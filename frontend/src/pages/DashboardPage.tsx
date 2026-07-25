@@ -1,7 +1,10 @@
 import { AuthRequest } from "../types/auth";
 import { LOCChart, TrendChart } from "../components/Charts";
 import { DataTable } from "../components/DataTable";
-import Filters, { type WorkQueueFilter } from "../components/Filters";
+import Filters, {
+  type LocFilter,
+  type WorkQueueFilter,
+} from "../components/Filters";
 import KPICards from "../components/KPICards";
 import { UpcomingWorkflowCard } from "../components/UpcomingWorkflowCard";
 import type { WorkflowViewMode } from "../hooks/useWorkflowViewMode";
@@ -30,6 +33,8 @@ interface DashboardPageProps {
   selectedInsurance: string;
   setSelectedInsurance: (value: string) => void;
   insurances: string[];
+  selectedLoc: LocFilter;
+  setSelectedLoc: (value: LocFilter) => void;
   selectedWorkQueue: WorkQueueFilter;
   setSelectedWorkQueue: (value: WorkQueueFilter) => void;
   onClearFilters: () => void;
@@ -54,6 +59,8 @@ export function DashboardPage({
   selectedInsurance,
   setSelectedInsurance,
   insurances,
+  selectedLoc,
+  setSelectedLoc,
   selectedWorkQueue,
   setSelectedWorkQueue,
   onClearFilters,
@@ -100,6 +107,8 @@ export function DashboardPage({
         selectedInsurance={selectedInsurance}
         setSelectedInsurance={setSelectedInsurance}
         insurances={insurances}
+        selectedLoc={selectedLoc}
+        setSelectedLoc={setSelectedLoc}
         selectedWorkQueue={selectedWorkQueue}
         setSelectedWorkQueue={setSelectedWorkQueue}
         darkMode={darkMode}
@@ -154,7 +163,14 @@ export function DashboardPage({
               <h3 className="mb-4 text-lg font-semibold">
                 Level of Care Breakdown
               </h3>
-              <LOCChart data={filteredData} darkMode={darkMode} />
+              <LOCChart
+                data={filteredData}
+                darkMode={darkMode}
+                onLocDoubleClick={(loc) => {
+                  const nextLoc = loc as LocFilter;
+                  setSelectedLoc(selectedLoc === nextLoc ? "All" : nextLoc);
+                }}
+              />
             </div>
           )}
         </div>

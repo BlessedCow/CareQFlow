@@ -12,6 +12,14 @@ export type WorkQueueFilter =
   | "Approved"
   | "Partial Approvals";
 
+  export type LocFilter =
+  | "All"
+  | "DTX"
+  | "RTC"
+  | "PHP"
+  | "IOP"
+  | "UNKNOWN";
+
 interface FiltersProps {
   dateRange: "7d" | "30d" | "90d" | "all";
   setDateRange: (val: "7d" | "30d" | "90d" | "all") => void;
@@ -21,6 +29,8 @@ interface FiltersProps {
   selectedInsurance: string;
   setSelectedInsurance: (val: string) => void;
   insurances: string[];
+  selectedLoc: LocFilter;
+  setSelectedLoc: (val: LocFilter) => void;
   selectedWorkQueue: WorkQueueFilter;
   setSelectedWorkQueue: (val: WorkQueueFilter) => void;
   darkMode: boolean;
@@ -36,6 +46,8 @@ export default function Filters({
   selectedInsurance,
   setSelectedInsurance,
   insurances,
+  selectedLoc,
+  setSelectedLoc,
   selectedWorkQueue,
   setSelectedWorkQueue,
   darkMode,
@@ -57,6 +69,7 @@ export default function Filters({
     dateRange !== "30d" ||
     selectedFacility !== "All" ||
     selectedInsurance !== "All" ||
+    selectedLoc !== "All" ||
     selectedWorkQueue !== "All";
 
   const filterSummary = [
@@ -69,13 +82,14 @@ export default function Filters({
     }`,
     `Facility: ${selectedFacility}`,
     `Insurance: ${selectedInsurance}`,
+    `LOC: ${selectedLoc === "All" ? "All LOCs" : selectedLoc}`,
     `Queue: ${selectedWorkQueue}`,
   ].join(" • ");
 
   return (
     <div
       className={cn(
-        "grid gap-4 rounded-xl border p-4 shadow-sm md:grid-cols-2 xl:grid-cols-5 xl:items-end",
+        "grid gap-4 rounded-xl border p-4 shadow-sm md:grid-cols-2 xl:grid-cols-6 xl:items-end",
         darkMode ? "bg-gray-900/50 border-gray-800" : "bg-white border-gray-200"
       )}
     >
@@ -163,6 +177,35 @@ export default function Filters({
                 {insurance}
               </option>
             ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+            <svg
+              className="h-4 w-4 fill-current"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+            >
+              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col">
+        <label className={labelClasses}>Level of Care</label>
+        <div className="relative">
+          <select
+            value={selectedLoc}
+            onChange={(event) =>
+              setSelectedLoc(event.target.value as LocFilter)
+            }
+            className={cn(selectClasses, "w-full")}
+          >
+            <option value="All">All LOCs</option>
+            <option value="DTX">DTX</option>
+            <option value="RTC">RTC</option>
+            <option value="PHP">PHP</option>
+            <option value="IOP">IOP</option>
+            <option value="UNKNOWN">UNKNOWN</option>
           </select>
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
             <svg

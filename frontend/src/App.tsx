@@ -81,6 +81,8 @@ function App() {
     setSelectedFacility,
     selectedInsurance,
     setSelectedInsurance,
+    selectedLoc,
+    setSelectedLoc,
     selectedWorkQueue,
     setSelectedWorkQueue,
     filteredData,
@@ -402,6 +404,8 @@ function App() {
           selectedInsurance={selectedInsurance}
           setSelectedInsurance={setSelectedInsurance}
           insurances={insuranceOptions}
+          selectedLoc={selectedLoc}
+          setSelectedLoc={setSelectedLoc}
           selectedWorkQueue={selectedWorkQueue}
           setSelectedWorkQueue={setSelectedWorkQueue}
           onClearFilters={handleClearFilters}
@@ -426,6 +430,8 @@ function App() {
           selectedInsurance={selectedInsurance}
           setSelectedInsurance={setSelectedInsurance}
           insurances={insuranceOptions}
+          selectedLoc={selectedLoc}
+          setSelectedLoc={setSelectedLoc}
           selectedWorkQueue={selectedWorkQueue}
           setSelectedWorkQueue={setSelectedWorkQueue}
           onClearFilters={handleClearFilters}
@@ -447,6 +453,8 @@ function App() {
           selectedInsurance={selectedInsurance}
           setSelectedInsurance={setSelectedInsurance}
           insurances={insuranceOptions}
+          selectedLoc={selectedLoc}
+          setSelectedLoc={setSelectedLoc}
           selectedWorkQueue={selectedWorkQueue}
           setSelectedWorkQueue={setSelectedWorkQueue}
           onClearFilters={handleClearFilters}

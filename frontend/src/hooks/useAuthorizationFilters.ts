@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { subDays } from 'date-fns';
 
-import type { WorkQueueFilter } from '../components/Filters';
+import type {
+  LocFilter,
+  WorkQueueFilter,
+} from '../components/Filters';
 import type { AuthRequest } from '../types/auth';
 
 export type DateRange = '7d' | '30d' | '90d' | 'all';
@@ -26,6 +29,39 @@ function matchesWorkQueueFilter(item: AuthRequest, workQueueFilter: WorkQueueFil
   }
 
   return item.status === workQueueFilter;
+}
+
+function normalizeLoc(loc: string): LocFilter {
+  const normalizedLoc = loc.trim().toLowerCase();
+
+  if (normalizedLoc === 'dtx' || normalizedLoc.includes('detox')) {
+    return 'DTX';
+  }
+
+  if (
+    normalizedLoc === 'rtc' ||
+    normalizedLoc.includes('residential')
+  ) {
+    return 'RTC';
+  }
+
+  if (normalizedLoc === 'php') {
+    return 'PHP';
+  }
+
+  if (normalizedLoc === 'iop') {
+    return 'IOP';
+  }
+
+  return 'UNKNOWN';
+}
+
+function matchesLocFilter(item: AuthRequest, locFilter: LocFilter) {
+  if (locFilter === 'All') {
+    return true;
+  }
+
+  return normalizeLoc(String(item.loc ?? '')) === locFilter;
 }
 
 function getDateRangeDays(range: DateRange) {
@@ -70,22 +106,48 @@ export function useAuthorizationFilters({
   const [dateRange, setDateRange] = useState<DateRange>('30d');
   const [selectedFacility, setSelectedFacility] = useState('All');
   const [selectedInsurance, setSelectedInsurance] = useState('All');
+  const [selectedLoc, setSelectedLoc] = useState<LocFilter>('All');
   const [selectedWorkQueue, setSelectedWorkQueue] = useState<WorkQueueFilter>('All');
 
   const filteredData = useMemo(() => {
     const today = new Date();
-    const daysToSubtract = dateRange === 'all' ? null : getDateRangeDays(dateRange);
-    const startDate = daysToSubtract === null ? null : subDays(today, daysToSubtract);
-
+    const daysToSubtract =
+      dateRange === 'all' ? null : getDateRangeDays(dateRange);
+    const startDate =
+      daysToSubtract === null ? null : subDays(today, daysToSubtract);
+  
     return authRequests.filter((item) => {
-      const inDateRange = startDate === null || (item.date >= startDate && item.date <= today);
-      const matchFacility = selectedFacility === 'All' || item.facility === selectedFacility;
-      const matchInsurance = selectedInsurance === 'All' || item.payer === selectedInsurance;
-      const matchWorkQueue = matchesWorkQueueFilter(item, selectedWorkQueue);
-
-      return inDateRange && matchFacility && matchInsurance && matchWorkQueue;
+      const inDateRange =
+        startDate === null ||
+        (item.date >= startDate && item.date <= today);
+      const matchFacility =
+        selectedFacility === 'All' ||
+        item.facility === selectedFacility;
+      const matchInsurance =
+        selectedInsurance === 'All' ||
+        item.payer === selectedInsurance;
+      const matchLoc = matchesLocFilter(item, selectedLoc);
+      const matchWorkQueue = matchesWorkQueueFilter(
+        item,
+        selectedWorkQueue,
+      );
+  
+      return (
+        inDateRange &&
+        matchFacility &&
+        matchInsurance &&
+        matchLoc &&
+        matchWorkQueue
+      );
     });
-  }, [authRequests, dateRange, selectedFacility, selectedInsurance, selectedWorkQueue]);
+  }, [
+    authRequests,
+    dateRange,
+    selectedFacility,
+    selectedInsurance,
+    selectedLoc,
+    selectedWorkQueue,
+  ]);
 
   const comparisonFilteredData = useMemo(() => {
     if (dateRange === 'all') {
@@ -100,9 +162,16 @@ export function useAuthorizationFilters({
       const inPreviousDateRange = item.date >= previousStartDate && item.date < currentStartDate;
       const matchFacility = selectedFacility === 'All' || item.facility === selectedFacility;
       const matchInsurance = selectedInsurance === 'All' || item.payer === selectedInsurance;
+      const matchLoc = matchesLocFilter(item, selectedLoc);
       const matchWorkQueue = matchesWorkQueueFilter(item, selectedWorkQueue);
 
-      return inPreviousDateRange && matchFacility && matchInsurance && matchWorkQueue;
+      return (
+        inPreviousDateRange &&
+        matchFacility &&
+        matchInsurance &&
+        matchLoc &&
+        matchWorkQueue
+      );
     });
   }, [authRequests, dateRange, selectedFacility, selectedInsurance, selectedWorkQueue]);
 
@@ -111,6 +180,7 @@ export function useAuthorizationFilters({
     setSelectedFacility('All');
     setSelectedInsurance('All');
     setSelectedWorkQueue('All');
+    setSelectedLoc('All');
   };
 
   useEffect(() => {
@@ -132,6 +202,8 @@ export function useAuthorizationFilters({
     setSelectedFacility,
     selectedInsurance,
     setSelectedInsurance,
+    selectedLoc,
+    setSelectedLoc,
     selectedWorkQueue,
     setSelectedWorkQueue,
     filteredData,

@@ -7,7 +7,10 @@ import {
 } from "../components/AuthTimelineSection";
 import { AuthorizationReadOnlyView } from "../components/AuthorizationReadOnlyView";
 import { DataTable } from "../components/DataTable";
-import Filters, { type WorkQueueFilter } from "../components/Filters";
+import Filters, {
+  type LocFilter,
+  type WorkQueueFilter,
+} from "../components/Filters";
 import type { NewAuthFormState } from "../hooks/useAuthorizationForm";
 import type { WorkflowViewMode } from "../hooks/useWorkflowViewMode";
 import type { AuthRequest } from "../types/auth";
@@ -40,6 +43,8 @@ interface AuthorizationsPageProps {
   isCreatingAuth: boolean;
   registeredFacilities: string[];
   registeredInsurances: string[];
+  selectedLoc: LocFilter;
+  setSelectedLoc: (value: LocFilter) => void;
   registeredWebPortals: string[];
   authEvents: AuthEvent[];
   authEventsError: string | null;
@@ -95,6 +100,8 @@ export function AuthorizationsPage({
   selectedInsurance,
   setSelectedInsurance,
   insurances,
+  selectedLoc,
+  setSelectedLoc,
   selectedWorkQueue,
   setSelectedWorkQueue,
   onClearFilters,
@@ -176,6 +183,8 @@ export function AuthorizationsPage({
           selectedInsurance={selectedInsurance}
           setSelectedInsurance={setSelectedInsurance}
           insurances={insurances}
+          selectedLoc={selectedLoc}
+          setSelectedLoc={setSelectedLoc}
           selectedWorkQueue={selectedWorkQueue}
           setSelectedWorkQueue={setSelectedWorkQueue}
           darkMode={darkMode}

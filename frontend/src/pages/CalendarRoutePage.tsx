@@ -1,5 +1,8 @@
 import { CalendarPage } from "../components/CalendarPage";
-import Filters, { type WorkQueueFilter } from "../components/Filters";
+import Filters, {
+  type LocFilter,
+  type WorkQueueFilter,
+} from "../components/Filters";
 import type { AuthRequest } from "../types/auth";
 import { cn } from "../utils/cn";
 
@@ -9,7 +12,6 @@ interface CalendarRoutePageProps {
   darkMode: boolean;
   isLoadingAuths: boolean;
   authsError: string | null;
-
   dateRange: DateRange;
   setDateRange: (value: DateRange) => void;
   selectedFacility: string;
@@ -18,10 +20,11 @@ interface CalendarRoutePageProps {
   selectedInsurance: string;
   setSelectedInsurance: (value: string) => void;
   insurances: string[];
+  selectedLoc: LocFilter;
+  setSelectedLoc: (value: LocFilter) => void;
   selectedWorkQueue: WorkQueueFilter;
   setSelectedWorkQueue: (value: WorkQueueFilter) => void;
   onClearFilters: () => void;
-
   filteredData: AuthRequest[];
   onSelectAuth: (auth: AuthRequest) => void;
 }
@@ -38,6 +41,8 @@ export function CalendarRoutePage({
   selectedInsurance,
   setSelectedInsurance,
   insurances,
+  selectedLoc,
+  setSelectedLoc,
   selectedWorkQueue,
   setSelectedWorkQueue,
   onClearFilters,
@@ -81,6 +86,8 @@ export function CalendarRoutePage({
         selectedInsurance={selectedInsurance}
         setSelectedInsurance={setSelectedInsurance}
         insurances={insurances}
+        selectedLoc={selectedLoc}
+        setSelectedLoc={setSelectedLoc}
         selectedWorkQueue={selectedWorkQueue}
         setSelectedWorkQueue={setSelectedWorkQueue}
         darkMode={darkMode}
