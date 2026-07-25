@@ -20,10 +20,47 @@ from authstatus_api.authorizations.state import (
     initial_timeline_event_payload,
 )
 from authstatus_api.persistence.connections import get_conn
-from authstatus_api.persistence.schema import (
-    AUTH_TABLE_COLUMNS,
-    init_db,
-)
+from authstatus_api.persistence.schema import init_db
+
+AUTH_TABLE_COLUMNS = {
+    "id",
+    "facility",
+    "client_name",
+    "member_id",
+    "group_number",
+    "date_of_birth",
+    "loc",
+    "insurance",
+    "insurance_phone",
+    "insurance_fax",
+    "submission_methods",
+    "portal_name",
+    "fax_numbers",
+    "live_call_type",
+    "scheduled_call_at",
+    "care_manager_enabled",
+    "care_manager_details",
+    "notes_links",
+    "auth_type",
+    "status",
+    "discharge_clinical_needed",
+    "no_pa_required",
+    "progress_made",
+    "facility_informed",
+    "waiting_on_clinicals",
+    "los_requested",
+    "days_approved",
+    "requested_days",
+    "approved_days",
+    "auth_start_date",
+    "auth_end_date",
+    "programming_days",
+    "review_due_date",
+    "submitted_at",
+    "decision_at",
+    "created_at",
+    "updated_at",
+}
 
 
 def create_auth(payload: dict[str, Any]) -> dict[str, Any]:

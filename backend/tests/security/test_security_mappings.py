@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from backend.authstatus_api.security.mappings import (
+from authstatus_api.security.mappings import (
     format_datetime,
     parse_datetime,
     session_row_to_dict,

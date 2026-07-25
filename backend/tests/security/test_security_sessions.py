@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from authstatus_api.persistence.connections import get_conn
-from authstatus_api.security.users import create_user
 from authstatus_api.security.sessions import (
     create_user_session,
     get_active_session_by_token,
@@ -14,6 +13,7 @@ from authstatus_api.security.sessions import (
     revoke_user_sessions,
     touch_session,
 )
+from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
 

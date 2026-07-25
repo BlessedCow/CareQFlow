@@ -16,10 +16,24 @@ from authstatus_api.authorizations.state import (
     sync_auth_timeline_fields,
 )
 from authstatus_api.persistence.connections import get_conn
-from authstatus_api.persistence.schema import (
-    AUTH_EVENT_TABLE_COLUMNS,
-    init_db,
-)
+from authstatus_api.persistence.schema import init_db
+
+AUTH_EVENT_TABLE_COLUMNS = {
+    "id",
+    "auth_id",
+    "event_type",
+    "event_date",
+    "event_time",
+    "outcome",
+    "notes",
+    "created_at",
+    "updated_at",
+    "requested_days",
+    "approved_days",
+    "auth_start_date",
+    "auth_end_date",
+    "review_due_date",
+}
 
 
 def _auth_exists(auth_id: int) -> bool:
