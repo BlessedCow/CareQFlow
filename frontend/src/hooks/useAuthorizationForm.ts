@@ -63,6 +63,31 @@ export const DEFAULT_AUTH_FORM: NewAuthFormState = {
   careManagerNotes: "",
 };
 
+function normalizeFormLoc(loc: string): string {
+  const normalizedLoc = loc.trim().toLowerCase();
+
+  if (normalizedLoc === "dtx" || normalizedLoc.includes("detox")) {
+    return "DTX";
+  }
+
+  if (
+    normalizedLoc === "rtc" ||
+    normalizedLoc.includes("residential")
+  ) {
+    return "RTC";
+  }
+
+  if (normalizedLoc === "php") {
+    return "PHP";
+  }
+
+  if (normalizedLoc === "iop") {
+    return "IOP";
+  }
+
+  return loc;
+}
+
 export function getAuthFormFromAuth(auth: AuthRequest): NewAuthFormState {
   return {
     clientName: auth.patientId,
@@ -70,7 +95,7 @@ export function getAuthFormFromAuth(auth: AuthRequest): NewAuthFormState {
     groupNumber: auth.groupNumber,
     dateOfBirth: auth.dateOfBirth,
     facility: auth.facility,
-    loc: auth.loc,
+    loc: normalizeFormLoc(auth.loc),
     status: auth.status,
     startDate: auth.dateStr || "",
     endDate: auth.authEndDate ?? "",
