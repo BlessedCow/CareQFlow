@@ -13,10 +13,11 @@ from authstatus_api.pdf_intake.extractor import (
     InvalidPdfError,
     PdfTextExtractionResult,
 )
-from authstatus_api.pdf_intake.templates.standard_vob import (
+from authstatus_api.pdf_intake.templates.models import (
     ExtractedValue,
+    ExtractionConfidence,
     ExtractionSource,
-    StandardVobExtraction,
+    PdfTemplateExtraction,
 )
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.security.users import create_user
@@ -86,53 +87,75 @@ def extraction_result(
     )
 
 
-def parsed_result() -> StandardVobExtraction:
-    return StandardVobExtraction(
+def parsed_result() -> PdfTemplateExtraction:
+    return PdfTemplateExtraction(
         template_id="standard_vob_v1",
         is_match=True,
         admit_date_range=ExtractedValue(
             value="01/15/2030 - 01/15/2030",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         facility=ExtractedValue(
             value="Example Facility",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         patient_name=ExtractedValue(
             value="Test Patient",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         patient_dob=ExtractedValue(
             value="01/02/1990",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         insurance_company=ExtractedValue(
             value="Example Health Plan",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         insurance_phone=ExtractedValue(
             value="844-555-0101",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         medical_member_id=ExtractedValue(
             value="TEST-MED-12345",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         medical_group_number=ExtractedValue(
             value="TEST-GROUP-100",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         behavioral_health_member_id=ExtractedValue(
             value="TEST-BH-67890",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         behavioral_health_group_number=ExtractedValue(
             value="TEST-BH-GROUP-200",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
         authorization_phone=ExtractedValue(
             value="800-555-0100",
             source=ExtractionSource.FORM_FIELD,
+            confidence=ExtractionConfidence.HIGH,
+            needs_review=False,
         ),
     )
 
@@ -155,7 +178,7 @@ def test_authorized_role_can_preview_pdf(
             return_value=extraction_result(),
         ) as extract_mock,
         patch(
-            "authstatus_api.pdf_intake.router.parse_standard_vob",
+            "authstatus_api.pdf_intake.router.parse_pdf_intake",
             return_value=parsed_result(),
         ),
     ):
@@ -179,15 +202,24 @@ def test_authorized_role_can_preview_pdf(
     assert data["facility"] == {
         "value": "Example Facility",
         "source": "form_field",
+        "confidence": "high",
+        "needs_review": False,
     }
+
     assert data["date_of_birth"] == {
         "value": "01/02/1990",
         "source": "form_field",
+        "confidence": "high",
+        "needs_review": False,
     }
+
     assert data["authorization_phone"] == {
         "value": "800-555-0100",
         "source": "form_field",
+        "confidence": "high",
+        "needs_review": False,
     }
+
     assert data["has_usable_text"] is True
 
     serialized_response = response.text
@@ -332,7 +364,7 @@ def test_pdf_preview_audit_metadata_contains_no_phi(client):
             return_value=extraction_result(),
         ),
         patch(
-            "authstatus_api.pdf_intake.router.parse_standard_vob",
+            "authstatus_api.pdf_intake.router.parse_pdf_intake",
             return_value=parsed_result(),
         ),
     ):

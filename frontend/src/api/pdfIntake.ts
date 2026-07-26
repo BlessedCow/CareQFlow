@@ -1,10 +1,13 @@
 import { API_BASE_URL, authenticatedFetch } from "./client";
 
 export type PdfCandidateSource = "form_field" | "embedded_text";
+export type PdfCandidateConfidence = "high" | "medium" | "low";
 
 export interface PdfIntakeCandidate {
   value: string;
   source: PdfCandidateSource;
+  confidence: PdfCandidateConfidence;
+  needs_review: boolean;
 }
 
 export interface PdfIntakePreview {

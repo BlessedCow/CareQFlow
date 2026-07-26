@@ -2,9 +2,12 @@ from authstatus_api.pdf_intake.extractor import (
     PdfFormField,
     PdfTextExtractionResult,
 )
+from authstatus_api.pdf_intake.templates.models import (
+    ExtractionConfidence,
+    ExtractionSource,
+)
 from authstatus_api.pdf_intake.templates.standard_vob import (
     STANDARD_VOB_TEMPLATE_ID,
-    ExtractionSource,
     is_standard_vob,
     parse_standard_vob,
 )
@@ -107,22 +110,73 @@ def test_extracts_known_fillable_form_fields():
 
     assert extraction.facility is not None
     assert extraction.facility.value == "Example Facility"
-    assert (
-        extraction.facility.source
-        == ExtractionSource.FORM_FIELD
-    )
+    assert extraction.facility.source == ExtractionSource.FORM_FIELD
 
     assert extraction.medical_member_id is not None
-    assert (
-        extraction.medical_member_id.value
-        == "TEST-MED-12345"
-    )
+    assert extraction.medical_member_id.value == "TEST-MED-12345"
 
     assert extraction.authorization_phone is not None
-    assert (
-        extraction.authorization_phone.value
-        == "800-555-0100"
+    assert extraction.authorization_phone.value == "800-555-0100"
+
+    assert extraction.facility.confidence == ExtractionConfidence.HIGH
+    assert extraction.facility.needs_review is False
+
+    assert extraction.patient_dob is not None
+    assert extraction.patient_dob.confidence == ExtractionConfidence.HIGH
+    assert extraction.patient_dob.needs_review is False
+
+
+def test_resolves_same_behavioral_health_identifiers():
+    result = make_result(
+        form_fields=(
+            form_field("text_27yesv", "TEST-MED-12345"),
+            form_field("text_26rjsk", "TEST-GROUP-100"),
+            form_field("text_25attw", "SAME"),
+            form_field("text_23ikpt", "SAME"),
+        ),
     )
+
+    extraction = parse_standard_vob(result)
+
+    assert extraction.medical_member_id is not None
+    assert extraction.behavioral_health_member_id is not None
+    assert extraction.behavioral_health_member_id.value == "TEST-MED-12345"
+
+    assert extraction.medical_group_number is not None
+    assert extraction.behavioral_health_group_number is not None
+    assert extraction.behavioral_health_group_number.value == "TEST-GROUP-100"
+
+
+def test_ignores_placeholder_values():
+    result = make_result(
+        form_fields=(
+            form_field("text_2mfsh", "N/A"),
+            form_field("text_19jkwv", "-"),
+            form_field("text_27yesv", "NONE"),
+            form_field("text_26rjsk", "N A"),
+        ),
+    )
+
+    extraction = parse_standard_vob(result)
+
+    assert extraction.facility is None
+    assert extraction.insurance_phone is None
+    assert extraction.medical_member_id is None
+    assert extraction.medical_group_number is None
+
+
+def test_same_identifier_without_medical_fallback_is_not_extracted():
+    result = make_result(
+        form_fields=(
+            form_field("text_25attw", "SAME"),
+            form_field("text_23ikpt", "SAME"),
+        ),
+    )
+
+    extraction = parse_standard_vob(result)
+
+    assert extraction.behavioral_health_member_id is None
+    assert extraction.behavioral_health_group_number is None
 
 
 def test_uses_embedded_text_without_form_fields():
@@ -146,29 +200,19 @@ PHONE NUMBER FOR AUTHORIZATION: 800-555-0100 NO AUTH PENALTY: No
     assert extraction.is_match is True
 
     assert extraction.facility is not None
-    assert (
-        extraction.facility.value
-        == "Example Recovery Center"
-    )
-    assert (
-        extraction.facility.source
-        == ExtractionSource.EMBEDDED_TEXT
-    )
+    assert extraction.facility.value == "Example Recovery Center"
+    assert extraction.facility.source == ExtractionSource.EMBEDDED_TEXT
 
     assert extraction.patient_dob is not None
     assert extraction.patient_dob.value == "01/02/1990"
+    assert extraction.patient_dob.confidence == ExtractionConfidence.MEDIUM
+    assert extraction.patient_dob.needs_review is True
 
     assert extraction.medical_member_id is not None
-    assert (
-        extraction.medical_member_id.value
-        == "TEST-MED-12345"
-    )
+    assert extraction.medical_member_id.value == "TEST-MED-12345"
 
     assert extraction.authorization_phone is not None
-    assert (
-        extraction.authorization_phone.value
-        == "800-555-0100"
-    )
+    assert extraction.authorization_phone.value == "800-555-0100"
 
 
 def test_form_field_takes_priority_over_text():
@@ -190,10 +234,7 @@ def test_form_field_takes_priority_over_text():
 
     assert extraction.facility is not None
     assert extraction.facility.value == "Form Facility"
-    assert (
-        extraction.facility.source
-        == ExtractionSource.FORM_FIELD
-    )
+    assert extraction.facility.source == ExtractionSource.FORM_FIELD
 
 
 def test_text_fills_blank_form_value():
@@ -203,19 +244,14 @@ def test_text_fills_blank_form_value():
     )
     result = make_result(
         text=text,
-        form_fields=(
-            form_field("text_5vani", ""),
-        ),
+        form_fields=(form_field("text_5vani", ""),),
     )
 
     extraction = parse_standard_vob(result)
 
     assert extraction.patient_dob is not None
     assert extraction.patient_dob.value == "01/02/1990"
-    assert (
-        extraction.patient_dob.source
-        == ExtractionSource.EMBEDDED_TEXT
-    )
+    assert extraction.patient_dob.source == ExtractionSource.EMBEDDED_TEXT
 
 
 def test_text_fills_missing_fields_while_form_values_remain():
@@ -237,17 +273,11 @@ def test_text_fills_missing_fields_while_form_values_remain():
 
     assert extraction.facility is not None
     assert extraction.facility.value == "Form Facility"
-    assert (
-        extraction.facility.source
-        == ExtractionSource.FORM_FIELD
-    )
+    assert extraction.facility.source == ExtractionSource.FORM_FIELD
 
     assert extraction.patient_dob is not None
     assert extraction.patient_dob.value == "01/02/1990"
-    assert (
-        extraction.patient_dob.source
-        == ExtractionSource.EMBEDDED_TEXT
-    )
+    assert extraction.patient_dob.source == ExtractionSource.EMBEDDED_TEXT
 
 
 def test_blank_template_does_not_invent_values():

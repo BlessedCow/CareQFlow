@@ -18,10 +18,8 @@ from authstatus_api.pdf_intake.schemas import (
     PdfIntakeCandidate,
     PdfIntakePreviewResponse,
 )
-from authstatus_api.pdf_intake.templates.standard_vob import (
-    ExtractedValue,
-    parse_standard_vob,
-)
+from authstatus_api.pdf_intake.templates.models import ExtractedValue
+from authstatus_api.pdf_intake.templates.registry import parse_pdf_intake
 from authstatus_api.security.dependencies import require_role
 
 router = APIRouter(
@@ -59,6 +57,8 @@ def _candidate(
     return PdfIntakeCandidate(
         value=extracted_value.value,
         source=extracted_value.source.value,
+        confidence=extracted_value.confidence.value,
+        needs_review=extracted_value.needs_review,
     )
 
 
@@ -79,10 +79,7 @@ def _candidate_count(
         preview.behavioral_health_group_number,
     )
 
-    return sum(
-        candidate is not None
-        for candidate in candidate_fields
-    )
+    return sum(candidate is not None for candidate in candidate_fields)
 
 
 @router.post(
@@ -95,10 +92,7 @@ async def preview_pdf_intake(
     current_user: dict = PdfIntakeUser,
 ) -> PdfIntakePreviewResponse:
     content_type = (
-        request.headers.get("content-type", "")
-        .partition(";")[0]
-        .strip()
-        .lower()
+        request.headers.get("content-type", "").partition(";")[0].strip().lower()
     )
 
     if content_type != "application/pdf":
@@ -134,33 +128,21 @@ async def preview_pdf_intake(
             detail="The uploaded PDF could not be processed.",
         )
 
-    parsed = parse_standard_vob(extraction_result)
+    parsed = parse_pdf_intake(extraction_result)
 
     preview = PdfIntakePreviewResponse(
         template_id=parsed.template_id,
         template_matched=parsed.is_match,
         facility=_candidate(parsed.facility),
         client_name=_candidate(parsed.patient_name),
-        admit_date_range=_candidate(
-            parsed.admit_date_range
-        ),
+        admit_date_range=_candidate(parsed.admit_date_range),
         date_of_birth=_candidate(parsed.patient_dob),
         insurance=_candidate(parsed.insurance_company),
-        insurance_phone=_candidate(
-            parsed.insurance_phone
-        ),
-        authorization_phone=_candidate(
-            parsed.authorization_phone
-        ),
-        medical_member_id=_candidate(
-            parsed.medical_member_id
-        ),
-        medical_group_number=_candidate(
-            parsed.medical_group_number
-        ),
-        behavioral_health_member_id=_candidate(
-            parsed.behavioral_health_member_id
-        ),
+        insurance_phone=_candidate(parsed.insurance_phone),
+        authorization_phone=_candidate(parsed.authorization_phone),
+        medical_member_id=_candidate(parsed.medical_member_id),
+        medical_group_number=_candidate(parsed.medical_group_number),
+        behavioral_health_member_id=_candidate(parsed.behavioral_health_member_id),
         behavioral_health_group_number=_candidate(
             parsed.behavioral_health_group_number
         ),

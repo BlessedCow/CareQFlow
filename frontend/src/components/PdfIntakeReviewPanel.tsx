@@ -115,15 +115,40 @@ function CandidateSourceLabel({
   darkMode: boolean;
 }) {
   if (!candidate) {
-    return null;
+    return (
+      <span
+        className={cn(
+          "text-xs",
+          darkMode ? "text-amber-300" : "text-amber-700"
+        )}
+      >
+        Not extracted. Review required.
+      </span>
+    );
   }
+
+  const sourceLabel =
+    candidate.source === "form_field" ? "fillable field" : "embedded text";
+
+  const confidenceLabel =
+    candidate.confidence.charAt(0).toUpperCase() +
+    candidate.confidence.slice(1);
 
   return (
     <span
-      className={cn("text-xs", darkMode ? "text-gray-400" : "text-gray-500")}
+      className={cn(
+        "text-xs",
+        candidate.needs_review
+          ? darkMode
+            ? "text-amber-300"
+            : "text-amber-700"
+          : darkMode
+          ? "text-gray-400"
+          : "text-gray-500"
+      )}
     >
-      Extracted from{" "}
-      {candidate.source === "form_field" ? "fillable field" : "embedded text"}
+      {confidenceLabel} confidence from {sourceLabel}
+      {candidate.needs_review ? ". Review required." : ""}
     </span>
   );
 }
@@ -143,7 +168,27 @@ export function PdfIntakeReviewPanel({
   useEffect(() => {
     setValues(getInitialValues(preview));
     setIdentifierSource(getInitialIdentifierSource(preview));
+    setReviewConfirmed(false);
   }, [preview]);
+
+  const reviewCandidates = [
+    preview.client_name,
+    preview.date_of_birth,
+    preview.facility,
+    preview.admit_date_range,
+    preview.insurance,
+    preview.authorization_phone,
+    preview.medical_member_id,
+    preview.medical_group_number,
+    preview.behavioral_health_member_id,
+    preview.behavioral_health_group_number,
+  ];
+
+  const hasReviewRequiredCandidates = reviewCandidates.some(
+    (candidate) => candidate?.needs_review
+  );
+
+  const [reviewConfirmed, setReviewConfirmed] = useState(false);
 
   const updateValue = (field: keyof ReviewValues, value: string) => {
     setValues((currentValues) => ({
@@ -176,12 +221,17 @@ export function PdfIntakeReviewPanel({
     });
   };
 
-  const inputClassName = cn(
-    "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
-    darkMode
-      ? "border-gray-700 bg-gray-950 text-gray-100"
-      : "border-gray-300 bg-white text-gray-900"
-  );
+  const getInputClassName = (candidate: PdfIntakeCandidate | null): string =>
+    cn(
+      "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+      candidate?.needs_review
+        ? darkMode
+          ? "border-amber-600 bg-amber-950/20 text-gray-100"
+          : "border-amber-400 bg-amber-50 text-gray-900"
+        : darkMode
+        ? "border-gray-700 bg-gray-950 text-gray-100"
+        : "border-gray-300 bg-white text-gray-900"
+    );
 
   const labelClassName = cn(
     "text-sm font-medium",
@@ -236,6 +286,19 @@ export function PdfIntakeReviewPanel({
             extraction.
           </p>
         )}
+        {hasReviewRequiredCandidates && (
+          <p
+            className={cn(
+              "mt-2 rounded-lg border px-3 py-2 text-sm",
+              darkMode
+                ? "border-amber-900 bg-amber-950/40 text-amber-200"
+                : "border-amber-300 bg-amber-50 text-amber-800"
+            )}
+          >
+            One or more values were extracted with reduced confidence. Review
+            the amber-highlighted fields before applying them.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -245,7 +308,7 @@ export function PdfIntakeReviewPanel({
             type="text"
             value={values.clientName}
             onChange={(event) => updateValue("clientName", event.target.value)}
-            className={inputClassName}
+            className={getInputClassName(preview.client_name)}
           />
           <CandidateSourceLabel
             candidate={preview.client_name}
@@ -259,7 +322,7 @@ export function PdfIntakeReviewPanel({
             type="date"
             value={values.dateOfBirth}
             onChange={(event) => updateValue("dateOfBirth", event.target.value)}
-            className={inputClassName}
+            className={getInputClassName(preview.date_of_birth)}
           />
           <CandidateSourceLabel
             candidate={preview.date_of_birth}
@@ -273,7 +336,7 @@ export function PdfIntakeReviewPanel({
             type="text"
             value={values.facility}
             onChange={(event) => updateValue("facility", event.target.value)}
-            className={inputClassName}
+            className={getInputClassName(preview.facility)}
           />
           <CandidateSourceLabel
             candidate={preview.facility}
@@ -287,7 +350,7 @@ export function PdfIntakeReviewPanel({
             type="date"
             value={values.startDate}
             onChange={(event) => updateValue("startDate", event.target.value)}
-            className={inputClassName}
+            className={getInputClassName(preview.admit_date_range)}
           />
           <CandidateSourceLabel
             candidate={preview.admit_date_range}
@@ -301,7 +364,7 @@ export function PdfIntakeReviewPanel({
             type="text"
             value={values.insurance}
             onChange={(event) => updateValue("insurance", event.target.value)}
-            className={inputClassName}
+            className={getInputClassName(preview.insurance)}
           />
           <CandidateSourceLabel
             candidate={preview.insurance}
@@ -317,7 +380,7 @@ export function PdfIntakeReviewPanel({
             onChange={(event) =>
               updateValue("authorizationPhone", event.target.value)
             }
-            className={inputClassName}
+            className={getInputClassName(preview.authorization_phone)}
           />
           <CandidateSourceLabel
             candidate={preview.authorization_phone}
@@ -380,7 +443,9 @@ export function PdfIntakeReviewPanel({
                   onChange={(event) =>
                     updateValue("behavioralHealthMemberId", event.target.value)
                   }
-                  className={inputClassName}
+                  className={getInputClassName(
+                    preview.behavioral_health_member_id
+                  )}
                 />
                 <CandidateSourceLabel
                   candidate={preview.behavioral_health_member_id}
@@ -399,7 +464,9 @@ export function PdfIntakeReviewPanel({
                       event.target.value
                     )
                   }
-                  className={inputClassName}
+                  className={getInputClassName(
+                    preview.behavioral_health_group_number
+                  )}
                 />
                 <CandidateSourceLabel
                   candidate={preview.behavioral_health_group_number}
@@ -441,7 +508,7 @@ export function PdfIntakeReviewPanel({
                   onChange={(event) =>
                     updateValue("medicalMemberId", event.target.value)
                   }
-                  className={inputClassName}
+                  className={getInputClassName(preview.medical_member_id)}
                 />
                 <CandidateSourceLabel
                   candidate={preview.medical_member_id}
@@ -457,7 +524,7 @@ export function PdfIntakeReviewPanel({
                   onChange={(event) =>
                     updateValue("medicalGroupNumber", event.target.value)
                   }
-                  className={inputClassName}
+                  className={getInputClassName(preview.medical_group_number)}
                 />
                 <CandidateSourceLabel
                   candidate={preview.medical_group_number}
@@ -480,6 +547,28 @@ export function PdfIntakeReviewPanel({
         </label>
       </fieldset>
 
+      {hasReviewRequiredCandidates && (
+        <label
+          className={cn(
+            "mt-5 flex items-start gap-2 rounded-lg border px-3 py-3 text-sm",
+            darkMode
+              ? "border-amber-900 bg-amber-950/30 text-amber-200"
+              : "border-amber-300 bg-amber-50 text-amber-900"
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={reviewConfirmed}
+            onChange={(event) => setReviewConfirmed(event.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            I reviewed the fields marked as needing review and confirmed or
+            corrected their values.
+          </span>
+        </label>
+      )}
+
       <div className="mt-5 flex flex-wrap justify-end gap-2">
         <button
           type="button"
@@ -497,7 +586,13 @@ export function PdfIntakeReviewPanel({
         <button
           type="button"
           onClick={handleApply}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          disabled={hasReviewRequiredCandidates && !reviewConfirmed}
+          className={cn(
+            "rounded-lg px-4 py-2 text-sm font-medium text-white",
+            hasReviewRequiredCandidates && !reviewConfirmed
+              ? "cursor-not-allowed bg-gray-400"
+              : "bg-blue-600 hover:bg-blue-700"
+          )}
         >
           Apply to authorization
         </button>

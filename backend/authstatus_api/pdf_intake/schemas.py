@@ -10,6 +10,8 @@ PdfCandidateSource = Literal["form_field", "embedded_text"]
 class PdfIntakeCandidate(BaseModel):
     value: str
     source: PdfCandidateSource
+    confidence: Literal["high", "medium", "low"]
+    needs_review: bool
 
     model_config = ConfigDict(extra="forbid")
 
