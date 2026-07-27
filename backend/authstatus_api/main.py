@@ -7,6 +7,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from authstatus_api.errors import register_exception_handlers
+from authstatus_api.observability.logging import (
+    configure_application_logging,
+)
 from authstatus_api.pdf_intake.router import (
     router as pdf_intake_router,
 )
@@ -40,6 +43,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_application_logging(
+        environment=settings.app_environment,
+    )
 
     api = FastAPI(
         title=settings.app_name,
