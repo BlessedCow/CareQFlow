@@ -111,32 +111,42 @@ def list_audit_events(
 ) -> dict[str, Any]:
     init_db()
 
-    filters: list[str] = []
-    values: list[Any] = []
+    action_pattern = (
+        _contains_pattern(action) if action is not None and action.strip() else None
+    )
+    username_pattern = (
+        _contains_pattern(username)
+        if username is not None and username.strip()
+        else None
+    )
 
-    if action and action.strip():
-        filters.append("LOWER(action) LIKE LOWER(?) ESCAPE '\\'")
-        values.append(_contains_pattern(action))
-
-    if username and username.strip():
-        filters.append("LOWER(username) LIKE LOWER(?) ESCAPE '\\'")
-        values.append(_contains_pattern(username))
-
-    where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    filter_values = [
+        action_pattern,
+        action_pattern,
+        username_pattern,
+        username_pattern,
+    ]
     offset = (page - 1) * page_size
 
     with get_conn() as conn:
         total = conn.execute(
-            f"""
+            """
             SELECT COUNT(*) AS total
             FROM audit_events
-            {where_clause}
+            WHERE (
+                ? IS NULL
+                OR LOWER(action) LIKE LOWER(?) ESCAPE '\\'
+            )
+            AND (
+                ? IS NULL
+                OR LOWER(username) LIKE LOWER(?) ESCAPE '\\'
+            )
             """,
-            values,
+            filter_values,
         ).fetchone()["total"]
 
         rows = conn.execute(
-            f"""
+            """
             SELECT
                 id,
                 user_id,
@@ -149,11 +159,18 @@ def list_audit_events(
                 user_agent,
                 created_at
             FROM audit_events
-            {where_clause}
+            WHERE (
+                ? IS NULL
+                OR LOWER(action) LIKE LOWER(?) ESCAPE '\\'
+            )
+            AND (
+                ? IS NULL
+                OR LOWER(username) LIKE LOWER(?) ESCAPE '\\'
+            )
             ORDER BY id DESC
             LIMIT ? OFFSET ?
             """,
-            [*values, page_size, offset],
+            [*filter_values, page_size, offset],
         ).fetchall()
 
     return {

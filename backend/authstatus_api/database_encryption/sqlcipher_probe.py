@@ -19,12 +19,14 @@ def import_sqlcipher() -> Any:
 
     return sqlcipher3
 
+
 def _sql_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
 def apply_sqlcipher_key(conn: Any, passphrase: str) -> None:
     conn.execute(f"PRAGMA key = {_sql_quote(passphrase)}")
+
 
 def create_sqlcipher_probe_database(
     database_path: Path,
@@ -40,14 +42,12 @@ def create_sqlcipher_probe_database(
     conn = sqlcipher3.connect(str(database_path))
     try:
         apply_sqlcipher_key(conn, passphrase)
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS probe_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 label TEXT NOT NULL
             )
-            """
-        )
+            """)
         conn.execute(
             """
             INSERT INTO probe_records (label)
@@ -73,13 +73,11 @@ def read_sqlcipher_probe_database(
     conn = sqlcipher3.connect(str(database_path))
     try:
         apply_sqlcipher_key(conn, passphrase)
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT label
             FROM probe_records
             ORDER BY id
-            """
-        ).fetchall()
+            """).fetchall()
     finally:
         conn.close()
 
@@ -90,13 +88,11 @@ def plaintext_sqlite_can_read_database(database_path: Path) -> bool:
     try:
         conn = sqlite3.connect(database_path)
         try:
-            conn.execute(
-                """
+            conn.execute("""
                 SELECT name
                 FROM sqlite_master
                 LIMIT 1
-                """
-            ).fetchall()
+                """).fetchall()
         finally:
             conn.close()
     except sqlite3.DatabaseError:
@@ -104,20 +100,49 @@ def plaintext_sqlite_can_read_database(database_path: Path) -> bool:
 
     return True
 
+
 def _quote_identifier(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+def _select_all_query(table_name: str) -> str:
+    return " ".join(
+        (
+            "SELECT",
+            "*",
+            "FROM",
+            _quote_identifier(table_name),
+        )
+    )
+
+
+def _insert_rows_query(
+    table_name: str,
+    column_names: list[str],
+) -> str:
+    quoted_columns = ", ".join(_quote_identifier(column) for column in column_names)
+    placeholders = ", ".join("?" for _ in column_names)
+
+    return " ".join(
+        (
+            "INSERT",
+            "INTO",
+            _quote_identifier(table_name),
+            f"({quoted_columns})",
+            "VALUES",
+            f"({placeholders})",
+        )
+    )
+
+
 def _table_names(conn: sqlite3.Connection) -> list[str]:
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT name
         FROM sqlite_master
         WHERE type = 'table'
           AND name NOT LIKE 'sqlite_%'
         ORDER BY name
-        """
-    ).fetchall()
+        """).fetchall()
 
     return [row[0] for row in rows]
 
@@ -148,8 +173,7 @@ def migrate_plaintext_sqlite_to_sqlcipher(
         source_conn.row_factory = sqlite3.Row
         apply_sqlcipher_key(destination_conn, passphrase)
 
-        schema_rows = source_conn.execute(
-            """
+        schema_rows = source_conn.execute("""
             SELECT sql
             FROM sqlite_master
             WHERE sql IS NOT NULL
@@ -164,29 +188,24 @@ def migrate_plaintext_sqlite_to_sqlcipher(
                 ELSE 5
               END,
               name
-            """
-        ).fetchall()
+            """).fetchall()
 
         for row in schema_rows:
             destination_conn.execute(row["sql"])
 
         for table_name in _table_names(source_conn):
-            rows = source_conn.execute(
-                f"SELECT * FROM {_quote_identifier(table_name)}"
-            ).fetchall()
+            rows = source_conn.execute(_select_all_query(table_name)).fetchall()
 
             if not rows:
                 continue
 
-            column_names = rows[0].keys()
-            column_list = ", ".join(_quote_identifier(column) for column in column_names)
-            placeholders = ", ".join("?" for _ in column_names)
+            column_names = list(rows[0].keys())
 
             destination_conn.executemany(
-                f"""
-                INSERT INTO {_quote_identifier(table_name)} ({column_list})
-                VALUES ({placeholders})
-                """,
+                _insert_rows_query(
+                    table_name,
+                    column_names,
+                ),
                 [tuple(row[column] for column in column_names) for row in rows],
             )
 
@@ -220,14 +239,12 @@ def verify_sqlcipher_database(
     try:
         apply_sqlcipher_key(conn, passphrase)
 
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT name
             FROM sqlite_master
             WHERE type = 'table'
             ORDER BY name
-            """
-        ).fetchall()
+            """).fetchall()
 
         table_names = {row[0] for row in rows}
     finally:

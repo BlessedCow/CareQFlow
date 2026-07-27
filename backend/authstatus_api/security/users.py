@@ -116,34 +116,59 @@ def update_user(
 ) -> dict[str, Any] | None:
     init_db()
 
-    updates: list[str] = []
-    values: list[Any] = []
-
-    if role is not None:
-        updates.append("role = ?")
-        values.append(role)
-
-    if is_active is not None:
-        updates.append("is_active = ?")
-        values.append(1 if is_active else 0)
-
-    if not updates:
-        return get_user_by_id(user_id)
-
-    updates.append("updated_at = ?")
-    values.append(format_datetime(utc_now()))
-    values.append(user_id)
+    now = format_datetime(utc_now())
 
     try:
         with get_conn() as conn:
-            cursor = conn.execute(
-                f"""
-                UPDATE users
-                SET {", ".join(updates)}
-                WHERE id = ?
-                """,
-                values,
-            )
+            if role is not None and is_active is not None:
+                cursor = conn.execute(
+                    """
+                    UPDATE users
+                    SET
+                        role = ?,
+                        is_active = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        role,
+                        1 if is_active else 0,
+                        now,
+                        user_id,
+                    ),
+                )
+            elif role is not None:
+                cursor = conn.execute(
+                    """
+                    UPDATE users
+                    SET
+                        role = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        role,
+                        now,
+                        user_id,
+                    ),
+                )
+            elif is_active is not None:
+                cursor = conn.execute(
+                    """
+                    UPDATE users
+                    SET
+                        is_active = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        1 if is_active else 0,
+                        now,
+                        user_id,
+                    ),
+                )
+            else:
+                return get_user_by_id(user_id)
     except sqlite3.IntegrityError:
         raise
 

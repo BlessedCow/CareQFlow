@@ -9,7 +9,6 @@ from authstatus_api.authorizations.mappings import (
 from authstatus_api.authorizations.sql import (
     insert_sql,
     sql_columns,
-    update_assignments,
 )
 from authstatus_api.authorizations.state import (
     current_timestamp,
@@ -33,6 +32,39 @@ AUTH_EVENT_TABLE_COLUMNS = {
     "auth_start_date",
     "auth_end_date",
     "review_due_date",
+}
+
+
+AUTH_EVENT_UPDATE_QUERIES = {
+    "event_type": (
+        "UPDATE auth_events SET event_type = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "event_date": (
+        "UPDATE auth_events SET event_date = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "event_time": (
+        "UPDATE auth_events SET event_time = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "outcome": ("UPDATE auth_events SET outcome = ? " "WHERE auth_id = ? AND id = ?"),
+    "notes": ("UPDATE auth_events SET notes = ? " "WHERE auth_id = ? AND id = ?"),
+    "updated_at": (
+        "UPDATE auth_events SET updated_at = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "requested_days": (
+        "UPDATE auth_events SET requested_days = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "approved_days": (
+        "UPDATE auth_events SET approved_days = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "auth_start_date": (
+        "UPDATE auth_events SET auth_start_date = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "auth_end_date": (
+        "UPDATE auth_events SET auth_end_date = ? " "WHERE auth_id = ? AND id = ?"
+    ),
+    "review_due_date": (
+        "UPDATE auth_events SET review_due_date = ? " "WHERE auth_id = ? AND id = ?"
+    ),
 }
 
 
@@ -147,18 +179,12 @@ def update_auth_event(
         sync_auth_timeline_fields(auth_id)
         return get_auth_event(auth_id, event_id)
 
-    assignments = update_assignments(keys)
-    values = [prepared[key] for key in keys]
-
     with get_conn() as conn:
-        conn.execute(
-            (
-                "UPDATE auth_events "
-                f"SET {assignments} "
-                "WHERE auth_id = ? AND id = ?"
-            ),  # nosec
-            [*values, auth_id, event_id],
-        )
+        for key in keys:
+            conn.execute(
+                AUTH_EVENT_UPDATE_QUERIES[key],
+                (prepared[key], auth_id, event_id),
+            )
 
     sync_auth_timeline_fields(auth_id)
 

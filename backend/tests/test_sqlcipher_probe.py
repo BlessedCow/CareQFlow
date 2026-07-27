@@ -7,6 +7,8 @@ import sqlcipher3
 
 from authstatus_api.database_encryption.sqlcipher_probe import (
     SQLCipherProbeError,
+    _insert_rows_query,
+    _select_all_query,
     apply_sqlcipher_key,
     create_sqlcipher_probe_database,
     import_sqlcipher,
@@ -66,21 +68,20 @@ def test_sqlcipher_rejects_wrong_passphrase(tmp_path):
             database_path,
             passphrase="wrong passphrase",
         )
-        
+
+
 def test_migrate_plaintext_sqlite_to_sqlcipher_copies_schema_and_data(tmp_path):
     source_path = tmp_path / "source.db"
     destination_path = tmp_path / "destination.sqlcipher.db"
 
     plaintext_conn = sqlite3.connect(str(source_path))
     try:
-        plaintext_conn.execute(
-            """
+        plaintext_conn.execute("""
             CREATE TABLE records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL
             )
-            """
-        )
+            """)
         plaintext_conn.execute(
             """
             INSERT INTO records (name)
@@ -106,39 +107,34 @@ def test_migrate_plaintext_sqlite_to_sqlcipher_copies_schema_and_data(tmp_path):
     encrypted_conn = sqlcipher3.connect(str(destination_path))
     try:
         apply_sqlcipher_key(encrypted_conn, "correct horse battery staple")
-        rows = encrypted_conn.execute(
-            """
+        rows = encrypted_conn.execute("""
             SELECT name
             FROM records
-            """
-        ).fetchall()
+            """).fetchall()
     finally:
         encrypted_conn.close()
 
     assert [row[0] for row in rows] == ["test record"]
-    
+
+
 def test_verify_sqlcipher_database_confirms_required_tables(tmp_path):
     source_path = tmp_path / "source.db"
     destination_path = tmp_path / "destination.sqlcipher.db"
 
     plaintext_conn = sqlite3.connect(str(source_path))
     try:
-        plaintext_conn.execute(
-            """
+        plaintext_conn.execute("""
             CREATE TABLE users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL
             )
-            """
-        )
-        plaintext_conn.execute(
-            """
+            """)
+        plaintext_conn.execute("""
             CREATE TABLE auths (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 client_name TEXT NOT NULL
             )
-            """
-        )
+            """)
         plaintext_conn.commit()
     finally:
         plaintext_conn.close()
@@ -176,3 +172,20 @@ def test_verify_sqlcipher_database_rejects_missing_required_table(tmp_path):
             passphrase="correct horse battery staple",
             required_tables={"missing_table"},
         )
+
+
+def test_select_all_query_quotes_table_name():
+    query = _select_all_query('records"archive')
+
+    assert query == 'SELECT * FROM "records""archive"'
+
+
+def test_insert_rows_query_quotes_identifiers():
+    query = _insert_rows_query(
+        'records"archive',
+        ["id", 'display"name'],
+    )
+
+    assert query == (
+        'INSERT INTO "records""archive" ' '("id", "display""name") VALUES (?, ?)'
+    )

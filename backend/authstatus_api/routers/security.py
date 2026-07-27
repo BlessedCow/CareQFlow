@@ -57,6 +57,8 @@ from authstatus_api.security.users import (
 )
 from authstatus_api.settings import get_settings
 
+REQUIRE_CREDENTIAL_ROTATION = True
+
 router = APIRouter(prefix="/api/security", tags=["security"])
 
 AdminUserDependency = Depends(require_role("Admin"))
@@ -137,7 +139,7 @@ def create_managed_user(
         user=current_user,
         metadata={
             "role": payload.role,
-            "must_change_password": True,
+            "must_change_password": REQUIRE_CREDENTIAL_ROTATION,
         },
         request=request,
     )
@@ -291,7 +293,7 @@ def reset_managed_user_password(
         user=current_user,
         metadata={
             "sessions_revoked": sessions_revoked,
-            "must_change_password": True,
+            "must_change_password": REQUIRE_CREDENTIAL_ROTATION,
         },
         request=request,
     )
