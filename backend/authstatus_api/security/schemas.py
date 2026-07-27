@@ -88,11 +88,17 @@ class AuditEventListResponse(BaseModel):
 
 class LoginResponse(BaseModel):
     user: UserResponse
+    session: SessionResponse
 
 
 class CurrentUserResponse(BaseModel):
     user: UserResponse
+    session: SessionResponse
 
 
 class LogoutResponse(BaseModel):
     logged_out: bool
+
+
+class SessionResponse(BaseModel):
+    expires_at: str

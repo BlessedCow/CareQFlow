@@ -1,12 +1,12 @@
 import { Activity } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import type { CurrentUser } from "../api/security";
+import type { AuthSession } from "../api/security";
 import { loginUser } from "../api/security";
 import { cn } from "../utils/cn";
 
 interface LoginPageProps {
   darkMode: boolean;
-  onLogin: (user: CurrentUser) => void;
+  onLogin: (authSession: AuthSession) => void;
 }
 
 export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
@@ -21,8 +21,8 @@ export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
     setIsLoggingIn(true);
 
     try {
-      const user = await loginUser(username, password);
-      onLogin(user);
+      const authSession = await loginUser(username, password);
+      onLogin(authSession);
     } catch (error) {
       setLoginError(
         error instanceof Error ? error.message : "Unable to sign in."

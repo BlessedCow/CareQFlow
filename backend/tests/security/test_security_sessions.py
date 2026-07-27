@@ -9,6 +9,7 @@ from authstatus_api.security.sessions import (
     create_user_session,
     get_active_session_by_token,
     hash_session_token,
+    renew_session,
     revoke_session,
     revoke_user_sessions,
     touch_session,
@@ -109,6 +110,71 @@ def test_touch_session_updates_last_seen_at():
 
     assert refreshed is not None
     assert refreshed["last_seen_at"] >= before
+
+
+def test_renew_session_extends_expiration():
+    user = create_user(
+        "renew@example.com",
+        "password value",
+        role="UR",
+    )
+    created_session = create_user_session(
+        user["id"],
+        minutes=5,
+    )
+    original_expiration = created_session["session"]["expires_at"]
+
+    renewed = renew_session(
+        created_session["token"],
+        minutes=30,
+    )
+
+    assert renewed is not None
+    assert renewed["expires_at"] > original_expiration
+    assert renewed["last_seen_at"] >= created_session["session"]["last_seen_at"]
+
+
+def test_renew_session_rejects_expired_session():
+    user = create_user(
+        "renew-expired@example.com",
+        "password value",
+        role="UR",
+    )
+    created_session = create_user_session(user["id"])
+    expired_at = (datetime.now(UTC) - timedelta(minutes=1)).isoformat(
+        timespec="seconds"
+    )
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE sessions
+            SET expires_at = ?
+            WHERE id = ?
+            """,
+            (
+                expired_at,
+                created_session["session"]["id"],
+            ),
+        )
+
+    assert renew_session(created_session["token"]) is None
+
+
+def test_renew_session_rejects_revoked_session():
+    user = create_user(
+        "renew-revoked@example.com",
+        "password value",
+        role="UR",
+    )
+    created_session = create_user_session(user["id"])
+
+    assert revoke_session(created_session["token"]) is True
+    assert renew_session(created_session["token"]) is None
+
+
+def test_renew_session_rejects_unknown_token():
+    assert renew_session("unknown-token") is None
 
 
 def test_revoke_session_revokes_active_session():

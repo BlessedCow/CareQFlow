@@ -10,13 +10,17 @@ export interface CurrentUser {
   must_change_password: boolean;
 }
 
-interface LoginResponse {
-  user: CurrentUser;
+export interface SessionInfo {
+  expires_at: string;
 }
 
-interface CurrentUserResponse {
+export interface AuthSession {
   user: CurrentUser;
+  session: SessionInfo;
 }
+
+type LoginResponse = AuthSession;
+type CurrentUserResponse = AuthSession;
 
 interface UserListResponse {
   users: CurrentUser[];
@@ -145,7 +149,7 @@ interface FetchAuditEventsOptions {
 export async function loginUser(
   username: string,
   password: string
-): Promise<CurrentUser> {
+): Promise<AuthSession> {
   const response = await fetch(`${API_BASE_URL}/api/security/login`, {
     method: "POST",
     credentials: "include",
@@ -161,10 +165,10 @@ export async function loginUser(
 
   const data = (await response.json()) as LoginResponse;
 
-  return data.user;
+  return data;
 }
 
-export async function fetchCurrentUser(): Promise<CurrentUser> {
+export async function fetchCurrentUser(): Promise<AuthSession> {
   const response = await authenticatedFetch(`${API_BASE_URL}/api/security/me`);
 
   if (!response.ok) {
@@ -173,7 +177,22 @@ export async function fetchCurrentUser(): Promise<CurrentUser> {
 
   const data = (await response.json()) as CurrentUserResponse;
 
-  return data.user;
+  return data;
+}
+
+export async function renewCurrentSession(): Promise<SessionInfo> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/session/renew`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to renew session.");
+  }
+
+  return (await response.json()) as SessionInfo;
 }
 
 export async function fetchUsers(): Promise<CurrentUser[]> {

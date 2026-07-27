@@ -388,6 +388,68 @@ function DashboardCardsSettingsCard({
   );
 }
 
+interface SessionDisplaySettingsCardProps {
+  darkMode: boolean;
+  showSessionTimer: boolean;
+  onShowSessionTimerChange: (value: boolean) => void;
+}
+
+function SessionDisplaySettingsCard({
+  darkMode,
+  showSessionTimer,
+  onShowSessionTimerChange,
+}: SessionDisplaySettingsCardProps) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-5 shadow-sm",
+        darkMode ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"
+      )}
+    >
+      <h3 className="text-lg font-semibold">Session Display</h3>
+
+      <p
+        className={cn(
+          "mt-1 text-sm",
+          darkMode ? "text-gray-400" : "text-gray-600"
+        )}
+      >
+        Optionally show the remaining session time in the bottom right corner.
+        Security warnings will still appear when this is hidden.
+      </p>
+
+      <label
+        className={cn(
+          "mt-4 flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm",
+          darkMode
+            ? "border-gray-800 bg-gray-950 text-gray-200"
+            : "border-gray-200 bg-gray-50 text-gray-700"
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={showSessionTimer}
+          onChange={(event) => onShowSessionTimerChange(event.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+
+        <span>
+          <span className="block font-medium">Show session countdown</span>
+          <span
+            className={cn(
+              "mt-1 block text-xs",
+              darkMode ? "text-gray-400" : "text-gray-600"
+            )}
+          >
+            This preference is off by default and stores no session or patient
+            information.
+          </span>
+        </span>
+      </label>
+    </div>
+  );
+}
+
 interface SettingsPageProps {
   darkMode: boolean;
 
@@ -426,6 +488,9 @@ interface SettingsPageProps {
   workflowViewMode: WorkflowViewMode;
   onWorkflowViewModeChange: (value: WorkflowViewMode) => void;
 
+  showSessionTimer: boolean;
+  onShowSessionTimerChange: (value: boolean) => void;
+
   onPasswordChanged: () => void;
 }
 
@@ -457,6 +522,8 @@ export function SettingsPage({
   onResetDashboardCards,
   workflowViewMode,
   onWorkflowViewModeChange,
+  showSessionTimer,
+  onShowSessionTimerChange,
   onPasswordChanged,
 }: SettingsPageProps) {
   const [isPasswordChangeOpen, setIsPasswordChangeOpen] = useState(false);
@@ -477,7 +544,7 @@ export function SettingsPage({
         </div>
       )}
 
-    <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         <RegisteredListCard
           darkMode={darkMode}
           category="facility"
@@ -537,6 +604,12 @@ export function SettingsPage({
             darkMode={darkMode}
             workflowViewMode={workflowViewMode}
             onWorkflowViewModeChange={onWorkflowViewModeChange}
+          />
+
+          <SessionDisplaySettingsCard
+            darkMode={darkMode}
+            showSessionTimer={showSessionTimer}
+            onShowSessionTimerChange={onShowSessionTimerChange}
           />
 
           <DashboardCardsSettingsCard

@@ -87,7 +87,11 @@ def test_login_returns_user_without_session_token(client):
             "password_changed_at": data["user"]["password_changed_at"],
             "must_change_password": False,
         },
+        "session": {
+            "expires_at": data["session"]["expires_at"],
+        },
     }
+    assert data["session"]["expires_at"]
     assert data["user"]["role"] == "Admin"
     assert "password_hash" not in data["user"]
 
@@ -183,6 +187,7 @@ def test_me_returns_current_user(client):
 
     assert data["user"]["username"] == "user@example.com"
     assert data["user"]["role"] == "UR"
+    assert data["session"]["expires_at"]
 
 
 def test_login_sets_httponly_session_cookie(client):
@@ -1307,3 +1312,142 @@ def test_user_regains_protected_access_after_required_password_change(client):
 
     assert allowed_response.status_code == 200
     assert allowed_response.json()["users"][0]["must_change_password"] is False
+
+
+def test_me_returns_same_session_expiration_as_login(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    login_expiration = login_response.json()["session"]["expires_at"]
+
+    assert login_expiration
+
+    me_response = client.get("/api/security/me")
+
+    assert me_response.status_code == 200
+    assert me_response.json()["session"]["expires_at"] == login_expiration
+
+
+def test_user_can_renew_active_session(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    original_expiration = login_response.json()["session"]["expires_at"]
+
+    renew_response = client.post(
+        "/api/security/session/renew",
+        headers=csrf_headers(client),
+    )
+
+    assert renew_response.status_code == 200
+
+    renewed_expiration = renew_response.json()["expires_at"]
+
+    assert renewed_expiration >= original_expiration
+
+    set_cookie_headers = renew_response.headers.get_list("set-cookie")
+
+    assert any(
+        header.startswith("carequeue_session=") and "Max-Age=1200" in header
+        for header in set_cookie_headers
+    )
+    assert any(
+        header.startswith("carequeue_csrf=") and "Max-Age=1200" in header
+        for header in set_cookie_headers
+    )
+
+
+def test_session_renewal_requires_csrf_header(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    response = client.post(
+        "/api/security/session/renew",
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "CSRF validation failed.",
+    }
+
+
+def test_session_renewal_requires_active_session(client):
+    response = client.post(
+        "/api/security/session/renew",
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Authentication required.",
+    }
+
+
+def test_me_returns_renewed_session_expiration(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    renew_response = client.post(
+        "/api/security/session/renew",
+        headers=csrf_headers(client),
+    )
+
+    assert renew_response.status_code == 200
+
+    renewed_expiration = renew_response.json()["expires_at"]
+
+    me_response = client.get("/api/security/me")
+
+    assert me_response.status_code == 200
+    assert me_response.json()["session"]["expires_at"] == renewed_expiration

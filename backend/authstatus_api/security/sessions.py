@@ -14,7 +14,7 @@ from authstatus_api.security.mappings import (
 )
 
 SESSION_TOKEN_BYTES = 32
-DEFAULT_SESSION_MINUTES = 30
+DEFAULT_SESSION_MINUTES = 20
 
 
 def generate_session_token() -> str:
@@ -148,6 +148,43 @@ def touch_session(token: str) -> None:
             """,
             (now, token_hash),
         )
+
+
+def renew_session(
+    token: str,
+    *,
+    minutes: int = DEFAULT_SESSION_MINUTES,
+) -> dict[str, Any] | None:
+    init_db()
+
+    token_hash = hash_session_token(token)
+    now_datetime = utc_now()
+    now = format_datetime(now_datetime)
+    expires_at = format_datetime(now_datetime + timedelta(minutes=minutes))
+
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE sessions
+            SET
+                last_seen_at = ?,
+                expires_at = ?
+            WHERE token_hash = ?
+              AND revoked_at IS NULL
+              AND expires_at > ?
+            """,
+            (
+                now,
+                expires_at,
+                token_hash,
+                now,
+            ),
+        )
+
+    if cursor.rowcount == 0:
+        return None
+
+    return get_active_session_by_token(token)
 
 
 def revoke_session(token: str) -> bool:

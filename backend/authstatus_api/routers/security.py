@@ -32,6 +32,7 @@ from authstatus_api.security.schemas import (
     LoginResponse,
     LogoutResponse,
     PasswordUpdateResponse,
+    SessionResponse,
     UserCreateRequest,
     UserListResponse,
     UserResponse,
@@ -40,6 +41,8 @@ from authstatus_api.security.schemas import (
 from authstatus_api.security.sessions import (
     DEFAULT_SESSION_MINUTES,
     create_user_session,
+    get_active_session_by_token,
+    renew_session,
     revoke_session,
     revoke_user_sessions,
 )
@@ -368,6 +371,9 @@ def login(
 
     return LoginResponse(
         user=_user_response(user),
+        session=SessionResponse(
+            expires_at=session["expires_at"],
+        ),
     )
 
 
@@ -419,6 +425,68 @@ def logout(
 
 @router.get("/me", response_model=CurrentUserResponse)
 def read_current_user(
+    request: Request,
     user: dict = AuthenticatedUserDependency,
 ) -> CurrentUserResponse:
-    return CurrentUserResponse(user=_user_response(user))
+    token = extract_session_token(request)
+    session = get_active_session_by_token(token)
+
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
+        )
+
+    return CurrentUserResponse(
+        user=_user_response(user),
+        session=SessionResponse(
+            expires_at=session["expires_at"],
+        ),
+    )
+
+
+@router.post(
+    "/session/renew",
+    response_model=SessionResponse,
+)
+def renew_current_session(
+    request: Request,
+    response: Response,
+    user: dict = AuthenticatedUserDependency,
+) -> SessionResponse:
+    token = extract_session_token(request)
+    session = renew_session(token)
+
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
+        )
+
+    settings = get_settings()
+    csrf_token = request.cookies.get(settings.csrf_cookie_name)
+
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=token,
+        max_age=DEFAULT_SESSION_MINUTES * 60,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/api",
+    )
+
+    if csrf_token:
+        response.set_cookie(
+            key=settings.csrf_cookie_name,
+            value=csrf_token,
+            max_age=DEFAULT_SESSION_MINUTES * 60,
+            httponly=False,
+            secure=settings.session_cookie_secure,
+            samesite="lax",
+            path="/",
+        )
+
+    return SessionResponse(
+        expires_at=session["expires_at"],
+    )

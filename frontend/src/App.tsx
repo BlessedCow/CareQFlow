@@ -2,11 +2,19 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 // API
 import { fetchAuthRequests } from "./api/authStatus";
-import { fetchCurrentUser, logoutUser, type CurrentUser } from "./api/security";
+
+// Security
+import {
+  fetchCurrentUser,
+  logoutUser,
+  type AuthSession,
+  type CurrentUser,
+} from "./api/security";
 
 // Components
 import { LoginPage } from "./components/LoginPage";
 import { RequiredPasswordChangePage } from "./components/RequiredPasswordChangePage";
+import { SessionTimeoutManager } from "./components/SessionTimeoutManager";
 
 // Pages
 import { DashboardPage } from "./pages/DashboardPage";
@@ -25,6 +33,7 @@ import { useAuthorizationForm } from "./hooks/useAuthorizationForm";
 import { useAuthorizationSelection } from "./hooks/useAuthorizationSelection";
 import { useAuthorizationMutations } from "./hooks/useAuthorizationMutations";
 import { useWorkflowViewMode } from "./hooks/useWorkflowViewMode";
+import { useSessionTimerPreference } from "./hooks/useSessionTimerPreference";
 
 // AppShell
 import { AppShell } from "./components/layout/AppShell";
@@ -37,6 +46,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [activePage, setActivePage] = useState<AppPage>("dashboard");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const {
     dashboardCardSettings,
@@ -73,6 +83,8 @@ function App() {
   );
 
   const { workflowViewMode, setWorkflowViewMode } = useWorkflowViewMode();
+
+  const { showSessionTimer, setShowSessionTimer } = useSessionTimerPreference();
 
   const {
     dateRange,
@@ -133,14 +145,16 @@ function App() {
 
     async function restoreSession() {
       try {
-        const user = await fetchCurrentUser();
+        const authSession = await fetchCurrentUser();
 
         if (isMounted) {
-          setCurrentUser(user);
+          setCurrentUser(authSession.user);
+          setSessionExpiresAt(authSession.session.expires_at);
         }
       } catch {
         if (isMounted) {
           setCurrentUser(null);
+          setSessionExpiresAt(null);
         }
       } finally {
         if (isMounted) {
@@ -318,28 +332,40 @@ function App() {
     }
   };
 
-  const handleLogin = (user: CurrentUser) => {
-    setCurrentUser(user);
+  const handleLogin = (authSession: AuthSession) => {
+    setCurrentUser(authSession.user);
+    setSessionExpiresAt(authSession.session.expires_at);
     setActivePage("dashboard");
   };
 
-  const handleRequiredPasswordChanged = async () => {
-    await logoutUser();
+  const clearAuthenticatedState = useCallback(() => {
     setCurrentUser(null);
+    setSessionExpiresAt(null);
     setAuthRequests([]);
     clearAuthEvents();
     handleCancelAuthForm();
     setActivePage("dashboard");
+  }, [clearAuthEvents, handleCancelAuthForm]);
+
+  const handleRequiredPasswordChanged = async () => {
+    try {
+      await logoutUser();
+    } finally {
+      clearAuthenticatedState();
+    }
   };
 
   const handleLogout = async () => {
-    await logoutUser();
-    setCurrentUser(null);
-    setAuthRequests([]);
-    clearAuthEvents();
-    handleCancelAuthForm();
-    setActivePage("dashboard");
+    try {
+      await logoutUser();
+    } finally {
+      clearAuthenticatedState();
+    }
   };
+
+  const handleSessionExpired = useCallback(() => {
+    clearAuthenticatedState();
+  }, [clearAuthenticatedState]);
 
   if (isCheckingSession) {
     return (
@@ -367,12 +393,11 @@ function App() {
   }
 
   const handlePasswordChanged = async () => {
-    await logoutUser();
-    setCurrentUser(null);
-    setAuthRequests([]);
-    clearAuthEvents();
-    handleCancelAuthForm();
-    setActivePage("dashboard");
+    try {
+      await logoutUser();
+    } finally {
+      clearAuthenticatedState();
+    }
   };
 
   const canManageAuthorizations =
@@ -381,210 +406,227 @@ function App() {
   const canManageUsers = currentUser.role === "Admin";
 
   return (
-    <AppShell
-      activePage={activePage}
-      darkMode={darkMode}
-      currentUser={currentUser}
-      canManageUsers={canManageUsers}
-      onPageChange={setActivePage}
-      onToggleDarkMode={() => setDarkMode((currentValue) => !currentValue)}
-      onLogout={handleLogout}
-    >
-      {activePage === "dashboard" && (
-        <DashboardPage
+    <>
+      <AppShell
+        activePage={activePage}
+        darkMode={darkMode}
+        currentUser={currentUser}
+        canManageUsers={canManageUsers}
+        onPageChange={setActivePage}
+        onToggleDarkMode={() => setDarkMode((currentValue) => !currentValue)}
+        onLogout={handleLogout}
+      >
+        {activePage === "dashboard" && (
+          <DashboardPage
+            darkMode={darkMode}
+            workflowViewMode={workflowViewMode}
+            isLoadingAuths={isLoadingAuths}
+            authsError={authsError}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            selectedFacility={selectedFacility}
+            setSelectedFacility={setSelectedFacility}
+            facilities={facilityOptions}
+            selectedInsurance={selectedInsurance}
+            setSelectedInsurance={setSelectedInsurance}
+            insurances={insuranceOptions}
+            selectedLoc={selectedLoc}
+            setSelectedLoc={setSelectedLoc}
+            selectedWorkQueue={selectedWorkQueue}
+            setSelectedWorkQueue={setSelectedWorkQueue}
+            onClearFilters={handleClearFilters}
+            dashboardCardSettings={dashboardCardSettings}
+            filteredData={filteredData}
+            comparisonFilteredData={comparisonFilteredData}
+            comparisonPeriodLabel={comparisonPeriodLabel}
+            onViewAuth={handleOpenAuthDetails}
+          />
+        )}
+
+        {activePage === "calendar" && (
+          <CalendarRoutePage
+            darkMode={darkMode}
+            isLoadingAuths={isLoadingAuths}
+            authsError={authsError}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            selectedFacility={selectedFacility}
+            setSelectedFacility={setSelectedFacility}
+            facilities={facilityOptions}
+            selectedInsurance={selectedInsurance}
+            setSelectedInsurance={setSelectedInsurance}
+            insurances={insuranceOptions}
+            selectedLoc={selectedLoc}
+            setSelectedLoc={setSelectedLoc}
+            selectedWorkQueue={selectedWorkQueue}
+            setSelectedWorkQueue={setSelectedWorkQueue}
+            onClearFilters={handleClearFilters}
+            filteredData={filteredData}
+            onSelectAuth={handleOpenAuthDetails}
+          />
+        )}
+
+        {activePage === "authorizations" && (
+          <AuthorizationsPage
+            darkMode={darkMode}
+            isLoadingAuths={isLoadingAuths}
+            authsError={authsError}
+            dateRange={dateRange}
+            setDateRange={setDateRange}
+            selectedFacility={selectedFacility}
+            setSelectedFacility={setSelectedFacility}
+            facilities={facilityOptions}
+            selectedInsurance={selectedInsurance}
+            setSelectedInsurance={setSelectedInsurance}
+            insurances={insuranceOptions}
+            selectedLoc={selectedLoc}
+            setSelectedLoc={setSelectedLoc}
+            selectedWorkQueue={selectedWorkQueue}
+            setSelectedWorkQueue={setSelectedWorkQueue}
+            onClearFilters={handleClearFilters}
+            filteredData={filteredData}
+            showAddAuthForm={showAddAuthForm}
+            viewingAuth={viewingAuth}
+            editingAuthId={editingAuthId}
+            newAuthForm={newAuthForm}
+            isCreatingAuth={isCreatingAuth}
+            registeredFacilities={registeredFacilities}
+            registeredInsurances={registeredInsurances}
+            registeredWebPortals={registeredWebPortals}
+            authEvents={authEvents}
+            workflowViewMode={workflowViewMode}
+            canManageAuthorizations={canManageAuthorizations}
+            authEventsError={authEventsError}
+            isLoadingAuthEvents={isLoadingAuthEvents}
+            isSavingAuthEvent={isSavingAuthEvent}
+            editingAuthEventId={editingAuthEventId}
+            confirmingDeleteAuthEventId={confirmingDeleteAuthEventId}
+            timelineEventForm={timelineEventForm}
+            deletingAuthId={deletingAuthId}
+            onShowAddAuthForm={handleShowAddAuthForm}
+            onCancelAuthForm={handleCancelAuthForm}
+            onCloseViewAuth={handleCloseViewAuth}
+            onStartLocChangeAuthorization={handleStartLocChangeAuthorization}
+            onFieldChange={handleNewAuthFieldChange}
+            onSubmitAuth={handleCreateAuth}
+            onViewAuth={handleStartViewAuth}
+            onEditAuth={handleStartEditAuth}
+            onDeleteAuth={handleDeleteAuth}
+            onTimelineEventFieldChange={handleTimelineEventFieldChange}
+            onAddTimelineEvent={async () => {
+              if (!editingAuthId) {
+                return;
+              }
+
+              await handleAddTimelineEvent(editingAuthId);
+              await refreshAuthRequests();
+            }}
+            onAddTimelineEventAndReturn={async () => {
+              if (!editingAuthId) {
+                return;
+              }
+
+              await handleAddTimelineEvent(editingAuthId);
+              await refreshAuthRequests();
+              handleCancelAuthForm();
+            }}
+            onStartEditTimelineEvent={handleStartEditTimelineEvent}
+            onCancelEditTimelineEvent={handleCancelEditTimelineEvent}
+            onUpdateTimelineEvent={async (eventId, payload) => {
+              if (!editingAuthId) {
+                return;
+              }
+
+              await handleUpdateTimelineEvent(editingAuthId, eventId, payload);
+              await refreshAuthRequests();
+            }}
+            onUpdateTimelineEventAndReturn={async (eventId, payload) => {
+              if (!editingAuthId) {
+                return;
+              }
+
+              await handleUpdateTimelineEvent(editingAuthId, eventId, payload);
+              await refreshAuthRequests();
+              handleCancelAuthForm();
+            }}
+            onStartDeleteTimelineEvent={handleStartDeleteTimelineEvent}
+            onCancelDeleteTimelineEvent={handleCancelDeleteTimelineEvent}
+            onConfirmDeleteTimelineEvent={async (eventId) => {
+              if (!editingAuthId) {
+                return;
+              }
+
+              await handleConfirmDeleteTimelineEvent(editingAuthId, eventId);
+              await refreshAuthRequests();
+            }}
+            onStartContinuedStay={() =>
+              handleStartContinuedStay({
+                programmingDays: newAuthForm.programmingDays,
+                authEndDate: newAuthForm.endDate,
+                requestedDays: newAuthForm.requestedDays,
+                approvedDays: newAuthForm.approvedDays,
+              })
+            }
+          />
+        )}
+
+        {activePage === "settings" && (
+          <SettingsPage
+            darkMode={darkMode}
+            showSessionTimer={showSessionTimer}
+            onShowSessionTimerChange={setShowSessionTimer}
+            newFacilityName={newFacilityName}
+            setNewFacilityName={setNewFacilityName}
+            registeredFacilities={registeredFacilities}
+            onAddFacility={handleAddFacility}
+            onRemoveFacility={handleRemoveFacility}
+            newInsuranceName={newInsuranceName}
+            setNewInsuranceName={setNewInsuranceName}
+            registeredInsurances={registeredInsurances}
+            onAddInsurance={handleAddInsurance}
+            onRemoveInsurance={handleRemoveInsurance}
+            newWebPortalName={newWebPortalName}
+            setNewWebPortalName={setNewWebPortalName}
+            registeredWebPortals={registeredWebPortals}
+            onAddWebPortal={handleAddWebPortal}
+            onRemoveWebPortal={handleRemoveWebPortal}
+            dashboardCardSettings={dashboardCardSettings}
+            onToggleDashboardCard={handleToggleDashboardCard}
+            onResetDashboardCards={handleResetDashboardCards}
+            workflowViewMode={workflowViewMode}
+            onWorkflowViewModeChange={setWorkflowViewMode}
+            onPasswordChanged={handlePasswordChanged}
+            isLoadingRegisteredOptions={isLoadingRegisteredOptions}
+            registeredOptionsError={registeredOptionsError}
+            savingCategory={savingCategory}
+            deletingOptionId={deletingOptionId}
+            isProtectedOption={isProtectedOption}
+            canManageRegisteredOptions={canManageUsers}
+          />
+        )}
+
+        {activePage === "adminUsers" && canManageUsers && (
+          <AdminUsersPage darkMode={darkMode} currentUser={currentUser} />
+        )}
+
+        {activePage === "adminAudit" && canManageUsers && (
+          <AdminAuditPage darkMode={darkMode} />
+        )}
+      </AppShell>
+
+      {sessionExpiresAt && (
+        <SessionTimeoutManager
           darkMode={darkMode}
-          workflowViewMode={workflowViewMode}
-          isLoadingAuths={isLoadingAuths}
-          authsError={authsError}
-          dateRange={dateRange}
-          setDateRange={setDateRange}
-          selectedFacility={selectedFacility}
-          setSelectedFacility={setSelectedFacility}
-          facilities={facilityOptions}
-          selectedInsurance={selectedInsurance}
-          setSelectedInsurance={setSelectedInsurance}
-          insurances={insuranceOptions}
-          selectedLoc={selectedLoc}
-          setSelectedLoc={setSelectedLoc}
-          selectedWorkQueue={selectedWorkQueue}
-          setSelectedWorkQueue={setSelectedWorkQueue}
-          onClearFilters={handleClearFilters}
-          dashboardCardSettings={dashboardCardSettings}
-          filteredData={filteredData}
-          comparisonFilteredData={comparisonFilteredData}
-          comparisonPeriodLabel={comparisonPeriodLabel}
-          onViewAuth={handleOpenAuthDetails}
+          expiresAt={sessionExpiresAt}
+          showTimer={showSessionTimer}
+          onSessionRenewed={setSessionExpiresAt}
+          onSessionExpired={handleSessionExpired}
+          onLogout={() => {
+            void handleLogout();
+          }}
         />
       )}
-
-      {activePage === "calendar" && (
-        <CalendarRoutePage
-          darkMode={darkMode}
-          isLoadingAuths={isLoadingAuths}
-          authsError={authsError}
-          dateRange={dateRange}
-          setDateRange={setDateRange}
-          selectedFacility={selectedFacility}
-          setSelectedFacility={setSelectedFacility}
-          facilities={facilityOptions}
-          selectedInsurance={selectedInsurance}
-          setSelectedInsurance={setSelectedInsurance}
-          insurances={insuranceOptions}
-          selectedLoc={selectedLoc}
-          setSelectedLoc={setSelectedLoc}
-          selectedWorkQueue={selectedWorkQueue}
-          setSelectedWorkQueue={setSelectedWorkQueue}
-          onClearFilters={handleClearFilters}
-          filteredData={filteredData}
-          onSelectAuth={handleOpenAuthDetails}
-        />
-      )}
-
-      {activePage === "authorizations" && (
-        <AuthorizationsPage
-          darkMode={darkMode}
-          isLoadingAuths={isLoadingAuths}
-          authsError={authsError}
-          dateRange={dateRange}
-          setDateRange={setDateRange}
-          selectedFacility={selectedFacility}
-          setSelectedFacility={setSelectedFacility}
-          facilities={facilityOptions}
-          selectedInsurance={selectedInsurance}
-          setSelectedInsurance={setSelectedInsurance}
-          insurances={insuranceOptions}
-          selectedLoc={selectedLoc}
-          setSelectedLoc={setSelectedLoc}
-          selectedWorkQueue={selectedWorkQueue}
-          setSelectedWorkQueue={setSelectedWorkQueue}
-          onClearFilters={handleClearFilters}
-          filteredData={filteredData}
-          showAddAuthForm={showAddAuthForm}
-          viewingAuth={viewingAuth}
-          editingAuthId={editingAuthId}
-          newAuthForm={newAuthForm}
-          isCreatingAuth={isCreatingAuth}
-          registeredFacilities={registeredFacilities}
-          registeredInsurances={registeredInsurances}
-          registeredWebPortals={registeredWebPortals}
-          authEvents={authEvents}
-          workflowViewMode={workflowViewMode}
-          canManageAuthorizations={canManageAuthorizations}
-          authEventsError={authEventsError}
-          isLoadingAuthEvents={isLoadingAuthEvents}
-          isSavingAuthEvent={isSavingAuthEvent}
-          editingAuthEventId={editingAuthEventId}
-          confirmingDeleteAuthEventId={confirmingDeleteAuthEventId}
-          timelineEventForm={timelineEventForm}
-          deletingAuthId={deletingAuthId}
-          onShowAddAuthForm={handleShowAddAuthForm}
-          onCancelAuthForm={handleCancelAuthForm}
-          onCloseViewAuth={handleCloseViewAuth}
-          onStartLocChangeAuthorization={handleStartLocChangeAuthorization}
-          onFieldChange={handleNewAuthFieldChange}
-          onSubmitAuth={handleCreateAuth}
-          onViewAuth={handleStartViewAuth}
-          onEditAuth={handleStartEditAuth}
-          onDeleteAuth={handleDeleteAuth}
-          onTimelineEventFieldChange={handleTimelineEventFieldChange}
-          onAddTimelineEvent={async () => {
-            if (!editingAuthId) {
-              return;
-            }
-
-            await handleAddTimelineEvent(editingAuthId);
-            await refreshAuthRequests();
-          }}
-          onAddTimelineEventAndReturn={async () => {
-            if (!editingAuthId) {
-              return;
-            }
-
-            await handleAddTimelineEvent(editingAuthId);
-            await refreshAuthRequests();
-            handleCancelAuthForm();
-          }}
-          onStartEditTimelineEvent={handleStartEditTimelineEvent}
-          onCancelEditTimelineEvent={handleCancelEditTimelineEvent}
-          onUpdateTimelineEvent={async (eventId, payload) => {
-            if (!editingAuthId) {
-              return;
-            }
-
-            await handleUpdateTimelineEvent(editingAuthId, eventId, payload);
-            await refreshAuthRequests();
-          }}
-          onUpdateTimelineEventAndReturn={async (eventId, payload) => {
-            if (!editingAuthId) {
-              return;
-            }
-
-            await handleUpdateTimelineEvent(editingAuthId, eventId, payload);
-            await refreshAuthRequests();
-            handleCancelAuthForm();
-          }}
-          onStartDeleteTimelineEvent={handleStartDeleteTimelineEvent}
-          onCancelDeleteTimelineEvent={handleCancelDeleteTimelineEvent}
-          onConfirmDeleteTimelineEvent={async (eventId) => {
-            if (!editingAuthId) {
-              return;
-            }
-
-            await handleConfirmDeleteTimelineEvent(editingAuthId, eventId);
-            await refreshAuthRequests();
-          }}
-          onStartContinuedStay={() =>
-            handleStartContinuedStay({
-              programmingDays: newAuthForm.programmingDays,
-              authEndDate: newAuthForm.endDate,
-              requestedDays: newAuthForm.requestedDays,
-              approvedDays: newAuthForm.approvedDays,
-            })
-          }
-        />
-      )}
-
-      {activePage === "settings" && (
-        <SettingsPage
-          darkMode={darkMode}
-          newFacilityName={newFacilityName}
-          setNewFacilityName={setNewFacilityName}
-          registeredFacilities={registeredFacilities}
-          onAddFacility={handleAddFacility}
-          onRemoveFacility={handleRemoveFacility}
-          newInsuranceName={newInsuranceName}
-          setNewInsuranceName={setNewInsuranceName}
-          registeredInsurances={registeredInsurances}
-          onAddInsurance={handleAddInsurance}
-          onRemoveInsurance={handleRemoveInsurance}
-          newWebPortalName={newWebPortalName}
-          setNewWebPortalName={setNewWebPortalName}
-          registeredWebPortals={registeredWebPortals}
-          onAddWebPortal={handleAddWebPortal}
-          onRemoveWebPortal={handleRemoveWebPortal}
-          dashboardCardSettings={dashboardCardSettings}
-          onToggleDashboardCard={handleToggleDashboardCard}
-          onResetDashboardCards={handleResetDashboardCards}
-          workflowViewMode={workflowViewMode}
-          onWorkflowViewModeChange={setWorkflowViewMode}
-          onPasswordChanged={handlePasswordChanged}
-          isLoadingRegisteredOptions={isLoadingRegisteredOptions}
-          registeredOptionsError={registeredOptionsError}
-          savingCategory={savingCategory}
-          deletingOptionId={deletingOptionId}
-          isProtectedOption={isProtectedOption}
-          canManageRegisteredOptions={canManageUsers}
-        />
-      )}
-
-      {activePage === "adminUsers" && canManageUsers && (
-        <AdminUsersPage darkMode={darkMode} currentUser={currentUser} />
-      )}
-
-      {activePage === "adminAudit" && canManageUsers && (
-        <AdminAuditPage darkMode={darkMode} />
-      )}
-    </AppShell>
+    </>
   );
 }
 
