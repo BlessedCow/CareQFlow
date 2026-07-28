@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from authstatus_api.errors import register_exception_handlers
@@ -13,6 +13,7 @@ from authstatus_api.observability.logging import (
 from authstatus_api.pdf_intake.router import (
     router as pdf_intake_router,
 )
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 from authstatus_api.registered_options.router import (
     router as registered_options_router,
@@ -64,12 +65,26 @@ def create_app() -> FastAPI:
     register_exception_handlers(api)
 
     @api.get("/api/health")
-    def health_check() -> dict[str, str]:
+    @api.get("/api/health/live")
+    def health_check() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {
             "status": "ok",
             "app": settings.app_name,
             "version": settings.app_version,
         }
+
+    @api.get("/api/health/ready")
+    def readiness_check(  # pyright: ignore[reportUnusedFunction]
+        response: Response,
+    ) -> dict[str, str]:
+        try:
+            with get_conn() as conn:
+                conn.execute("SELECT 1").fetchone()
+        except Exception:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return {"status": "unavailable"}
+
+        return {"status": "ok"}
 
     api.include_router(security_router)
     api.include_router(auths_router)

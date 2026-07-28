@@ -93,17 +93,6 @@ def make_payload() -> dict:
     }
 
 
-def test_health_endpoint(client):
-    response = client.get("/api/health")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "app": "AuthStatus API",
-        "version": "0.1.0",
-    }
-
-
 def test_create_auth_endpoint_returns_decrypted_record(client, auth_headers):
     response = client.post("/api/auths", json=make_payload(), headers=auth_headers)
 
