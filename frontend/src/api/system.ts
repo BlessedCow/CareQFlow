@@ -10,15 +10,9 @@ export interface DatabaseReadiness {
   status: "ok" | "unavailable";
 }
 
-export type EndpointAccess =
-  | "public"
-  | "authenticated"
-  | "admin";
+export type EndpointAccess = "public" | "authenticated" | "admin";
 
-export type EndpointStatus =
-  | "operational"
-  | "unavailable"
-  | "registered";
+export type EndpointStatus = "operational" | "unavailable" | "registered";
 
 export interface ApiEndpointStatus {
   path: string;
@@ -51,6 +45,27 @@ export interface BackupCreateResponse {
 export interface BackupVerifyResponse {
   filename: string;
   verified: boolean;
+}
+
+export interface StagedRecovery {
+  backup_filename: string;
+  staged_filename: string;
+  staged_at: string;
+}
+
+export interface RecoveryStatusResponse {
+  pending: boolean;
+  recovery: StagedRecovery | null;
+}
+
+export interface RecoveryStageResponse {
+  recovery: StagedRecovery;
+  staged: boolean;
+}
+
+export interface RecoveryCancelResponse {
+  recovery: StagedRecovery;
+  canceled: boolean;
 }
 
 async function getErrorMessage(
@@ -94,19 +109,14 @@ export async function fetchDatabaseReadiness(): Promise<DatabaseReadiness> {
   return (await response.json()) as DatabaseReadiness;
 }
 
-export async function fetchApiEndpoints(): Promise<
-  ApiEndpointStatus[]
-> {
+export async function fetchApiEndpoints(): Promise<ApiEndpointStatus[]> {
   const response = await authenticatedFetch(
     `${API_BASE_URL}/api/admin/system/endpoints`
   );
 
   if (!response.ok) {
     throw new Error(
-      await getErrorMessage(
-        response,
-        "Unable to load API endpoint status."
-      )
+      await getErrorMessage(response, "Unable to load API endpoint status.")
     );
   }
 
@@ -171,4 +181,69 @@ export async function verifyRestorePoint(
   }
 
   return (await response.json()) as BackupVerifyResponse;
+}
+
+export async function fetchRecoveryStatus(): Promise<RecoveryStatusResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/admin/system/backups/recovery`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(
+        response,
+        "Unable to load database recovery status."
+      )
+    );
+  }
+
+  return (await response.json()) as RecoveryStatusResponse;
+}
+
+export async function stageDatabaseRecovery(
+  filename: string
+): Promise<RecoveryStageResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/admin/system/backups/recovery/stage`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filename,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(
+        response,
+        "Unable to stage the selected restore point."
+      )
+    );
+  }
+
+  return (await response.json()) as RecoveryStageResponse;
+}
+
+export async function cancelDatabaseRecovery(): Promise<RecoveryCancelResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/admin/system/backups/recovery`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(
+        response,
+        "Unable to cancel the staged database recovery."
+      )
+    );
+  }
+
+  return (await response.json()) as RecoveryCancelResponse;
 }

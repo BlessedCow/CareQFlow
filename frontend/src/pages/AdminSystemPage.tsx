@@ -13,16 +13,20 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  cancelDatabaseRecovery,
   createRestorePoint,
   fetchApiEndpoints,
   fetchApplicationHealth,
   fetchDatabaseReadiness,
+  fetchRecoveryStatus,
   fetchRestorePoints,
+  stageDatabaseRecovery,
   verifyRestorePoint,
   type ApiEndpointStatus,
   type ApplicationHealth,
   type BackupFile,
   type DatabaseReadiness,
+  type StagedRecovery,
 } from "../api/system";
 import { cn } from "../utils/cn";
 
@@ -71,21 +75,32 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
   const [isLoadingEndpoints, setIsLoadingEndpoints] = useState(false);
   const [endpointSearch, setEndpointSearch] = useState("");
   const [endpointError, setEndpointError] = useState<string | null>(null);
+  const [stagedRecovery, setStagedRecovery] = useState<StagedRecovery | null>(
+    null
+  );
+  const [stagingFilename, setStagingFilename] = useState<string | null>(null);
+  const [isCancelingRecovery, setIsCancelingRecovery] = useState(false);
+  const [recoveryConfirmationFilename, setRecoveryConfirmationFilename] =
+    useState<string | null>(null);
 
   const loadSystemData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const [health, readiness, backups] = await Promise.all([
+      const [health, readiness, backups, recoveryStatus] = await Promise.all([
         fetchApplicationHealth(),
         fetchDatabaseReadiness(),
         fetchRestorePoints(),
+        fetchRecoveryStatus(),
       ]);
 
       setApplicationHealth(health);
       setDatabaseReadiness(readiness);
       setRestorePoints(backups);
+      setStagedRecovery(
+        recoveryStatus.pending ? recoveryStatus.recovery : null
+      );
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -147,6 +162,59 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
       );
     } finally {
       setVerifyingFilename(null);
+    }
+  };
+
+  const handleStageRecovery = async () => {
+    if (!recoveryConfirmationFilename) {
+      return;
+    }
+
+    const filename = recoveryConfirmationFilename;
+
+    setStagingFilename(filename);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const result = await stageDatabaseRecovery(filename);
+
+      setStagedRecovery(result.recovery);
+      setRecoveryConfirmationFilename(null);
+      setSuccessMessage(
+        `Restore point ${filename} was staged for database recovery.`
+      );
+    } catch (stageError) {
+      setError(
+        stageError instanceof Error
+          ? stageError.message
+          : "Unable to stage the selected restore point."
+      );
+    } finally {
+      setStagingFilename(null);
+    }
+  };
+
+  const handleCancelRecovery = async () => {
+    setIsCancelingRecovery(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const result = await cancelDatabaseRecovery();
+
+      setStagedRecovery(null);
+      setSuccessMessage(
+        `Staged recovery for ${result.recovery.backup_filename} was canceled.`
+      );
+    } catch (cancelError) {
+      setError(
+        cancelError instanceof Error
+          ? cancelError.message
+          : "Unable to cancel the staged database recovery."
+      );
+    } finally {
+      setIsCancelingRecovery(false);
     }
   };
 
@@ -510,6 +578,117 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
       )}
 
       <section className={cardClass}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <Database className="h-6 w-6 text-amber-500" />
+              <h2 className="text-lg font-semibold">Database Recovery</h2>
+            </div>
+
+            <p
+              className={cn(
+                "mt-2 max-w-2xl text-sm",
+                darkMode ? "text-gray-400" : "text-gray-600"
+              )}
+            >
+              Staging prepares and validates a database recovery copy. It does
+              not replace the active database or interrupt current users.
+            </p>
+          </div>
+
+          {stagedRecovery && (
+            <button
+              type="button"
+              onClick={() => void handleCancelRecovery()}
+              disabled={
+                isCancelingRecovery ||
+                stagingFilename !== null ||
+                isCreating ||
+                verifyingFilename !== null
+              }
+              className={cn(
+                "rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                darkMode
+                  ? "border-red-800 text-red-300 hover:bg-red-950/40"
+                  : "border-red-300 text-red-700 hover:bg-red-50"
+              )}
+            >
+              {isCancelingRecovery ? "Canceling..." : "Cancel Staged Recovery"}
+            </button>
+          )}
+        </div>
+
+        {stagedRecovery ? (
+          <div
+            className={cn(
+              "mt-5 rounded-lg border p-4",
+              darkMode
+                ? "border-amber-900 bg-amber-950/30"
+                : "border-amber-200 bg-amber-50"
+            )}
+          >
+            <div className="flex items-center gap-2 font-medium">
+              <CircleAlert className="h-5 w-5 text-amber-500" />
+              Recovery pending
+            </div>
+
+            <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <dt
+                  className={cn(
+                    "font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Restore point
+                </dt>
+                <dd className="mt-1 break-all">
+                  {stagedRecovery.backup_filename}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Staged database
+                </dt>
+                <dd className="mt-1 break-all">
+                  {stagedRecovery.staged_filename}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Staged
+                </dt>
+                <dd className="mt-1">{formatDate(stagedRecovery.staged_at)}</dd>
+              </div>
+            </dl>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "mt-5 rounded-lg border border-dashed px-4 py-8 text-center text-sm",
+              darkMode
+                ? "border-gray-700 text-gray-400"
+                : "border-gray-300 text-gray-600"
+            )}
+          >
+            No database recovery is currently staged.
+          </div>
+        )}
+      </section>
+
+      <section className={cardClass}>
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -602,24 +781,55 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                     <td className="px-3 py-4">
                       {formatFileSize(backup.size_bytes)}
                     </td>
-                    <td className="px-3 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void handleVerifyRestorePoint(backup.filename)
-                        }
-                        disabled={isCreating || verifyingFilename !== null}
-                        className={cn(
-                          "rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                          darkMode
-                            ? "border-gray-700 hover:bg-gray-800"
-                            : "border-gray-300 hover:bg-gray-100"
-                        )}
-                      >
-                        {verifyingFilename === backup.filename
-                          ? "Verifying..."
-                          : "Verify"}
-                      </button>
+                    <td className="px-3 py-4">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleVerifyRestorePoint(backup.filename)
+                          }
+                          disabled={
+                            isCreating ||
+                            verifyingFilename !== null ||
+                            stagingFilename !== null ||
+                            isCancelingRecovery
+                          }
+                          className={cn(
+                            "rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                            darkMode
+                              ? "border-gray-700 hover:bg-gray-800"
+                              : "border-gray-300 hover:bg-gray-100"
+                          )}
+                        >
+                          {verifyingFilename === backup.filename
+                            ? "Verifying..."
+                            : "Verify"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRecoveryConfirmationFilename(backup.filename)
+                          }
+                          disabled={
+                            stagedRecovery !== null ||
+                            isCreating ||
+                            verifyingFilename !== null ||
+                            stagingFilename !== null ||
+                            isCancelingRecovery
+                          }
+                          className={cn(
+                            "rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                            darkMode
+                              ? "border-amber-800 text-amber-300 hover:bg-amber-950/40"
+                              : "border-amber-300 text-amber-700 hover:bg-amber-50"
+                          )}
+                        >
+                          {stagingFilename === backup.filename
+                            ? "Staging..."
+                            : "Stage Recovery"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -628,6 +838,76 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
           </div>
         )}
       </section>
+
+      {recoveryConfirmationFilename && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="stage-recovery-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div
+            className={cn(
+              "w-full max-w-lg rounded-xl border p-6 shadow-xl",
+              darkMode
+                ? "border-gray-700 bg-gray-900"
+                : "border-gray-200 bg-white"
+            )}
+          >
+            <h2 id="stage-recovery-title" className="text-lg font-semibold">
+              Stage Database Recovery?
+            </h2>
+
+            <p
+              className={cn(
+                "mt-3 text-sm",
+                darkMode ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              CareQueue will decrypt and validate this restore point into a
+              separate staged database:
+            </p>
+
+            <p className="mt-3 break-all rounded-lg bg-black/5 p-3 font-mono text-xs dark:bg-white/5">
+              {recoveryConfirmationFilename}
+            </p>
+
+            <p
+              className={cn(
+                "mt-3 text-sm",
+                darkMode ? "text-gray-400" : "text-gray-600"
+              )}
+            >
+              The active database will not be replaced during this operation.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRecoveryConfirmationFilename(null)}
+                disabled={stagingFilename !== null}
+                className={cn(
+                  "rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-60",
+                  darkMode
+                    ? "border-gray-700 hover:bg-gray-800"
+                    : "border-gray-300 hover:bg-gray-100"
+                )}
+              >
+                Keep Current Database
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleStageRecovery()}
+                disabled={stagingFilename !== null}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+              >
+                {stagingFilename ? "Staging..." : "Stage Recovery"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

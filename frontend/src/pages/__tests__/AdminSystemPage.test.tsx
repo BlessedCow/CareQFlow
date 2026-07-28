@@ -1,10 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import {
+  cancelDatabaseRecovery,
   createRestorePoint,
   fetchApiEndpoints,
   fetchApplicationHealth,
   fetchDatabaseReadiness,
+  fetchRecoveryStatus,
   fetchRestorePoints,
+  stageDatabaseRecovery,
   verifyRestorePoint,
 } from "../../api/system";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,11 +21,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminSystemPage } from "../AdminSystemPage";
 
 vi.mock("../../api/system", () => ({
+  cancelDatabaseRecovery: vi.fn(),
   createRestorePoint: vi.fn(),
   fetchApiEndpoints: vi.fn(),
   fetchApplicationHealth: vi.fn(),
   fetchDatabaseReadiness: vi.fn(),
+  fetchRecoveryStatus: vi.fn(),
   fetchRestorePoints: vi.fn(),
+  stageDatabaseRecovery: vi.fn(),
   verifyRestorePoint: vi.fn(),
 }));
 
@@ -26,6 +38,9 @@ const mockedFetchRestorePoints = vi.mocked(fetchRestorePoints);
 const mockedCreateRestorePoint = vi.mocked(createRestorePoint);
 const mockedVerifyRestorePoint = vi.mocked(verifyRestorePoint);
 const mockedFetchApiEndpoints = vi.mocked(fetchApiEndpoints);
+const mockedFetchRecoveryStatus = vi.mocked(fetchRecoveryStatus);
+const mockedStageDatabaseRecovery = vi.mocked(stageDatabaseRecovery);
+const mockedCancelDatabaseRecovery = vi.mocked(cancelDatabaseRecovery);
 
 const existingBackup = {
   filename: "auth_tracker_20260728.db.enc",
@@ -41,21 +56,27 @@ describe("AdminSystemPage", () => {
     mockedCreateRestorePoint.mockReset();
     mockedVerifyRestorePoint.mockReset();
     mockedFetchApiEndpoints.mockReset();
-  
+    mockedFetchRecoveryStatus.mockReset();
+    mockedStageDatabaseRecovery.mockReset();
+    mockedCancelDatabaseRecovery.mockReset();
+
     mockedFetchApplicationHealth.mockResolvedValue({
       status: "ok",
       app: "AuthStatus API",
       version: "0.1.0",
     });
-  
+
     mockedFetchDatabaseReadiness.mockResolvedValue({
       status: "ok",
     });
-  
-    mockedFetchRestorePoints.mockResolvedValue([
-      existingBackup,
-    ]);
-  
+
+    mockedFetchRecoveryStatus.mockResolvedValue({
+      pending: false,
+      recovery: null,
+    });
+
+    mockedFetchRestorePoints.mockResolvedValue([existingBackup]);
+
     mockedFetchApiEndpoints.mockResolvedValue([
       {
         path: "/api/health/live",
@@ -74,6 +95,142 @@ describe("AdminSystemPage", () => {
         probeable: false,
       },
     ]);
+  });
+
+  it("shows that no recovery is currently staged", async () => {
+    render(<AdminSystemPage darkMode={false} />);
+
+    expect(
+      await screen.findByText("No database recovery is currently staged.")
+    ).toBeInTheDocument();
+  });
+
+  it("requires confirmation before staging recovery", async () => {
+    render(<AdminSystemPage darkMode={false} />);
+
+    await screen.findByText(existingBackup.filename);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Stage Recovery",
+      })
+    );
+
+    expect(
+      screen.getByRole("dialog", {
+        name: "Stage Database Recovery?",
+      })
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(
+        "The active database will not be replaced during this operation."
+      )
+    ).toBeInTheDocument();
+
+    expect(mockedStageDatabaseRecovery).not.toHaveBeenCalled();
+  });
+
+  it("stages a selected restore point after confirmation", async () => {
+    const recovery = {
+      backup_filename: existingBackup.filename,
+      staged_filename: "auth_tracker_20260728.restored.db",
+      staged_at: "2026-07-28T04:42:11+00:00",
+    };
+
+    mockedStageDatabaseRecovery.mockResolvedValue({
+      recovery,
+      staged: true,
+    });
+
+    render(<AdminSystemPage darkMode={false} />);
+
+    await screen.findByText(existingBackup.filename);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Stage Recovery",
+      })
+    );
+
+    const confirmationDialog = screen.getByRole("dialog", {
+      name: "Stage Database Recovery?",
+    });
+
+    fireEvent.click(
+      within(confirmationDialog).getByRole("button", {
+        name: "Stage Recovery",
+      })
+    );
+
+    expect(await screen.findByText("Recovery pending")).toBeInTheDocument();
+
+    expect(mockedStageDatabaseRecovery).toHaveBeenCalledWith(
+      existingBackup.filename
+    );
+  });
+
+  it("loads an existing staged recovery", async () => {
+    mockedFetchRecoveryStatus.mockResolvedValue({
+      pending: true,
+      recovery: {
+        backup_filename: existingBackup.filename,
+        staged_filename: "auth_tracker_20260728.restored.db",
+        staged_at: "2026-07-28T04:42:11+00:00",
+      },
+    });
+
+    render(<AdminSystemPage darkMode={false} />);
+
+    expect(await screen.findByText("Recovery pending")).toBeInTheDocument();
+
+    expect(
+      screen.getByText("auth_tracker_20260728.restored.db")
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", {
+        name: "Stage Recovery",
+      })
+    ).toBeDisabled();
+  });
+
+  it("cancels a staged recovery", async () => {
+    const recovery = {
+      backup_filename: existingBackup.filename,
+      staged_filename: "auth_tracker_20260728.restored.db",
+      staged_at: "2026-07-28T04:42:11+00:00",
+    };
+
+    mockedFetchRecoveryStatus.mockResolvedValue({
+      pending: true,
+      recovery,
+    });
+
+    mockedCancelDatabaseRecovery.mockResolvedValue({
+      recovery,
+      canceled: true,
+    });
+
+    render(<AdminSystemPage darkMode={false} />);
+
+    await screen.findByText("Recovery pending");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Cancel Staged Recovery",
+      })
+    );
+
+    expect(
+      await screen.findByText(
+        `Staged recovery for ${existingBackup.filename} was canceled.`
+      )
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText("No database recovery is currently staged.")
+    ).toBeInTheDocument();
   });
 
   it("loads endpoint status when the inventory is opened", async () => {
