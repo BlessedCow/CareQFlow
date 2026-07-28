@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import tempfile
@@ -31,6 +32,12 @@ class BackupFileInfo(TypedDict):
     created_at: str
 
 
+class StagedRecoveryInfo(TypedDict):
+    backup_filename: str
+    staged_filename: str
+    staged_at: str
+
+
 REQUIRED_DATABASE_TABLES = {
     "audit_events",
     "auth_events",
@@ -38,6 +45,9 @@ REQUIRED_DATABASE_TABLES = {
     "sessions",
     "users",
 }
+
+
+PENDING_RECOVERY_MANIFEST = "pending_recovery.json"
 
 
 def _backup_timestamp() -> str:
@@ -513,3 +523,156 @@ def restore_encrypted_database_backup(
             temporary_path.unlink()
 
     return restored_path
+
+
+def stage_encrypted_database_recovery(
+    *,
+    filename: str,
+    backup_directory: Path | None = None,
+    restore_directory: Path | None = None,
+) -> StagedRecoveryInfo:
+    settings = get_settings()
+    destination_directory = resolve_project_path(
+        restore_directory or settings.restore_directory
+    )
+    manifest_path = destination_directory / PENDING_RECOVERY_MANIFEST
+
+    if manifest_path.exists():
+        raise BackupError("A database recovery is already staged.")
+
+    backup_path = resolve_encrypted_database_backup_path(
+        filename=filename,
+        backup_directory=backup_directory,
+    )
+
+    verify_encrypted_database_backup(
+        backup_path=backup_path,
+    )
+
+    staged_path = restore_encrypted_database_backup(
+        backup_path=backup_path,
+        restore_directory=destination_directory,
+    )
+
+    staged_at = datetime.now(UTC).isoformat(timespec="seconds")
+
+    recovery_info: StagedRecoveryInfo = {
+        "backup_filename": backup_path.name,
+        "staged_filename": staged_path.name,
+        "staged_at": staged_at,
+    }
+
+    try:
+        _atomic_write_bytes(
+            manifest_path,
+            json.dumps(
+                recovery_info,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+        )
+    except Exception:
+        if staged_path.exists():
+            staged_path.unlink()
+
+        raise
+
+    return recovery_info
+
+
+def get_staged_database_recovery(
+    *,
+    restore_directory: Path | None = None,
+) -> StagedRecoveryInfo | None:
+    settings = get_settings()
+    destination_directory = resolve_project_path(
+        restore_directory or settings.restore_directory
+    )
+    manifest_path = destination_directory / PENDING_RECOVERY_MANIFEST
+
+    if not manifest_path.exists():
+        return None
+
+    if not manifest_path.is_file():
+        raise BackupError("Pending recovery manifest is not a file.")
+
+    try:
+        manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise BackupError("Pending recovery manifest is invalid.") from exc
+
+    if not isinstance(manifest_data, dict):
+        raise BackupError("Pending recovery manifest is invalid.")
+
+    expected_keys = {
+        "backup_filename",
+        "staged_filename",
+        "staged_at",
+    }
+
+    if set(manifest_data) != expected_keys:
+        raise BackupError("Pending recovery manifest is invalid.")
+
+    if not all(
+        isinstance(manifest_data[key], str) and manifest_data[key]
+        for key in expected_keys
+    ):
+        raise BackupError("Pending recovery manifest is invalid.")
+
+    staged_filename = manifest_data["staged_filename"]
+
+    if (
+        "\x00" in staged_filename
+        or "/" in staged_filename
+        or "\\" in staged_filename
+        or Path(staged_filename).name != staged_filename
+        or staged_filename.startswith(".")
+        or not staged_filename.endswith(".restored.db")
+    ):
+        raise BackupError("Pending recovery manifest is invalid.")
+
+    staged_path = destination_directory / staged_filename
+
+    if staged_path.is_symlink():
+        raise BackupError("Staged recovery file must not be a symbolic link.")
+
+    if not staged_path.exists() or not staged_path.is_file():
+        raise BackupError("Staged recovery database does not exist.")
+
+    resolved_directory = destination_directory.resolve()
+    resolved_staged_path = staged_path.resolve()
+
+    if resolved_staged_path.parent != resolved_directory:
+        raise BackupError("Pending recovery manifest is invalid.")
+
+    _validate_restored_database(resolved_staged_path)
+
+    return {
+        "backup_filename": manifest_data["backup_filename"],
+        "staged_filename": staged_filename,
+        "staged_at": manifest_data["staged_at"],
+    }
+
+
+def cancel_staged_database_recovery(
+    *,
+    restore_directory: Path | None = None,
+) -> StagedRecoveryInfo:
+    recovery_info = get_staged_database_recovery(
+        restore_directory=restore_directory,
+    )
+
+    if recovery_info is None:
+        raise BackupError("No database recovery is currently staged.")
+
+    settings = get_settings()
+    destination_directory = resolve_project_path(
+        restore_directory or settings.restore_directory
+    )
+    staged_path = destination_directory / recovery_info["staged_filename"]
+    manifest_path = destination_directory / PENDING_RECOVERY_MANIFEST
+
+    staged_path.unlink()
+    manifest_path.unlink()
+
+    return recovery_info

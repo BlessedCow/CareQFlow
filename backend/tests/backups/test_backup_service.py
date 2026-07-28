@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 
 import pytest
 
 from authstatus_api.backups.service import (
+    PENDING_RECOVERY_MANIFEST,
     BackupConfigError,
     BackupError,
+    cancel_staged_database_recovery,
     create_encrypted_database_backup,
     decrypt_backup_file,
     encrypt_backup_bytes,
+    get_staged_database_recovery,
     list_encrypted_database_backups,
     resolve_encrypted_database_backup_path,
     restore_encrypted_database_backup,
+    stage_encrypted_database_recovery,
     verify_encrypted_database_backup,
 )
 from authstatus_api.crypto import generate_encryption_key
@@ -545,3 +550,310 @@ def test_resolve_encrypted_database_backup_path_rejects_symbolic_link(
             filename=link_path.name,
             backup_directory=backup_directory,
         )
+
+
+def test_stage_encrypted_database_recovery_creates_valid_staged_copy(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    recovery_info = stage_encrypted_database_recovery(
+        filename=backup_path.name,
+        backup_directory=backup_directory,
+        restore_directory=restore_directory,
+    )
+
+    staged_path = restore_directory / recovery_info["staged_filename"]
+    manifest_path = restore_directory / PENDING_RECOVERY_MANIFEST
+
+    assert recovery_info["backup_filename"] == backup_path.name
+    assert recovery_info["staged_filename"].endswith(".restored.db")
+    assert recovery_info["staged_at"]
+    assert staged_path.exists()
+    assert manifest_path.exists()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert manifest == recovery_info
+
+    with sqlite3.connect(staged_path) as conn:
+        integrity_result = conn.execute("PRAGMA quick_check").fetchone()
+
+    assert integrity_result is not None
+    assert integrity_result[0] == "ok"
+
+
+def test_stage_encrypted_database_recovery_rejects_second_pending_recovery(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    first_recovery = stage_encrypted_database_recovery(
+        filename=backup_path.name,
+        backup_directory=backup_directory,
+        restore_directory=restore_directory,
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="already staged",
+    ):
+        stage_encrypted_database_recovery(
+            filename=backup_path.name,
+            backup_directory=backup_directory,
+            restore_directory=restore_directory,
+        )
+
+    assert (restore_directory / first_recovery["staged_filename"]).exists()
+
+
+def test_stage_encrypted_database_recovery_rejects_unsafe_filename(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+    backup_directory.mkdir()
+
+    with pytest.raises(
+        BackupError,
+        match="Invalid backup filename",
+    ):
+        stage_encrypted_database_recovery(
+            filename="../outside.db.enc",
+            backup_directory=backup_directory,
+            restore_directory=restore_directory,
+        )
+
+    assert not restore_directory.exists()
+
+
+def test_stage_encrypted_database_recovery_does_not_modify_active_database(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    original_database_bytes = database_path.read_bytes()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    stage_encrypted_database_recovery(
+        filename=backup_path.name,
+        backup_directory=backup_directory,
+        restore_directory=restore_directory,
+    )
+
+    assert database_path.read_bytes() == original_database_bytes
+
+
+def test_get_staged_database_recovery_returns_pending_recovery(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    staged_recovery = stage_encrypted_database_recovery(
+        filename=backup_path.name,
+        backup_directory=backup_directory,
+        restore_directory=restore_directory,
+    )
+
+    result = get_staged_database_recovery(
+        restore_directory=restore_directory,
+    )
+
+    assert result == staged_recovery
+
+
+def test_get_staged_database_recovery_returns_none_when_absent(
+    tmp_path,
+):
+    result = get_staged_database_recovery(
+        restore_directory=tmp_path / "restores",
+    )
+
+    assert result is None
+
+
+def test_get_staged_database_recovery_rejects_invalid_manifest(
+    tmp_path,
+):
+    restore_directory = tmp_path / "restores"
+    restore_directory.mkdir()
+
+    manifest_path = restore_directory / PENDING_RECOVERY_MANIFEST
+    manifest_path.write_text(
+        "{not valid json",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Pending recovery manifest is invalid",
+    ):
+        get_staged_database_recovery(
+            restore_directory=restore_directory,
+        )
+
+
+def test_get_staged_database_recovery_rejects_missing_staged_database(
+    tmp_path,
+):
+    restore_directory = tmp_path / "restores"
+    restore_directory.mkdir()
+
+    manifest_path = restore_directory / PENDING_RECOVERY_MANIFEST
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "backup_filename": "backup.db.enc",
+                "staged_filename": "missing.restored.db",
+                "staged_at": "2026-07-28T04:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Staged recovery database does not exist",
+    ):
+        get_staged_database_recovery(
+            restore_directory=restore_directory,
+        )
+
+
+def test_get_staged_database_recovery_rejects_unsafe_staged_filename(
+    tmp_path,
+):
+    restore_directory = tmp_path / "restores"
+    restore_directory.mkdir()
+
+    manifest_path = restore_directory / PENDING_RECOVERY_MANIFEST
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "backup_filename": "backup.db.enc",
+                "staged_filename": "../outside.restored.db",
+                "staged_at": "2026-07-28T04:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Pending recovery manifest is invalid",
+    ):
+        get_staged_database_recovery(
+            restore_directory=restore_directory,
+        )
+
+
+def test_cancel_staged_database_recovery_removes_pending_files(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    staged_recovery = stage_encrypted_database_recovery(
+        filename=backup_path.name,
+        backup_directory=backup_directory,
+        restore_directory=restore_directory,
+    )
+
+    result = cancel_staged_database_recovery(
+        restore_directory=restore_directory,
+    )
+
+    assert result == staged_recovery
+    assert not (restore_directory / staged_recovery["staged_filename"]).exists()
+    assert not (restore_directory / PENDING_RECOVERY_MANIFEST).exists()
+
+    assert (
+        get_staged_database_recovery(
+            restore_directory=restore_directory,
+        )
+        is None
+    )
+
+
+def test_cancel_staged_database_recovery_rejects_missing_pending_recovery(
+    tmp_path,
+):
+    with pytest.raises(
+        BackupError,
+        match="No database recovery is currently staged",
+    ):
+        cancel_staged_database_recovery(
+            restore_directory=tmp_path / "restores",
+        )
+
+
+def test_cancel_staged_database_recovery_does_not_modify_active_database(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    original_database_bytes = database_path.read_bytes()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    stage_encrypted_database_recovery(
+        filename=backup_path.name,
+        backup_directory=backup_directory,
+        restore_directory=restore_directory,
+    )
+
+    cancel_staged_database_recovery(
+        restore_directory=restore_directory,
+    )
+
+    assert database_path.read_bytes() == original_database_bytes

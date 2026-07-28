@@ -27,3 +27,30 @@ class BackupVerifyRequest(BaseModel):
 class BackupVerifyResponse(BaseModel):
     filename: str
     verified: bool
+
+
+class RecoveryStageRequest(BaseModel):
+    filename: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class StagedRecoveryResponse(BaseModel):
+    backup_filename: str
+    staged_filename: str
+    staged_at: str
+
+
+class RecoveryStatusResponse(BaseModel):
+    pending: bool
+    recovery: StagedRecoveryResponse | None
+
+
+class RecoveryStageResponse(BaseModel):
+    recovery: StagedRecoveryResponse
+    staged: bool
+
+
+class RecoveryCancelResponse(BaseModel):
+    recovery: StagedRecoveryResponse
+    canceled: bool
