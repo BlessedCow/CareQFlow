@@ -7,6 +7,7 @@ import {
   LogOut,
   Moon,
   ScrollText,
+  ServerCog,
   Settings,
   Sun,
   Users,
@@ -69,6 +70,11 @@ const adminNavigationItems: {
     label: "Audit Log",
     icon: ScrollText,
   },
+  {
+    page: "adminSystem",
+    label: "System",
+    icon: ServerCog,
+  },
 ];
 
 
@@ -79,6 +85,7 @@ const PAGE_TITLES: Record<AppPage, string> = {
   settings: "Settings",
   adminUsers: "Users",
   adminAudit: "Audit Log",
+  adminSystem: "System",
 };
 
 const PAGE_DESCRIPTIONS: Record<AppPage, string> = {
@@ -88,6 +95,7 @@ const PAGE_DESCRIPTIONS: Record<AppPage, string> = {
   settings: "Configure CareQueue preferences",
   adminUsers: "Manage local CareQueue users and roles",
   adminAudit: "Review recorded security and workflow activity",
+  adminSystem: "Monitor health and manage encrypted restore points",
 };
 
 export function AppShell({
