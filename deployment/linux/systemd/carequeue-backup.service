@@ -1,0 +1,25 @@
+[Unit]
+Description=Create an encrypted CareQueue database backup
+Documentation=file:/opt/carequeue/docs/workflows/backup-and-recovery.md
+RequiresMountsFor=/var/lib/carequeue/backups
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=carequeue
+Group=carequeue
+WorkingDirectory=/opt/carequeue
+
+EnvironmentFile=/etc/carequeue/carequeue.env
+
+ExecStart=/opt/carequeue/backend/.venv/bin/python \
+    /opt/carequeue/backend/scripts/create_encrypted_backup.py \
+    --backup-directory /var/lib/carequeue/backups
+
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/carequeue/backups
+
+UMask=0077

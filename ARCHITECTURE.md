@@ -1,91 +1,129 @@
 # Architecture
 
-CareQueue is a local-first utilization review workflow prototype built with a React frontend and a FastAPI backend.
+CareQueue is a local-first utilization review workflow and authorization management application built with a React and TypeScript frontend and a FastAPI backend.
 
-The application is organized around authorization tracking, timeline events, review due dates, payer/facility workflow details, authentication, role-based access control, audit logging, and layered local data protection.
+The application is organized around authorization tracking, timeline events, review due dates, payer and facility workflows, PDF-assisted intake, authentication, role-based access control, audit logging, encrypted storage, encrypted backups, and operational deployment support.
+
+CareQueue is designed for private workflow development, testing, and controlled deployment evaluation. Its technical controls do not independently establish HIPAA compliance or production readiness.
 
 ## High-Level Overview
 
 ```text
 Browser
   ↓
-React/Vite frontend
+React, TypeScript, Vite, and Tailwind frontend
   ↓
-Authenticated API requests
+Secure cookie authentication and CSRF-protected requests
   ↓
 FastAPI backend
   ↓
-Repository/service layer
+Domain routers, services, and persistence modules
   ↓
 SQLite or SQLCipher database
 ```
 
-CareQueue currently runs as a local development application. The frontend and backend are started separately.
+CareQueue currently supports local development and platform-specific deployment preparation.
 
 ```text
-Frontend:
+Development frontend:
 http://localhost:5173
 
-Backend:
+Development backend:
 http://127.0.0.1:8000
 ```
+
+Production exposure requires HTTPS, restricted network access, protected configuration, appropriate service accounts, operational monitoring, and additional organizational safeguards.
 
 ## Repository Layout
 
 ```text
 CareQueue/
-├── frontend/
-│   └── src/
-│       ├── api/
-│       ├── components/
-│       │   └── layout/
-│       ├── hooks/
-│       ├── pages/
-│       ├── types/
-│       └── utils/
 ├── backend/
 │   ├── authstatus_api/
 │   │   ├── audit/
+│   │   ├── authorizations/
 │   │   ├── backups/
 │   │   ├── database_encryption/
+│   │   ├── observability/
 │   │   ├── pdf_intake/
+│   │   ├── persistence/
 │   │   ├── registered_options/
 │   │   ├── routers/
 │   │   ├── security/
 │   │   ├── crypto.py
-│   │   ├── database.py
 │   │   ├── errors.py
 │   │   ├── main.py
-│   │   ├── repository.py
 │   │   ├── schemas.py
 │   │   └── settings.py
 │   ├── scripts/
 │   ├── tests/
+│   │   ├── audit/
+│   │   ├── authorizations/
+│   │   ├── backups/
+│   │   ├── configuration/
+│   │   ├── database_encryption/
+│   │   ├── observability/
 │   │   ├── pdf_intake/
 │   │   ├── registered_options/
+│   │   ├── schemas/
 │   │   ├── security/
 │   │   └── conftest.py
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
 │   └── pyproject.toml
-├── README.md
+│
+├── deployment/
+│   ├── linux/
+│   │   └── systemd/
+│   │       ├── carequeue-backup.service
+│   │       └── carequeue-backup.timer
+│   └── windows/
+│       ├── install-backup-task.ps1
+│       ├── remove-backup-task.ps1
+│       └── run-backup.ps1
+│
+├── docs/
+│   ├── README.md
+│   ├── assets/
+│   │   └── screenshots/
+│   └── workflows/
+│       └── backup-and-recovery.md
+│
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── pages/
+│   │   ├── types/
+│   │   ├── utils/
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── .env.example
+├── ARCHITECTURE.md
 ├── CONTRIBUTING.md
 ├── DISCLAIMER.md
+├── README.md
+├── ROADMAP.md
 ├── SECURITY.md
-└── NOTES.md
+├── LICENSE
+└── .gitignore
 ```
 
-The current FastAPI backend lives in:
+The application backend lives in:
 
 ```text
 backend/authstatus_api/
 ```
 
-The backend root also contains the test suite, operational scripts, dependency files, and backend tooling configuration.
+The backend directory also contains operational scripts, dependency definitions, tooling configuration, and the domain-organized test suite.
 
 ## Frontend Architecture
 
-The frontend is a React/Vite/Tailwind application.
+The frontend is a React, TypeScript, Vite, and Tailwind application.
 
 ```text
 frontend/src/
@@ -95,54 +133,84 @@ frontend/src/
 ├── hooks/
 ├── pages/
 ├── types/
-└── utils/
+├── utils/
+├── App.tsx
+└── main.tsx
 ```
+
+### `App.tsx`
+
+`App.tsx` coordinates application-wide state and top-level workflows.
+
+Responsibilities include:
+
+- Restore an authenticated session
+- Track the current user
+- Track the server-provided session expiration
+- Clear authenticated data after logout or expiration
+- Coordinate page navigation
+- Load authorization records
+- Coordinate authorization filters, forms, selection, and timeline state
+- Pass settings and permissions into page components
+- Render the session timeout manager
+
+Sensitive authorization data is cleared from frontend state when authentication ends.
 
 ### `api/`
 
-The `api/` folder contains frontend API clients for communicating with the FastAPI backend.
+The `api/` folder contains frontend clients for the FastAPI backend.
 
-Key files:
+Current files include:
 
 ```text
-frontend/src/api/client.ts
-frontend/src/api/security.ts
-frontend/src/api/authStatus.ts
-frontend/src/api/authEvents.ts
+authEvents.ts
+authStatus.ts
+client.ts
+pdfIntake.ts
+registeredOptions.ts
+security.ts
 ```
 
-Responsibilities:
+Responsibilities include:
 
-- Store and attach bearer tokens
-- Send authenticated requests
-- Call security/login/session endpoints
-- Call authorization endpoints
-- Call authorization timeline event endpoints
+- Send authenticated requests with browser-managed cookies
+- Attach CSRF headers to state-changing authenticated requests
+- Call login, logout, current-user, and session-renewal endpoints
+- Call authorization and timeline endpoints
+- Call registered-option endpoints
+- Submit in-memory PDF intake requests
+- Convert API failures into frontend-safe errors
+
+The frontend does not store the raw session token in application state.
 
 ### `pages/`
 
-The `pages/` folder contains top-level routed application screens.
+The `pages/` folder contains top-level application screens.
 
-Current page areas include:
+Current pages include:
 
 ```text
-DashboardPage
+AdminAuditPage
+AdminUsersPage
 AuthorizationsPage
 CalendarRoutePage
+DashboardPage
 SettingsPage
 ```
 
-Responsibilities:
+Responsibilities include:
 
-- Compose page-level UI
-- Coordinate hooks and components
-- Render dashboard, authorization, calendar, and settings workflows
+- Compose page-level workflows
+- Display dashboard and authorization data
+- Coordinate page-specific filters and actions
+- Expose administrative user and audit interfaces
+- Render workflow and display settings
 
 ### `components/`
 
-The `components/` folder contains reusable UI and workflow components.
+The `components/` folder contains reusable interface and workflow components.
 
-Examples:
+Current examples include:
 
 ```text
 AddAuthorizationForm
@@ -154,36 +222,44 @@ DataTable
 Filters
 KPICards
 LoginPage
+PdfIntakeReviewPanel
+RequiredPasswordChangePage
+SessionTimeoutManager
 UpcomingWorkflowCard
 ```
 
-Responsibilities:
+Responsibilities include:
 
-- Render forms, tables, cards, filters, charts, and timeline sections
-- Provide authorization create/edit workflows
-- Provide read-only views
-- Support role-aware UI behavior
+- Render forms, tables, filters, charts, cards, and timeline events
+- Provide create, edit, and read-only authorization workflows
+- Display PDF intake extraction results
+- Mark low-confidence fields that require review
+- Require explicit confirmation before accepting flagged PDF values
+- Display the mandatory session-expiration warning
+- Optionally display the session countdown
+- Support role-aware interface behavior
 
 ### `components/layout/`
 
-The layout folder contains application shell structure.
+The layout folder contains the application shell.
 
 ```text
 AppShell
 ```
 
-Responsibilities:
+Responsibilities include:
 
-- Render main app layout
-- Show navigation
-- Show current user context
+- Render primary navigation
+- Display current-user context
+- Provide dark-mode controls
 - Provide logout access
+- Wrap authenticated page content
 
 ### `hooks/`
 
-The `hooks/` folder contains frontend state and workflow logic.
+The `hooks/` folder contains reusable frontend state and workflow logic.
 
-Examples:
+Current hooks include:
 
 ```text
 useAuthorizationEvents
@@ -192,24 +268,32 @@ useAuthorizationForm
 useAuthorizationMutations
 useAuthorizationSelection
 useDashboardCardSettings
+usePdfIntakePreview
 useRegisteredOptions
+useSessionTimerPreference
 useWorkflowViewMode
 ```
 
-Responsibilities:
+Responsibilities include:
 
-- Manage form state
-- Manage authorization selection
-- Manage authorization mutations
-- Manage registered settings/options
-- Manage dashboard card preferences
-- Manage timeline event loading and updates
+- Manage authorization form state and validation flow
+- Load and modify timeline events
+- Apply authorization filters
+- Manage authorization selection and detail views
+- Submit authorization mutations
+- Manage registered facilities, insurers, and portals
+- Process PDF intake previews
+- Store non-sensitive display preferences
+- Store the optional session-timer visibility preference
+- Manage dashboard and workflow presentation settings
+
+Only non-sensitive interface preferences should be stored in browser persistence.
 
 ### `types/`
 
 The `types/` folder contains shared frontend TypeScript types.
 
-Examples:
+Current files include:
 
 ```text
 auth.ts
@@ -220,19 +304,53 @@ navigation.ts
 
 The `utils/` folder contains frontend helper logic.
 
-Examples:
+Current files include:
 
 ```text
 authEvents.ts
 authSchedule.ts
+authorizationFormValidation.ts
 cn.ts
 ```
 
-Responsibilities:
+Responsibilities include:
 
-- Authorization event formatting helpers
-- Schedule/review date helpers
-- CSS class name composition helper
+- Format authorization events
+- Calculate authorization schedule behavior
+- Validate authorization form values
+- Compose conditional CSS class names
+
+## Frontend Session Management
+
+The backend supplies an expiration timestamp during login and current-session restoration.
+
+```text
+Login or GET /api/security/me
+  ↓
+Frontend receives user and session expiration
+  ↓
+SessionTimeoutManager calculates remaining time
+  ↓
+Mandatory warning appears with five minutes remaining
+  ↓
+User renews the active session or logs out
+```
+
+The default authenticated session length is 20 minutes.
+
+The warning threshold is five minutes.
+
+The visible bottom-right countdown is:
+
+- Optional
+- Off by default
+- Controlled from Settings
+- Informational only
+- Derived from the backend expiration timestamp
+
+The warning modal remains mandatory even when the visible timer is hidden.
+
+When a session expires, CareQueue clears authenticated frontend state and returns the user to the login screen.
 
 ## Backend Architecture
 
@@ -242,57 +360,61 @@ The FastAPI backend is located at:
 backend/authstatus_api/
 ```
 
+The backend is divided into domain packages instead of relying on one large repository module.
+
 ```text
-backend/
-├── authstatus_api/
-│   ├── audit/
-│   ├── backups/
-│   ├── database_encryption/
-│   ├── pdf_intake/
-│   ├── registered_options/
-│   ├── routers/
-│   ├── security/
-│   ├── crypto.py
-│   ├── database.py
-│   ├── errors.py
-│   ├── main.py
-│   ├── repository.py
-│   ├── schemas.py
-│   └── settings.py
-├── scripts/
-├── tests/
-├── requirements.txt
-├── requirements-dev.txt
-└── pyproject.toml
+authstatus_api/
+├── audit/
+├── authorizations/
+├── backups/
+├── database_encryption/
+├── observability/
+├── pdf_intake/
+├── persistence/
+├── registered_options/
+├── routers/
+├── security/
+├── crypto.py
+├── errors.py
+├── main.py
+├── schemas.py
+└── settings.py
 ```
 
 ### `main.py`
 
 Creates and configures the FastAPI application.
 
-Responsibilities:
+Responsibilities include:
 
-- Build the FastAPI app
+- Build the FastAPI application
+- Configure centralized logging
 - Register middleware
 - Register routers
-- Expose health endpoint behavior
+- Configure CORS
+- Expose health behavior
+- Initialize required persistence structures
 
 ### `settings.py`
 
 Centralizes backend configuration.
 
-Responsibilities:
+Responsibilities include:
 
 - Read environment settings
-- Configure database path
+- Configure application environment
+- Configure database path and encryption mode
+- Configure field-level encryption
+- Configure SQLCipher
+- Configure encrypted backup and restore paths
 - Configure CORS origins
-- Configure encryption keys
-- Configure database encryption mode
-- Configure backup and restore directories
+- Enforce safe path behavior
+- Provide production-sensitive defaults and validation
 
 Important environment values include:
 
 ```env
+AUTHSTATUS_APP_ENVIRONMENT=
 AUTHSTATUS_ENCRYPTION_KEY=
 AUTHSTATUS_SQLCIPHER_KEY=
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=
@@ -301,60 +423,168 @@ AUTHSTATUS_DATABASE_ENCRYPTION=
 AUTHSTATUS_BACKUP_DIRECTORY=
 AUTHSTATUS_RESTORE_DIRECTORY=
 AUTHSTATUS_CORS_ORIGINS=
+AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=
+AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=
 ```
 
-### `database.py`
+Secrets must not be committed to the repository.
 
-Manages database initialization and connections.
+## Persistence Architecture
 
-Responsibilities:
+Persistence-related code is located at:
 
-- Resolve safe database paths
-- Create required tables
-- Return SQLite or SQLCipher connections
-- Enforce database mode behavior
-- Initialize schema for authorizations, timeline events, users, sessions, and audit events
-
-Database mode is controlled by:
-
-```env
-AUTHSTATUS_DATABASE_ENCRYPTION=plaintext
+```text
+backend/authstatus_api/persistence/
 ```
 
-or:
-
-```env
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
+```text
+persistence/
+├── connections.py
+├── migrations.py
+├── paths.py
+└── schema.py
 ```
 
-### `repository.py`
+### `connections.py`
 
-Contains core authorization and timeline persistence logic.
+Responsibilities include:
 
-Responsibilities:
+- Open SQLite or SQLCipher connections
+- Apply configured database behavior
+- Provide shared connection access to domain repositories
+- Keep connection setup separate from domain logic
+
+### `paths.py`
+
+Responsibilities include:
+
+- Resolve database and storage paths
+- Enforce project-safe paths by default
+- Permit intentional external deployment paths only when explicitly configured
+- Prevent accidental writes to unexpected locations
+
+### `schema.py`
+
+Responsibilities include:
+
+- Coordinate table creation
+- Initialize domain-owned tables
+- Keep schema setup separate from request handling
+
+### `migrations.py`
+
+Responsibilities include:
+
+- Coordinate schema changes
+- Preserve compatibility with existing local databases
+- Apply controlled migration behavior
+
+Individual domains own their table definitions where practical.
+
+Examples include:
+
+```text
+audit/tables.py
+authorizations/tables.py
+registered_options/tables.py
+security/tables.py
+```
+
+## Authorization Domain
+
+Authorization behavior is located at:
+
+```text
+backend/authstatus_api/authorizations/
+```
+
+```text
+authorizations/
+├── analytics.py
+├── encryption.py
+├── events.py
+├── mappings.py
+├── records.py
+├── sql.py
+├── state.py
+├── tables.py
+└── timeline.py
+```
+
+### `records.py`
+
+Responsibilities include:
 
 - Create authorization records
 - Read authorization records
 - Update authorization records
 - Delete authorization records
-- Manage authorization timeline events
-- Convert database rows into API-safe response objects
-- Decrypt encrypted fields before returning records to authorized users
+- Convert stored values into API-safe response data
 
-### `schemas.py`
+### `events.py`
 
-Contains backend Pydantic schemas for authorization API data.
+Responsibilities include:
 
-Responsibilities:
+- Create authorization timeline events
+- Update timeline events
+- Delete timeline events
+- Apply fixed, parameterized update operations
 
-- Define request models
-- Define response models
-- Validate API payload shape
-- Keep API contracts explicit
+### `timeline.py`
+
+Responsibilities include:
+
+- Build authorization timeline representations
+- Coordinate event ordering and workflow state
+
+### `analytics.py`
+
+Responsibilities include:
+
+- Calculate authorization dashboard summaries
+- Support level-of-care and work-queue metrics
+- Provide analytics data to router-level responses
+
+### `encryption.py`
+
+Responsibilities include:
+
+- Identify sensitive authorization fields
+- Encrypt selected values before persistence
+- Decrypt selected values for authorized responses
+- Keep encryption mapping separate from general persistence logic
+
+### `mappings.py`
+
+Responsibilities include:
+
+- Convert database rows and stored representations
+- Normalize authorization and event values
+- Keep mapping logic out of routers
+
+### `sql.py`
+
+Responsibilities include:
+
+- Store fixed SQL statements and controlled query construction
+- Validate identifiers where dynamic selection is unavoidable
+- Reduce SQL injection risk
+- Keep SQL definitions separate from business logic
+
+### `state.py`
+
+Responsibilities include:
+
+- Represent authorization workflow state
+- Coordinate derived status behavior
+
+### `tables.py`
+
+Defines authorization-domain tables and indexes.
 
 ## Backend Routers
 
-Routers are located at:
+Primary API routers are located at:
 
 ```text
 backend/authstatus_api/routers/
@@ -362,9 +592,9 @@ backend/authstatus_api/routers/
 
 ### `auths.py`
 
-Authorization and timeline event routes.
+Authorization and timeline routes.
 
-Responsibilities:
+Responsibilities include:
 
 - List authorization records
 - Create authorization records
@@ -375,25 +605,38 @@ Responsibilities:
 - Create timeline events
 - Update timeline events
 - Delete timeline events
+- Enforce authorization dependencies and role requirements
 
 ### `analytics.py`
 
 Dashboard analytics routes.
 
-Responsibilities:
+Responsibilities include:
 
 - Provide dashboard summary metrics
-- Support frontend KPI/dashboard views
+- Support frontend KPI and workload views
 
 ### `security.py`
 
-Authentication/session routes.
+Authentication and session routes.
 
-Responsibilities:
+Responsibilities include:
 
-- Log users in
-- Log users out
-- Return current user session information
+- Authenticate users
+- Create secure browser sessions
+- Return current-user and session-expiration information
+- Renew active sessions
+- Revoke sessions during logout
+- Enforce CSRF validation for state-changing requests
+
+Current session endpoints include:
+
+```text
+POST /api/security/login
+GET  /api/security/me
+POST /api/security/session/renew
+POST /api/security/logout
+```
 
 ## Security Architecture
 
@@ -407,40 +650,169 @@ backend/authstatus_api/security/
 security/
 ├── csrf.py
 ├── dependencies.py
+├── mappings.py
 ├── password_hashing.py
-├── repository.py
 ├── schemas.py
 ├── sessions.py
-└── temporary_passwords.py
+├── tables.py
+├── temporary_passwords.py
+└── users.py
 ```
 
-### Authentication
+### `users.py`
 
-Users log in through the security API.
+Responsibilities include:
+
+- Create local users
+- Find users
+- Authenticate credentials
+- Update supported user attributes
+- Manage user state
+
+### `password_hashing.py`
+
+Passwords are hashed using Argon2id.
+
+Plaintext passwords must never be stored.
+
+### `sessions.py`
+
+Responsibilities include:
+
+- Generate session tokens
+- Hash session tokens before persistence
+- Create server-side session records
+- Find active sessions
+- Touch active sessions
+- Renew active sessions
+- Revoke individual sessions
+- Revoke all sessions for a user
+- Enforce expiration behavior
+
+The default session duration is 20 minutes.
+
+### `csrf.py`
+
+Responsibilities include:
+
+- Create CSRF tokens
+- Extract expected CSRF values
+- Validate state-changing authenticated requests
+- Reject missing or mismatched tokens
+
+### `dependencies.py`
+
+Responsibilities include:
+
+- Resolve the authenticated user
+- Enforce active-session requirements
+- Enforce role-based permissions
+- Coordinate authentication and CSRF dependencies
+
+### `temporary_passwords.py`
+
+Responsibilities include:
+
+- Support required password-change workflows
+- Validate temporary-password state
+- Keep first-login password handling separate from normal authentication
+
+### `mappings.py`
+
+Responsibilities include:
+
+- Convert user and session records into safe response forms
+- Keep response mapping separate from persistence logic
+
+### `schemas.py`
+
+Defines security request and response contracts.
+
+### `tables.py`
+
+Defines user and session tables.
+
+## Authentication and Session Flow
+
+Typical login flow:
 
 ```text
-POST /api/security/login
-GET  /api/security/me
-POST /api/security/logout
+User submits credentials
+  ↓
+Frontend calls POST /api/security/login
+  ↓
+Backend verifies the Argon2id password hash
+  ↓
+Backend creates a server-side session
+  ↓
+Raw session token is placed in an HttpOnly cookie
+  ↓
+CSRF token is placed in a separate browser cookie
+  ↓
+Frontend receives user data and session expiration
 ```
 
-Passwords are hashed with Argon2id before storage.
-
-### Sessions
-
-Raw session tokens are returned to the frontend and stored in the browser.
-
-The backend stores only hashed session tokens.
-
-Authenticated frontend requests include a bearer token.
+Typical authenticated request flow:
 
 ```text
-Authorization: Bearer <token>
+Browser sends secure session cookie
+  ↓
+Backend hashes the token
+  ↓
+Backend finds a matching active session
+  ↓
+Backend resolves the current user
+  ↓
+Backend enforces role requirements
+  ↓
+Request is processed
 ```
 
-### Roles
+Typical state-changing request flow:
 
-CareQueue currently supports:
+```text
+Browser sends session cookie
+  ↓
+Frontend sends matching CSRF header
+  ↓
+Backend validates authentication and CSRF
+  ↓
+Backend performs the requested write
+```
+
+Typical renewal flow:
+
+```text
+Five-minute warning appears
+  ↓
+User selects Continue session
+  ↓
+Frontend calls POST /api/security/session/renew
+  ↓
+Backend validates the current session and CSRF token
+  ↓
+Backend extends session expiration
+  ↓
+Browser cookie lifetimes are refreshed
+  ↓
+Frontend receives the new expiration timestamp
+```
+
+Typical expiration flow:
+
+```text
+Server expiration is reached
+  ↓
+Frontend clears authenticated state
+  ↓
+Authorization and timeline data are removed from memory
+  ↓
+User returns to the login screen
+```
+
+## Role-Based Access Control
+
+CareQueue supports:
 
 ```text
 Admin
@@ -452,37 +824,104 @@ Role behavior:
 
 ```text
 Admin:
-Can view, create, edit, and delete authorization records and timeline events.
+Can manage users, review audit records, and manage authorization workflows.
 
 UR:
 Can view, create, edit, and delete authorization records and timeline events.
 
 Read Only:
-Can view records but should not create, edit, or delete records.
+Can view records but cannot create, edit, or delete authorization data.
 ```
 
-Role checks should be enforced in the backend. The frontend also hides unavailable actions for read-only users.
+Backend authorization checks are authoritative.
+
+The frontend also hides or disables unavailable controls, but frontend visibility is not treated as a security boundary.
+
+## Registered Options Domain
+
+Registered facilities, insurers, and portals are handled under:
+
+```text
+backend/authstatus_api/registered_options/
+```
+
+```text
+registered_options/
+├── repository.py
+├── router.py
+├── schemas.py
+└── tables.py
+```
+
+Responsibilities include:
+
+- List registered options
+- Add supported options
+- Remove supported options
+- Protect required default values
+- Validate request and response shapes
+- Persist values separately from authorization records
+
+## PDF Intake Architecture
+
+PDF intake code is located at:
+
+```text
+backend/authstatus_api/pdf_intake/
+```
+
+```text
+pdf_intake/
+├── extractor.py
+├── parsers/
+├── request_body.py
+├── router.py
+└── schemas.py
+```
+
+Responsibilities include:
+
+- Accept an uploaded PDF in memory
+- Enforce expected content type and request limits
+- Extract text locally
+- Select a supported parser
+- Return structured intake fields
+- Attach confidence values
+- Mark uncertain or missing fields as needing review
+- Avoid persisting the uploaded PDF
+- Avoid placing extracted PHI or PII into logs or audit metadata
+
+The frontend displays extracted values in a review panel.
+
+Fields marked for review must be confirmed or corrected before the values are accepted into the authorization workflow.
+
+External OCR services are not required for the current text-based extraction path.
+
+Scanned PDFs without an embedded text layer may require a separately evaluated local OCR workflow in the future.
 
 ## Data Protection Architecture
 
-CareQueue uses layered local data protection.
+CareQueue uses layered data protection.
 
 ```text
 Field-level encryption
-↓
-Database file encryption
-↓
-Encrypted backups
+  ↓
+SQLCipher database encryption
+  ↓
+Separately encrypted backups
+  ↓
+Restricted scheduler and storage permissions
 ```
 
-These layers protect different things and use separate keys.
+Each layer protects a different part of the data lifecycle and uses separately managed keys.
 
 ### Field-Level Encryption
 
-Implemented in:
+Implemented through:
 
 ```text
 backend/authstatus_api/crypto.py
+backend/authstatus_api/authorizations/encryption.py
 ```
 
 Configured with:
@@ -491,16 +930,19 @@ Configured with:
 AUTHSTATUS_ENCRYPTION_KEY=
 ```
 
-This protects selected sensitive field values before they are stored in the database.
+Selected sensitive fields are encrypted before they are stored.
 
-The same key is required to decrypt existing encrypted field values.
+The same key is required to decrypt existing field values.
+
+Loss of the field-encryption key may make protected values unrecoverable.
 
 ### SQLCipher Database Encryption
 
-Implemented in:
+Implemented through:
 
 ```text
 backend/authstatus_api/database_encryption/
+backend/authstatus_api/persistence/connections.py
 ```
 
 Configured with:
@@ -510,13 +952,15 @@ AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
 AUTHSTATUS_SQLCIPHER_KEY=
 ```
 
-SQLCipher protects the SQLite database file at rest.
+SQLCipher protects the database file at rest.
 
-The plaintext fallback mode is:
+A plaintext development mode remains available:
 
 ```env
 AUTHSTATUS_DATABASE_ENCRYPTION=plaintext
 ```
+
+Plaintext mode should not be used for production PHI or PII.
 
 ### Encrypted Backups
 
@@ -530,17 +974,157 @@ Configured with:
 
 ```env
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=
-AUTHSTATUS_BACKUP_DIRECTORY=../backups
-AUTHSTATUS_RESTORE_DIRECTORY=../restores
+AUTHSTATUS_BACKUP_DIRECTORY=
+AUTHSTATUS_RESTORE_DIRECTORY=
 ```
 
-Encrypted backups are written as:
+Encrypted backup files use:
 
 ```text
 *.db.enc
 ```
 
-Restore operations write to a safe restore directory and should not overwrite the active database automatically.
+Backup encryption is separate from SQLCipher database encryption.
+
+Restore operations write to a safe restore directory and do not automatically overwrite the active database.
+
+## Backup Scheduling Architecture
+
+CareQueue includes platform-specific backup scheduling helpers.
+
+```text
+deployment/
+├── linux/
+│   └── systemd/
+└── windows/
+```
+
+### Windows
+
+Windows files include:
+
+```text
+deployment/windows/run-backup.ps1
+deployment/windows/install-backup-task.ps1
+deployment/windows/remove-backup-task.ps1
+```
+
+The Windows workflow:
+
+```text
+Task Scheduler
+  ↓
+run-backup.ps1
+  ↓
+Protected environment file is loaded into process scope
+  ↓
+create_encrypted_backup.py
+  ↓
+Encrypted backup is written to an isolated directory
+```
+
+The installer defaults to:
+
+```text
+Installation:
+C:\Program Files\CareQueue
+
+Operational data:
+C:\ProgramData\CareQueue
+
+Backups:
+C:\ProgramData\CareQueue\Backups
+
+Configuration:
+C:\ProgramData\CareQueue\Config\carequeue.env
+```
+
+The task runs as `SYSTEM` by default and may be configured to use a dedicated service account.
+
+Task registration requires elevated PowerShell.
+
+### Linux
+
+Linux files include:
+
+```text
+deployment/linux/systemd/carequeue-backup.service
+deployment/linux/systemd/carequeue-backup.timer
+```
+
+The Linux workflow:
+
+```text
+systemd timer
+  ↓
+carequeue-backup.service
+  ↓
+Protected environment file is loaded
+  ↓
+create_encrypted_backup.py
+  ↓
+Encrypted backup is written to isolated storage
+```
+
+The supplied service expects:
+
+```text
+Application:
+ /opt/carequeue
+
+Environment file:
+ /etc/carequeue/carequeue.env
+
+Backup directory:
+ /var/lib/carequeue/backups
+```
+
+The systemd service applies filesystem and process restrictions, including a restrictive file-creation mask and a limited writable path.
+
+Scheduled execution does not replace periodic restoration testing.
+
+## Observability Architecture
+
+Production logging code is located at:
+
+```text
+backend/authstatus_api/observability/
+```
+
+```text
+observability/
+├── filters.py
+├── logging.py
+└── sanitization.py
+```
+
+### `sanitization.py`
+
+Responsibilities include:
+
+- Mask known sensitive fields
+- Sanitize structured values
+- Remove authorization headers, cookies, session values, and tokens
+- Avoid rendering raw exception messages
+
+### `filters.py`
+
+Responsibilities include:
+
+- Apply sanitization to log records
+- Prevent sensitive values from reaching configured handlers
+
+### `logging.py`
+
+Responsibilities include:
+
+- Configure application logging centrally
+- Apply sanitization consistently
+- Preserve useful operational context without exposing PHI, PII, credentials, or session material
+
+Production logs may retain exception class names while removing traceback details and raw exception messages.
+
+Logging controls reduce risk but must still be supported by restricted log access, retention rules, and operational review.
 
 ## Audit Logging
 
@@ -550,9 +1134,13 @@ Audit logging is implemented in:
 backend/authstatus_api/audit/service.py
 ```
 
-Audit records are stored in the database.
+Audit tables are defined in:
 
-Audit logging currently covers selected actions such as:
+```text
+backend/authstatus_api/audit/tables.py
+```
+
+Audit logging covers selected actions such as:
 
 ```text
 security.login
@@ -566,27 +1154,32 @@ auth_event.update
 auth_event.delete
 ```
 
-Audit metadata should avoid storing PHI/PII values.
+Audit metadata should contain only the minimum information needed to identify the action.
 
-Preferred audit metadata:
+Preferred metadata includes:
 
 ```text
 record IDs
 action names
 changed field names
 event types
+user IDs
 ```
 
-Avoid logging:
+Audit metadata should not contain:
 
 ```text
-patient/client names
+patient or client names
 member IDs
 group numbers
 dates of birth
 authorization numbers tied to identifiable people
 clinical notes
-free-text PHI/PII
+uploaded PDF text
+free-text PHI or PII
+credentials
+session tokens
+CSRF tokens
 ```
 
 ## Database Architecture
@@ -598,6 +1191,7 @@ Core tables include:
 ```text
 auths
 auth_events
+registered_options
 users
 sessions
 audit_events
@@ -607,7 +1201,7 @@ audit_events
 
 Stores authorization records and workflow fields.
 
-Examples of data represented:
+Examples include:
 
 ```text
 facility
@@ -624,13 +1218,13 @@ decision details
 notes
 ```
 
-Selected sensitive values are encrypted before storage.
+Selected sensitive values are encrypted before persistence.
 
 ### `auth_events`
 
 Stores authorization timeline events.
 
-Examples of event data:
+Examples include:
 
 ```text
 event type
@@ -642,6 +1236,10 @@ decision date
 notes
 ```
 
+### `registered_options`
+
+Stores configurable facilities, insurers, and portal options.
+
 ### `users`
 
 Stores local application users.
@@ -652,79 +1250,104 @@ Passwords are stored as Argon2id hashes.
 
 Stores server-side session records.
 
-Raw bearer tokens are not stored. Token hashes are stored instead.
+Stored session values include:
+
+```text
+hashed token
+user reference
+creation time
+last-seen time
+expiration time
+revocation time
+```
+
+Raw session tokens are not stored in the database.
 
 ### `audit_events`
 
-Stores audit records for selected security and authorization actions.
+Stores selected authentication, administration, and authorization actions.
 
-Audit metadata should not contain sensitive field values.
+Audit metadata must not contain sensitive field values.
 
-## API Flow
-
-Typical login flow:
-
-```text
-User submits credentials
-↓
-Frontend calls POST /api/security/login
-↓
-Backend verifies password
-↓
-Backend creates session
-↓
-Frontend stores bearer token
-↓
-Frontend calls authenticated API routes
-```
+## Authorization API Flow
 
 Typical authorization list flow:
 
 ```text
-Frontend calls GET /api/auths with bearer token
-↓
-Backend verifies session
-↓
-Backend checks permissions
-↓
-Repository reads auth rows
-↓
+Frontend calls GET /api/auths
+  ↓
+Browser sends session cookie
+  ↓
+Backend verifies the active session
+  ↓
+Backend checks the user role
+  ↓
+Authorization records are loaded
+  ↓
 Sensitive fields are decrypted
-↓
-Response is returned to frontend
+  ↓
+Safe response data is returned
 ```
 
-Typical authorization create/update flow:
+Typical create or update flow:
 
 ```text
-Frontend submits form data
-↓
-Backend validates request schema
-↓
-Backend checks write permission
-↓
-Sensitive fields are encrypted
-↓
-Repository writes database changes
-↓
+Frontend submits authorization data
+  ↓
+Backend validates the request schema
+  ↓
+Backend verifies authentication, CSRF, and write permission
+  ↓
+Sensitive values are encrypted
+  ↓
+Authorization domain writes the change
+  ↓
+Audit metadata is recorded
+  ↓
+Updated response data is returned
+```
+
+Typical timeline-event flow:
+
+```text
+Frontend submits an event
+  ↓
+Backend validates permissions and payload
+  ↓
+Authorization event module writes the event
+  ↓
+Authorization state and timeline are refreshed
+  ↓
 Audit event is recorded
-↓
-Updated data is returned or reloaded
 ```
 
 ## Scripts
 
-Maintenance scripts live in:
+Maintenance and operational scripts live in:
 
 ```text
 backend/scripts/
 ```
 
-Current scripts include:
+Current script categories include:
+
+```text
+user creation
+development data seeding
+PDF intake inspection
+encrypted backup creation
+encrypted backup restoration
+SQLCipher migration
+SQLCipher verification
+SQLCipher cutover preparation
+```
+
+Examples include:
 
 ```text
 create_user.py
 seed_dev_auths.py
+inspect_pdf_intake.py
 create_encrypted_backup.py
 restore_encrypted_backup.py
 migrate_to_sqlcipher.py
@@ -734,19 +1357,17 @@ prepare_sqlcipher_cutover.py
 
 ### User Creation
 
-```text
-create_user.py
-```
+`create_user.py` creates local users because CareQueue does not provide public self-registration.
 
-Creates local users because there is no public signup screen.
+### Development Data
 
-### Demo Data
+`seed_dev_auths.py` creates development authorization records.
 
-```text
-seed_dev_auths.py
-```
+Development data must be fictional or clearly synthetic.
 
-Seeds development authorization records. Demo data should be fake or clearly anonymized.
+### PDF Inspection
+
+`inspect_pdf_intake.py` supports local inspection of PDF extraction behavior without sending files to an external service.
 
 ### Backup and Restore
 
@@ -755,7 +1376,7 @@ create_encrypted_backup.py
 restore_encrypted_backup.py
 ```
 
-Creates encrypted backups and restores backup copies into a safe restore directory.
+These scripts create separately encrypted database backups and restore them into a safe destination.
 
 ### SQLCipher
 
@@ -765,19 +1386,22 @@ verify_sqlcipher_database.py
 prepare_sqlcipher_cutover.py
 ```
 
-Supports database migration, verification, and safer cutover preparation.
+These scripts support migration, verification, and controlled preparation for SQLCipher database use.
 
 ## Runtime Data
 
-Local runtime files should not be committed.
+Runtime files and sensitive operational data should not be committed.
 
-Examples:
+Examples include:
 
 ```text
-backend/.env
+.env
 backend/data/
 backend/backups/
 backend/restores/
+local_backups/
+local_config/
+local_vobs/
 *.db
 *.sqlite
 *.sqlite3
@@ -785,59 +1409,103 @@ backend/restores/
 *.restored.db
 ```
 
+Environment files, encryption keys, production databases, real intake PDFs, generated backups, and restore outputs must remain outside version control.
+
 ## Testing Architecture
 
-Backend tests are located at:
+Backend tests are organized by application domain.
 
 ```text
 backend/tests/
+├── audit/
+├── authorizations/
+├── backups/
+├── configuration/
+├── database_encryption/
+├── observability/
+├── pdf_intake/
+├── registered_options/
+├── schemas/
+├── security/
+└── conftest.py
 ```
 
-Run backend tests from the repository root:
+Shared fixtures remain in:
+
+```text
+backend/tests/conftest.py
+```
+
+Run backend tests from `backend`:
 
 ```bash
-pytest backend/tests -q
+pytest tests -n auto -q
 ```
 
-Run Ruff from the repository root:
+Run Ruff from `backend`:
 
 ```bash
 python -m ruff check . --fix
 ```
 
-Frontend build check:
+Run Bandit from `backend`:
 
 ```bash
-cd frontend
+bandit -r authstatus_api
+```
+
+Run the frontend build check from `frontend`:
+
+```bash
 npm run build
 ```
 
+Test modules should use unique basenames because pytest may import test files as top-level modules depending on the active configuration.
+
 ## Current Limitations
 
-CareQueue is local-first and not production-ready.
+CareQueue is not independently production-ready or HIPAA compliant.
 
 Current limitations include:
 
-- No hosted deployment architecture
-- No production secret manager
-- No HTTPS/TLS deployment configuration
-- No external identity provider integration
-- No admin user management UI
-- No audit log review UI
-- Limited operational backup/restore documentation
-- Legacy backend folder nesting still exists
-- Compliance review has not been performed
+- No complete hosted deployment reference architecture
+- No integrated HTTPS or reverse-proxy deployment package
+- No production secret-manager integration
+- No external identity provider or single sign-on integration
+- No multi-tenant data isolation
+- No automated backup retention policy
+- No automated backup-health notification
+- No continuous restore verification
+- No formal disaster-recovery exercise record
+- Limited frontend automated testing
+- Text-based PDF extraction does not process all scanned documents
+- No independent security assessment
+- No formal compliance review
+- No executed business associate agreements
+- No organizational policies or workforce training supplied by the application
+- No guarantee that a local machine or deployment host is appropriately secured
 
 ## Design Principles
 
 CareQueue should prioritize:
 
 - Local-first development safety
-- Clear workflow tracking
-- Small focused changes
-- Explicit data handling
-- PHI/PII minimization
+- Explicit authentication and authorization
+- Server-enforced session expiration
+- PHI and PII minimization
 - Backend-enforced permissions
+- Secure defaults
+- Layered encryption
+- Separate key responsibilities
+- Safe database and storage paths
 - Audit metadata without sensitive values
+- Sanitized operational logging
+- In-memory PDF processing where practical
+- Explicit human review of uncertain extracted data
+- Isolated encrypted backups
+- Periodic restore testing
+- Domain-focused modules
+- Domain-organized tests
+- Small, reviewable changes
 - Straightforward architecture over unnecessary abstraction
-- Test coverage for behavior changes
+- Honest documentation of limitations

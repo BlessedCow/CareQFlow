@@ -1,8 +1,10 @@
 # CareQueue
 
-CareQueue is a local-first utilization review workflow and authorization dashboard for tracking prior authorization work, review dates, payer decisions, timeline events, and follow-up queues.
+CareQueue is a local-first utilization review workflow and authorization management application for tracking prior authorization work, review dates, payer decisions, timeline events, documentation intake, and follow-up queues.
 
-It combines a FastAPI backend with a React/Vite/Tailwind frontend. CareQueue is designed for local development, private workflow experimentation, and learning. It is not a production healthcare system and is not HIPAA compliant by itself.
+It combines a FastAPI backend with a React, TypeScript, Vite, and Tailwind frontend. CareQueue includes application-level security controls, encrypted storage options, encrypted backup and recovery utilities, role-based access, audit logging, and operational deployment helpers.
+
+CareQueue is intended for private workflow development, testing, and controlled deployment evaluation. It is not HIPAA compliant by itself, and deploying it does not replace an organization’s required administrative, physical, technical, legal, contractual, and operational safeguards.
 
 ## Important Disclaimer
 
@@ -23,31 +25,49 @@ Security features in this project reduce risk, but they do not create HIPAA comp
 
 ### Frontend
 
-- React/Vite/Tailwind interface
-- Login screen and session restore
+### Frontend
+
+- React, TypeScript, Vite, and Tailwind interface
+- Login screen and authenticated session restoration
+- Twenty-minute server-enforced sessions
+- Mandatory warning during the final five minutes of a session
+- Session renewal without exposing the session token to application code
+- Optional bottom-right session countdown that is off by default
 - Role-aware UI controls
 - Dashboard KPI cards and workload summaries
+- Level-of-care and work-queue filtering
 - Calendar view for review dates, start dates, end dates, and closed authorization events
 - Authorization work queue with filters, sorting, and pagination
 - Read-only authorization detail view
 - Timeline event management
-- Settings page for registered facilities, insurances, portals, and dashboard card visibility
+- PDF intake review workflow with confidence and needs-review indicators
+- Explicit confirmation before accepting fields marked for review
+- Settings for registered facilities, insurances, portals, workflow views, dashboard cards, and session-timer visibility
 - Dark mode
-- Local browser persistence for UI preferences
+- Local browser persistence for non-sensitive UI preferences
+
+### Backend
 
 ### Backend
 
 - FastAPI API
-- SQLite storage with optional SQLCipher database encryption
-- Field-level encryption for selected sensitive fields
+- SQLite storage with SQLCipher database-encryption support
+- Field-level encryption for selected sensitive authorization fields
 - Argon2id password hashing
-- Server-side session table with hashed bearer tokens
+- Server-side sessions with hashed session tokens
+- CSRF protection for authenticated state-changing requests
+- Configurable session renewal and expiration
 - Role-based access control
-- Audit logging for login/logout and authorization changes
-- Encrypted local database backups
-- Safe restore script for encrypted backups
+- Audit logging for authentication, user administration, and authorization changes
+- PHI-conscious production logging with centralized sanitization
+- Structured authorization, security, persistence, audit, backup, and PDF-intake modules
+- Local PDF text extraction without requiring an external OCR service
+- Confidence and review metadata for extracted intake fields
+- Encrypted database backup and safe restore utilities
+- Windows Task Scheduler deployment scripts for automated encrypted backups
+- Linux systemd service and timer definitions for automated encrypted backups
 - SQLCipher migration, verification, and cutover preparation scripts
-- Backend test coverage for repository, API, auth, audit, backups, and SQLCipher behavior
+- Domain-organized backend tests covering API, persistence, security, audit, backups, logging, PDF intake, and SQLCipher behavior
 
 ## Current Security Model
 
@@ -61,13 +81,22 @@ SQLCipher mode:
 The SQLite database file can be encrypted at rest.
 
 Encrypted backups:
-Backup copies are encrypted separately.
+Backup copies are encrypted separately and may be scheduled through Windows Task Scheduler or a Linux systemd timer.
 
 Authentication:
 Users log in with hashed passwords.
 
 Sessions:
-Raw session tokens are stored only in the browser. The backend stores token hashes.
+Raw session tokens remain in secure browser cookies. The backend stores token hashes.
+
+Session expiration:
+Authenticated sessions expire after 20 minutes. A mandatory warning appears during the final 5 minutes, and authorized users may renew an active session.
+
+CSRF protection:
+Authenticated state-changing requests require a matching CSRF token.
+
+Logging:
+Production logging applies centralized sanitization intended to prevent credentials, session values, sensitive fields, and exception details from being written to logs.
 
 Roles:
 Admin and UR users can manage records. Read Only users can view records.
@@ -90,49 +119,71 @@ AUTHSTATUS_BACKUP_ENCRYPTION_KEY=encrypted backup file key
 ├── backend/
 │   ├── authstatus_api/
 │   │   ├── audit/
+│   │   ├── authorizations/
 │   │   ├── backups/
 │   │   ├── database_encryption/
+│   │   ├── observability/
 │   │   ├── pdf_intake/
+│   │   ├── persistence/
 │   │   ├── registered_options/
 │   │   ├── routers/
 │   │   ├── security/
 │   │   ├── crypto.py
-│   │   ├── database.py
 │   │   ├── errors.py
 │   │   ├── main.py
-│   │   ├── repository.py
 │   │   ├── schemas.py
 │   │   └── settings.py
 │   ├── scripts/
 │   ├── tests/
+│   │   ├── audit/
+│   │   ├── authorizations/
+│   │   ├── backups/
+│   │   ├── configuration/
+│   │   ├── database_encryption/
+│   │   ├── observability/
 │   │   ├── pdf_intake/
 │   │   ├── registered_options/
+│   │   ├── schemas/
 │   │   ├── security/
 │   │   └── conftest.py
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
 │   └── pyproject.toml
 │
+├── deployment/
+│   ├── linux/
+│   │   └── systemd/
+│   │       ├── carequeue-backup.service
+│   │       └── carequeue-backup.timer
+│   └── windows/
+│       ├── install-backup-task.ps1
+│       ├── remove-backup-task.ps1
+│       └── run-backup.ps1
+│
 ├── docs/
 │   ├── README.md
-│   ├── screenshots/
+│   ├── assets/
+│   │   └── screenshots/
 │   └── workflows/
+│       └── backup-and-recovery.md
+│
 ├── frontend/
 │   ├── src/
 │   │   ├── api/
 │   │   ├── components/
-│   │   │   └── layout/
+│   │   │   ├── layout/
+│   │   │   └── security/
 │   │   ├── hooks/
 │   │   ├── pages/
 │   │   ├── types/
 │   │   └── utils/
 │   ├── package.json
 │   └── vite.config.ts
+│
 ├── .env.example
 ├── ARCHITECTURE.md
 ├── CONTRIBUTING.md
 ├── DISCLAIMER.md
-├── NOTES.md
 ├── README.md
 ├── ROADMAP.md
 ├── SECURITY.md
@@ -279,12 +330,15 @@ Can view records but does not see create, edit, or delete controls.
 
 Additional project documentation is available in the repository root and under `docs/`.
 
-- `ARCHITECTURE.md` explains the frontend, backend, database, security, audit, backup, and script structure.
-- `ROADMAP.md` outlines planned improvements and future development direction.
-- `SECURITY.md` describes local security controls, sensitive file handling, key handling, audit logging, and reporting guidance.
-- `DISCLAIMER.md` explains project limitations, PHI/PII warnings, and non-production status.
-- `CONTRIBUTING.md` explains contribution expectations, testing, privacy rules, and pull request guidance.
-- `docs/` is reserved for additional documentation, sanitized screenshots, workflow notes, setup references, and future implementation guides.
+- `ARCHITECTURE.md` explains the frontend, backend, persistence, security, audit, backup, logging, and PDF-intake structure.
+- `ROADMAP.md` tracks completed milestones, near-term priorities, and longer-term development direction.
+- `SECURITY.md` describes security controls, key handling, sessions, CSRF protection, logging, encrypted storage, backups, and reporting guidance.
+- `DISCLAIMER.md` explains project limitations, PHI and PII warnings, and compliance boundaries.
+- `CONTRIBUTING.md` explains contribution expectations, testing, privacy rules, repository organization, and pull request guidance.
+- `docs/workflows/backup-and-recovery.md` documents manual and scheduled encrypted backups, restoration, verification, Windows Task Scheduler, and Linux systemd operation.
+- `deployment/windows/` contains Windows backup runner, installer, and removal scripts.
+- `deployment/linux/systemd/` contains the Linux backup service and timer definitions.
+- `docs/assets/screenshots/` is reserved for sanitized screenshots created with entirely synthetic data.
 
 ## API Endpoints
 
@@ -294,6 +348,7 @@ GET    /api/health
 POST   /api/security/login
 POST   /api/security/logout
 GET    /api/security/me
+POST   /api/security/session/renew
 
 GET    /api/auths
 POST   /api/auths
@@ -309,7 +364,7 @@ DELETE /api/auths/{auth_id}/events/{event_id}
 GET    /api/analytics/summary
 ```
 
-Most API routes require a bearer token.
+Most API routes require an authenticated secure cookie. State-changing authenticated requests also require CSRF validation.
 
 ## Encrypted Backups
 
@@ -344,6 +399,21 @@ backend/restores/
 ```
 
 The restore script does not overwrite the active database.
+
+### Automated backup scheduling
+
+CareQueue includes platform-specific scheduling files:
+
+```text
+deployment/windows/
+deployment/linux/systemd/
+```
+Windows deployments may register the encrypted backup utility through Task Scheduler. Linux deployments may use the supplied systemd service and timer.
+
+Detailed setup, verification, removal, recovery, and troubleshooting instructions are available in:
+`docs/workflows/backup-and-recovery.md`
+
+Scheduled backups should write to an isolated storage path outside the active application installation and database directory. Backup files, environment files, and encryption keys must remain restricted to authorized service accounts and administrators.
 
 ## SQLCipher Workflow
 
@@ -395,16 +465,22 @@ Keep the plaintext database until SQLCipher mode has been tested through normal 
 
 ## Testing
 
-Backend tests from the repository root:
+Backend tests:
 
 ```bash
-pytest backend/tests -q
+cd backend
+pytest tests -n auto -q
 ```
 
-Ruff from the repository root:
+Ruff:
 
 ```bash
 python -m ruff check . --fix
+```
+
+Security scan:
+```bash
+bandit -r authstatus_api
 ```
 
 Frontend build check:
@@ -419,10 +495,13 @@ npm run build
 The following files and directories are local runtime data, generated artifacts, or sensitive configuration and should remain ignored:
 
 ```text
-backend/.env
+.env
 backend/data/
 backend/backups/
 backend/restores/
+local_backups/
+local_config/
+local_vobs/
 *.db
 *.sqlite
 *.sqlite3
@@ -430,6 +509,7 @@ backend/restores/
 *.restored.db
 frontend/node_modules/
 backend/.venv/
+__pycache__/
 ```
 
 Before committing, check the staged and unstaged files:
@@ -438,10 +518,18 @@ Before committing, check the staged and unstaged files:
 git status --short
 ```
 
-Do not commit database files, encrypted backups, restore files, `.env`, virtual environments, or `node_modules`.
+Do not commit databases, encrypted backups, restored databases, environment files, encryption keys, real intake PDFs, screenshots containing sensitive information, virtual environments, caches, or `node_modules`.
+
 
 ## Development Notes
 
-- The current FastAPI backend lives in `backend/authstatus_api`.
-- Backend tests should be run against `backend/tests`.
-- The app is currently local-first and should not be deployed publicly without additional production hardening.
+- The FastAPI backend lives in `backend/authstatus_api`.
+- Backend tests are organized by application domain under `backend/tests`.
+- The frontend lives in `frontend/src`.
+- The application uses a local-first architecture and should not be exposed publicly without a documented deployment model and additional production hardening.
+- Session expiration is enforced by the backend. The frontend countdown is informational only.
+- The visible session countdown is optional and off by default. The five-minute expiration warning remains mandatory.
+- Uploaded PDFs are processed for intake extraction and should not be persisted or logged by the intake workflow.
+- Screenshots and examples must use synthetic data only.
+- Scheduled backup success does not replace periodic restore testing.
+- Security controls reduce risk but do not independently establish regulatory compliance.
