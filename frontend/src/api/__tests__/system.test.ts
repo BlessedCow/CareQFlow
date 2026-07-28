@@ -1,5 +1,6 @@
 import {
   createRestorePoint,
+  fetchApiEndpoints,
   fetchApplicationHealth,
   fetchDatabaseReadiness,
   fetchRestorePoints,
@@ -45,6 +46,67 @@ describe("system API", () => {
 
     expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/health/live"
+    );
+  });
+
+  it("loads registered API endpoint status", async () => {
+    const endpoints = [
+      {
+        path: "/api/health/live",
+        methods: ["GET"],
+        group: "ungrouped",
+        access: "public",
+        status: "operational",
+        probeable: true,
+      },
+      {
+        path: "/api/admin/system/backups",
+        methods: ["POST"],
+        group: "admin-system-backups",
+        access: "admin",
+        status: "registered",
+        probeable: false,
+      },
+    ];
+
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          endpoints,
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    );
+
+    await expect(fetchApiEndpoints()).resolves.toEqual(endpoints);
+
+    expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/admin/system/endpoints"
+    );
+  });
+
+  it("returns the backend detail when endpoint inventory fails", async () => {
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: "Endpoint monitoring is unavailable.",
+        }),
+        {
+          status: 503,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    );
+
+    await expect(fetchApiEndpoints()).rejects.toThrow(
+      "Endpoint monitoring is unavailable."
     );
   });
 

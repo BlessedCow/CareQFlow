@@ -10,6 +10,29 @@ export interface DatabaseReadiness {
   status: "ok" | "unavailable";
 }
 
+export type EndpointAccess =
+  | "public"
+  | "authenticated"
+  | "admin";
+
+export type EndpointStatus =
+  | "operational"
+  | "unavailable"
+  | "registered";
+
+export interface ApiEndpointStatus {
+  path: string;
+  methods: string[];
+  group: string;
+  access: EndpointAccess;
+  status: EndpointStatus;
+  probeable: boolean;
+}
+
+interface EndpointListResponse {
+  endpoints: ApiEndpointStatus[];
+}
+
 export interface BackupFile {
   filename: string;
   size_bytes: number;
@@ -69,6 +92,27 @@ export async function fetchDatabaseReadiness(): Promise<DatabaseReadiness> {
   }
 
   return (await response.json()) as DatabaseReadiness;
+}
+
+export async function fetchApiEndpoints(): Promise<
+  ApiEndpointStatus[]
+> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/admin/system/endpoints`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(
+        response,
+        "Unable to load API endpoint status."
+      )
+    );
+  }
+
+  const data = (await response.json()) as EndpointListResponse;
+
+  return data.endpoints;
 }
 
 export async function fetchRestorePoints(): Promise<BackupFile[]> {

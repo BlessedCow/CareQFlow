@@ -1,20 +1,25 @@
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CircleAlert,
   Database,
   HardDriveDownload,
   RefreshCw,
+  Search,
   Server,
   ShieldCheck,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   createRestorePoint,
+  fetchApiEndpoints,
   fetchApplicationHealth,
   fetchDatabaseReadiness,
   fetchRestorePoints,
   verifyRestorePoint,
+  type ApiEndpointStatus,
   type ApplicationHealth,
   type BackupFile,
   type DatabaseReadiness,
@@ -60,6 +65,12 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
   );
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const [apiEndpoints, setApiEndpoints] = useState<ApiEndpointStatus[]>([]);
+  const [isEndpointInventoryOpen, setIsEndpointInventoryOpen] = useState(false);
+  const [isLoadingEndpoints, setIsLoadingEndpoints] = useState(false);
+  const [endpointSearch, setEndpointSearch] = useState("");
+  const [endpointError, setEndpointError] = useState<string | null>(null);
 
   const loadSystemData = useCallback(async () => {
     setIsLoading(true);
@@ -138,6 +149,57 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
       setVerifyingFilename(null);
     }
   };
+
+  const handleToggleEndpointInventory = async () => {
+    if (isEndpointInventoryOpen) {
+      setIsEndpointInventoryOpen(false);
+      return;
+    }
+
+    setIsEndpointInventoryOpen(true);
+
+    if (apiEndpoints.length > 0) {
+      return;
+    }
+
+    setIsLoadingEndpoints(true);
+    setEndpointError(null);
+
+    try {
+      const endpoints = await fetchApiEndpoints();
+      setApiEndpoints(endpoints);
+    } catch (loadError) {
+      setEndpointError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load API endpoint status."
+      );
+    } finally {
+      setIsLoadingEndpoints(false);
+    }
+  };
+
+  const filteredApiEndpoints = useMemo(() => {
+    const normalizedSearch = endpointSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return apiEndpoints;
+    }
+
+    return apiEndpoints.filter((endpoint) => {
+      const searchableValues = [
+        endpoint.path,
+        endpoint.group,
+        endpoint.access,
+        endpoint.status,
+        ...endpoint.methods,
+      ];
+
+      return searchableValues.some((value) =>
+        value.toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [apiEndpoints, endpointSearch]);
 
   const cardClass = cn(
     "rounded-xl border p-5 shadow-sm",
@@ -224,6 +286,28 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
               Version {applicationHealth.version}
             </p>
           )}
+
+          <button
+            type="button"
+            onClick={() => void handleToggleEndpointInventory()}
+            className={cn(
+              "mt-5 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+              darkMode
+                ? "border-gray-700 hover:bg-gray-800"
+                : "border-gray-300 hover:bg-gray-100"
+            )}
+            aria-expanded={isEndpointInventoryOpen}
+          >
+            {isEndpointInventoryOpen ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+
+            {isEndpointInventoryOpen
+              ? "Hide API Endpoints"
+              : "View API Endpoints"}
+          </button>
         </div>
 
         <div className={cardClass}>
@@ -257,6 +341,173 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
           </div>
         </div>
       </section>
+
+      {isEndpointInventoryOpen && (
+        <section className={cardClass}>
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">API Endpoint Status</h2>
+
+              <p
+                className={cn(
+                  "mt-1 text-sm",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}
+              >
+                Operational endpoints are actively probed. Registered endpoints
+                were loaded successfully but are not called automatically.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-80">
+              <Search
+                className={cn(
+                  "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2",
+                  darkMode ? "text-gray-500" : "text-gray-400"
+                )}
+              />
+
+              <input
+                type="search"
+                aria-label="Search API endpoints"
+                value={endpointSearch}
+                onChange={(event) => setEndpointSearch(event.target.value)}
+                placeholder="Search method, path, group, or status"
+                className={cn(
+                  "w-full rounded-lg border py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  darkMode
+                    ? "border-gray-700 bg-gray-950 text-gray-100"
+                    : "border-gray-300 bg-white text-gray-900"
+                )}
+              />
+            </div>
+          </div>
+
+          {endpointError && (
+            <div
+              role="alert"
+              className={cn(
+                "mb-4 rounded-lg border px-4 py-3 text-sm",
+                darkMode
+                  ? "border-red-900 bg-red-950/40 text-red-200"
+                  : "border-red-200 bg-red-50 text-red-800"
+              )}
+            >
+              {endpointError}
+            </div>
+          )}
+
+          {isLoadingEndpoints ? (
+            <div className="flex items-center justify-center py-10">
+              <RefreshCw className="mr-3 h-5 w-5 animate-spin" />
+              <span>Loading API endpoint status...</span>
+            </div>
+          ) : filteredApiEndpoints.length === 0 ? (
+            <div
+              className={cn(
+                "rounded-lg border border-dashed px-4 py-10 text-center text-sm",
+                darkMode
+                  ? "border-gray-700 text-gray-400"
+                  : "border-gray-300 text-gray-600"
+              )}
+            >
+              No API endpoints match the current search.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead>
+                  <tr
+                    className={cn(
+                      "border-b",
+                      darkMode
+                        ? "border-gray-800 text-gray-400"
+                        : "border-gray-200 text-gray-600"
+                    )}
+                  >
+                    <th className="px-3 py-3 font-medium">Method</th>
+                    <th className="px-3 py-3 font-medium">Path</th>
+                    <th className="px-3 py-3 font-medium">Group</th>
+                    <th className="px-3 py-3 font-medium">Access</th>
+                    <th className="px-3 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredApiEndpoints.map((endpoint) => (
+                    <tr
+                      key={`${endpoint.methods.join(",")}-${endpoint.path}`}
+                      className={cn(
+                        "border-b last:border-b-0",
+                        darkMode ? "border-gray-800" : "border-gray-100"
+                      )}
+                    >
+                      <td className="px-3 py-4">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-md px-2 py-1 font-mono text-xs font-semibold",
+                            darkMode
+                              ? "bg-gray-800 text-gray-200"
+                              : "bg-gray-100 text-gray-800"
+                          )}
+                        >
+                          {endpoint.methods.join(", ")}
+                        </span>
+                      </td>
+
+                      <td className="break-all px-3 py-4 font-mono text-xs">
+                        {endpoint.path}
+                      </td>
+
+                      <td className="px-3 py-4">{endpoint.group}</td>
+
+                      <td className="px-3 py-4 capitalize">
+                        {endpoint.access === "admin"
+                          ? "Admin"
+                          : endpoint.access}
+                      </td>
+
+                      <td className="px-3 py-4">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium",
+                            endpoint.status === "operational" &&
+                              (darkMode
+                                ? "bg-green-950 text-green-200"
+                                : "bg-green-100 text-green-800"),
+                            endpoint.status === "unavailable" &&
+                              (darkMode
+                                ? "bg-red-950 text-red-200"
+                                : "bg-red-100 text-red-800"),
+                            endpoint.status === "registered" &&
+                              (darkMode
+                                ? "bg-blue-950 text-blue-200"
+                                : "bg-blue-100 text-blue-800")
+                          )}
+                        >
+                          {endpoint.status === "operational" && (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          )}
+
+                          {endpoint.status === "unavailable" && (
+                            <CircleAlert className="h-3.5 w-3.5" />
+                          )}
+
+                          {endpoint.status === "operational"
+                            ? "Operational"
+                            : endpoint.status === "unavailable"
+                            ? "Unavailable"
+                            : "Registered"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className={cardClass}>
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
