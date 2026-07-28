@@ -8,24 +8,24 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = BACKEND_ROOT.parents[1]
+PROJECT_ROOT = BACKEND_ROOT.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 sys.path.insert(0, str(BACKEND_ROOT))
 
 os.environ.setdefault(
     "AUTHSTATUS_DATABASE_PATH",
-    str(PROJECT_ROOT / "backend" / "data" / "auth_tracker.db")
+    str(PROJECT_ROOT / "backend" / "data" / "auth_tracker.db"),
 )
 os.environ.setdefault(
-    "AUTHSTATUS_BACKUP_DIRECTORY",
-    str(PROJECT_ROOT / "backend" / "backups")
+    "AUTHSTATUS_BACKUP_DIRECTORY", str(PROJECT_ROOT / "backend" / "backups")
 )
 
 from authstatus_api.backups.service import (  # noqa: E402
     BackupConfigError,
     BackupError,
     create_encrypted_database_backup,
+    verify_encrypted_database_backup,
 )
 
 
@@ -57,11 +57,14 @@ def main() -> int:
             database_path=args.database_path,
             backup_directory=args.backup_directory,
         )
+        verify_encrypted_database_backup(
+            backup_path=backup_path,
+        )
     except (BackupConfigError, BackupError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
-    print(f"Created encrypted backup: {backup_path}")
+    print(f"Created and verified encrypted backup: {backup_path}")
     return 0
 
 

@@ -11,10 +11,115 @@ from authstatus_api.backups.service import (
     decrypt_backup_file,
     encrypt_backup_bytes,
     restore_encrypted_database_backup,
+    verify_encrypted_database_backup,
 )
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.persistence.schema import init_db
 from authstatus_api.settings import get_settings
+
+
+def test_verify_encrypted_database_backup_accepts_valid_backup(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    verify_encrypted_database_backup(backup_path=backup_path)
+
+    assert backup_path.exists()
+    assert not list(backup_directory.glob(".*.verify.*"))
+
+
+def test_verify_encrypted_database_backup_rejects_wrong_key(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    monkeypatch.setenv(
+        "AUTHSTATUS_BACKUP_ENCRYPTION_KEY",
+        generate_encryption_key(),
+    )
+    get_settings.cache_clear()
+
+    with pytest.raises(
+        BackupError,
+        match="Unable to decrypt backup file",
+    ):
+        verify_encrypted_database_backup(backup_path=backup_path)
+
+    assert backup_path.exists()
+    assert not list(backup_directory.glob(".*.verify.*"))
+
+
+def test_verify_encrypted_database_backup_rejects_corrupted_backup(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    backup_path = backup_directory / "corrupted.db.enc"
+    backup_path.write_bytes(b"not an encrypted CareQueue backup")
+
+    with pytest.raises(
+        BackupError,
+        match="Unable to decrypt backup file",
+    ):
+        verify_encrypted_database_backup(backup_path=backup_path)
+
+    assert not list(backup_directory.glob(".*.verify.*"))
+
+
+def test_verify_encrypted_database_backup_rejects_empty_backup(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    backup_path = backup_directory / "empty.db.enc"
+    backup_path.touch()
+
+    with pytest.raises(
+        BackupError,
+        match="Backup file is empty",
+    ):
+        verify_encrypted_database_backup(backup_path=backup_path)
+
+    assert not list(backup_directory.glob(".*.verify.*"))
+
+
+def test_verify_encrypted_database_backup_removes_invalid_decrypted_file(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    backup_path = backup_directory / "invalid-database.db.enc"
+    backup_path.write_bytes(encrypt_backup_bytes(b"not a CareQueue database"))
+
+    with pytest.raises(
+        BackupError,
+        match="not a valid plaintext SQLite database",
+    ):
+        verify_encrypted_database_backup(backup_path=backup_path)
+
+    assert backup_path.exists()
+    assert not list(backup_directory.glob(".*.verify.*"))
 
 
 @pytest.fixture(autouse=True)

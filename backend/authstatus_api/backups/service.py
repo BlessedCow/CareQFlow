@@ -320,6 +320,44 @@ def decrypt_backup_file(backup_path: Path) -> bytes:
     return decrypt_backup_bytes(backup_path.read_bytes())
 
 
+def verify_encrypted_database_backup(
+    *,
+    backup_path: Path,
+) -> None:
+    if backup_path.suffix != ".enc":
+        raise BackupError(f"Backup file must end with .enc: {backup_path}")
+
+    if not backup_path.exists():
+        raise BackupError(f"Backup file does not exist: {backup_path}")
+
+    if not backup_path.is_file():
+        raise BackupError(f"Backup path is not a file: {backup_path}")
+
+    if backup_path.stat().st_size == 0:
+        raise BackupError(f"Backup file is empty: {backup_path}")
+
+    decrypted_bytes = decrypt_backup_file(backup_path)
+    temporary_path: Path | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=backup_path.parent,
+            prefix=f".{backup_path.name}.verify.",
+            suffix=".db",
+            delete=False,
+        ) as temporary_file:
+            temporary_file.write(decrypted_bytes)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+            temporary_path = Path(temporary_file.name)
+
+        _validate_restored_database(temporary_path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
 def restore_encrypted_database_backup(
     *,
     backup_path: Path,
