@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -23,6 +23,12 @@ class BackupConfigError(RuntimeError):
 
 class BackupError(RuntimeError):
     pass
+
+
+class BackupFileInfo(TypedDict):
+    filename: str
+    size_bytes: int
+    created_at: str
 
 
 REQUIRED_DATABASE_TABLES = {
@@ -266,6 +272,105 @@ def decrypt_backup_bytes(encrypted_bytes: bytes) -> bytes:
         return _get_backup_fernet().decrypt(encrypted_bytes)
     except InvalidToken as exc:
         raise BackupError("Unable to decrypt backup file.") from exc
+
+
+def list_encrypted_database_backups(
+    *,
+    backup_directory: Path | None = None,
+) -> list[BackupFileInfo]:
+    settings = get_settings()
+    source_directory = resolve_project_path(
+        backup_directory or settings.backup_directory
+    )
+
+    if not source_directory.exists():
+        return []
+
+    if not source_directory.is_dir():
+        raise BackupError(
+            f"Backup directory path is not a directory: {source_directory}"
+        )
+
+    backups: list[BackupFileInfo] = []
+
+    for backup_path in source_directory.iterdir():
+        if (
+            not backup_path.is_file()
+            or backup_path.name.startswith(".")
+            or not backup_path.name.endswith(".db.enc")
+        ):
+            continue
+
+        file_stat = backup_path.stat()
+
+        backups.append(
+            {
+                "filename": backup_path.name,
+                "size_bytes": file_stat.st_size,
+                "created_at": datetime.fromtimestamp(
+                    file_stat.st_mtime,
+                    tz=UTC,
+                ).isoformat(timespec="seconds"),
+            }
+        )
+
+    return sorted(
+        backups,
+        key=lambda backup: (
+            backup["created_at"],
+            backup["filename"],
+        ),
+        reverse=True,
+    )
+
+
+def resolve_encrypted_database_backup_path(
+    *,
+    filename: str,
+    backup_directory: Path | None = None,
+) -> Path:
+    settings = get_settings()
+    source_directory = resolve_project_path(
+        backup_directory or settings.backup_directory
+    )
+
+    if not filename or filename in {".", ".."}:
+        raise BackupError("Invalid backup filename.")
+
+    if (
+        "\x00" in filename
+        or "/" in filename
+        or "\\" in filename
+        or Path(filename).name != filename
+        or filename.startswith(".")
+        or not filename.endswith(".db.enc")
+    ):
+        raise BackupError("Invalid backup filename.")
+
+    if not source_directory.exists():
+        raise BackupError("Backup directory does not exist.")
+
+    if not source_directory.is_dir():
+        raise BackupError("Backup directory path is not a directory.")
+
+    backup_path = source_directory / filename
+
+    if backup_path.is_symlink():
+        raise BackupError("Backup file must not be a symbolic link.")
+
+    if not backup_path.exists():
+        raise BackupError("Backup file does not exist.")
+
+    if not backup_path.is_file():
+        raise BackupError("Backup path is not a file.")
+
+    resolved_directory = source_directory.resolve()
+    resolved_backup_path = backup_path.resolve()
+
+    if resolved_backup_path.parent != resolved_directory:
+        raise BackupError("Invalid backup filename.")
+
+    return resolved_backup_path
 
 
 def create_encrypted_database_backup(

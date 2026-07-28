@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 
 import pytest
@@ -10,6 +11,8 @@ from authstatus_api.backups.service import (
     create_encrypted_database_backup,
     decrypt_backup_file,
     encrypt_backup_bytes,
+    list_encrypted_database_backups,
+    resolve_encrypted_database_backup_path,
     restore_encrypted_database_backup,
     verify_encrypted_database_backup,
 )
@@ -336,3 +339,209 @@ def test_restore_rejects_decrypted_file_that_is_not_a_carequeue_database(
 
     assert not list(restore_directory.glob("*.restored.db"))
     assert not list(restore_directory.glob("*.tmp"))
+
+
+def test_list_encrypted_database_backups_returns_newest_first(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    older_backup = backup_directory / "auth_tracker_older.db.enc"
+    newer_backup = backup_directory / "auth_tracker_newer.db.enc"
+
+    older_backup.write_bytes(b"older encrypted backup")
+    newer_backup.write_bytes(b"newer encrypted backup")
+
+    os.utime(
+        older_backup,
+        (1_700_000_000, 1_700_000_000),
+    )
+    os.utime(
+        newer_backup,
+        (1_800_000_000, 1_800_000_000),
+    )
+
+    backups = list_encrypted_database_backups(
+        backup_directory=backup_directory,
+    )
+
+    assert [backup["filename"] for backup in backups] == [
+        "auth_tracker_newer.db.enc",
+        "auth_tracker_older.db.enc",
+    ]
+    assert backups[0]["size_bytes"] == len(b"newer encrypted backup")
+    assert backups[0]["created_at"] == "2027-01-15T08:00:00+00:00"
+
+
+def test_list_encrypted_database_backups_ignores_unrelated_files(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    valid_backup = backup_directory / "auth_tracker_valid.db.enc"
+    valid_backup.write_bytes(b"encrypted backup")
+
+    (backup_directory / "notes.txt").write_text(
+        "not a backup",
+        encoding="utf-8",
+    )
+    (backup_directory / "database.db").write_bytes(b"unencrypted database")
+    (backup_directory / ".temporary.db.enc").write_bytes(b"temporary backup")
+
+    nested_directory = backup_directory / "nested.db.enc"
+    nested_directory.mkdir()
+
+    backups = list_encrypted_database_backups(
+        backup_directory=backup_directory,
+    )
+
+    assert backups == [
+        {
+            "filename": "auth_tracker_valid.db.enc",
+            "size_bytes": len(b"encrypted backup"),
+            "created_at": backups[0]["created_at"],
+        }
+    ]
+
+
+def test_list_encrypted_database_backups_returns_empty_for_missing_directory(
+    tmp_path,
+):
+    backups = list_encrypted_database_backups(
+        backup_directory=tmp_path / "missing-backups",
+    )
+
+    assert backups == []
+
+
+def test_list_encrypted_database_backups_rejects_file_as_directory(
+    tmp_path,
+):
+    invalid_directory = tmp_path / "backups"
+    invalid_directory.write_text(
+        "not a directory",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Backup directory path is not a directory",
+    ):
+        list_encrypted_database_backups(
+            backup_directory=invalid_directory,
+        )
+
+
+def test_resolve_encrypted_database_backup_path_accepts_listed_backup(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    backup_path = backup_directory / "auth_tracker_valid.db.enc"
+    backup_path.write_bytes(b"encrypted backup")
+
+    resolved_path = resolve_encrypted_database_backup_path(
+        filename=backup_path.name,
+        backup_directory=backup_directory,
+    )
+
+    assert resolved_path == backup_path.resolve()
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "",
+        ".",
+        "..",
+        "../outside.db.enc",
+        "..\\outside.db.enc",
+        "nested/backup.db.enc",
+        "nested\\backup.db.enc",
+        "/absolute/backup.db.enc",
+        "C:\\absolute\\backup.db.enc",
+        ".temporary.db.enc",
+        "backup.db",
+        "backup.enc",
+        "backup.db.enc\x00extra",
+    ],
+)
+def test_resolve_encrypted_database_backup_path_rejects_unsafe_filename(
+    tmp_path,
+    filename,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    with pytest.raises(
+        BackupError,
+        match="Invalid backup filename",
+    ):
+        resolve_encrypted_database_backup_path(
+            filename=filename,
+            backup_directory=backup_directory,
+        )
+
+
+def test_resolve_encrypted_database_backup_path_rejects_missing_backup(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    with pytest.raises(
+        BackupError,
+        match="Backup file does not exist",
+    ):
+        resolve_encrypted_database_backup_path(
+            filename="missing.db.enc",
+            backup_directory=backup_directory,
+        )
+
+
+def test_resolve_encrypted_database_backup_path_rejects_directory(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    nested_directory = backup_directory / "nested.db.enc"
+    nested_directory.mkdir()
+
+    with pytest.raises(
+        BackupError,
+        match="Backup path is not a file",
+    ):
+        resolve_encrypted_database_backup_path(
+            filename=nested_directory.name,
+            backup_directory=backup_directory,
+        )
+
+
+def test_resolve_encrypted_database_backup_path_rejects_symbolic_link(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    backup_directory.mkdir()
+
+    target_path = tmp_path / "outside.db.enc"
+    target_path.write_bytes(b"outside backup")
+
+    link_path = backup_directory / "linked.db.enc"
+
+    try:
+        link_path.symlink_to(target_path)
+    except OSError:
+        pytest.skip("Symbolic links are not available in this environment.")
+
+    with pytest.raises(
+        BackupError,
+        match="must not be a symbolic link",
+    ):
+        resolve_encrypted_database_backup_path(
+            filename=link_path.name,
+            backup_directory=backup_directory,
+        )

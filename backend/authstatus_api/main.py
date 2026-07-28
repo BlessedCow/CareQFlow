@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
+from authstatus_api.backups.router import router as backups_router
 from authstatus_api.errors import register_exception_handlers
 from authstatus_api.observability.logging import (
     configure_application_logging,
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     api.include_router(security_router)
+    api.include_router(backups_router)
     api.include_router(auths_router)
     api.include_router(analytics_router)
     api.include_router(registered_options_router)
