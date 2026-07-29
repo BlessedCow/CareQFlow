@@ -4,7 +4,8 @@ import errno
 import os
 import platform
 import socket
-import subprocess
+import subprocess  # nosec B404
+from contextlib import suppress
 from pathlib import Path
 from typing import TypedDict
 
@@ -118,6 +119,16 @@ def verify_managed_service_stopped(
     if not normalized_service_name:
         raise RecoveryActivationError("The managed service name must not be empty.")
 
+    if normalized_service_name.startswith(("-", "/")):
+        raise RecoveryActivationError(
+            "The managed service name must not begin with an option prefix."
+        )
+
+    if any(character in normalized_service_name for character in ("\x00", "\r", "\n")):
+        raise RecoveryActivationError(
+            "The managed service name contains invalid characters."
+        )
+
     operating_system = platform.system()
 
     if operating_system == "Windows":
@@ -140,7 +151,7 @@ def verify_managed_service_stopped(
         )
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             command,
             capture_output=True,
             text=True,
@@ -680,10 +691,8 @@ def verify_exclusive_database_access() -> None:
         conn.execute("ROLLBACK")
     except Exception as exc:
         if conn is not None:
-            try:
+            with suppress(Exception):
                 conn.execute("ROLLBACK")
-            except Exception:
-                pass
 
         raise RecoveryActivationError(
             "Recovery activation refused: the active database " "is locked or in use."

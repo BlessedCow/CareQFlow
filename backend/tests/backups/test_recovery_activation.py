@@ -960,6 +960,56 @@ def test_verify_managed_service_stopped_skips_when_not_configured():
     mocked_run.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "service_name",
+    [
+        "-CareQueue",
+        "--unit=carequeue.service",
+        "/CareQueue",
+    ],
+)
+def test_verify_managed_service_rejects_option_like_name(
+    service_name,
+):
+    with patch(
+        "authstatus_api.backups.recovery_activation.subprocess.run"
+    ) as mocked_run:
+        with pytest.raises(
+            RecoveryActivationError,
+            match="must not begin with an option prefix",
+        ):
+            verify_managed_service_stopped(
+                service_name=service_name,
+            )
+
+    mocked_run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "service_name",
+    [
+        "CareQueue\x00Service",
+        "CareQueue\nService",
+        "CareQueue\rService",
+    ],
+)
+def test_verify_managed_service_rejects_control_characters(
+    service_name,
+):
+    with patch(
+        "authstatus_api.backups.recovery_activation.subprocess.run"
+    ) as mocked_run:
+        with pytest.raises(
+            RecoveryActivationError,
+            match="contains invalid characters",
+        ):
+            verify_managed_service_stopped(
+                service_name=service_name,
+            )
+
+    mocked_run.assert_not_called()
+
+
 def test_verify_windows_service_stopped():
     result = subprocess.CompletedProcess(
         args=["sc.exe", "query", "CareQueue"],

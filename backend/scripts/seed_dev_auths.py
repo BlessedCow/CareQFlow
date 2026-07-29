@@ -1,7 +1,8 @@
 import argparse
 import json
-import random
+import secrets
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from faker import Faker
@@ -60,22 +61,37 @@ SUBMISSION_METHODS = [
 
 
 def build_record() -> dict[str, str]:
-    facility = random.choice(FACILITIES)
-    loc = random.choice(LOCS)
-    auth_type = random.choice(AUTH_TYPES)
+    facility = secrets.choice(FACILITIES)
+    loc = secrets.choice(LOCS)
+    auth_type = secrets.choice(AUTH_TYPES)
 
     return {
         "client_name": fake.name(),
         "facility": facility,
         "loc": loc,
-        "status": random.choice(STATUSES),
-        "insurance": random.choice(INSURERS),
+        "status": secrets.choice(STATUSES),
+        "insurance": secrets.choice(INSURERS),
         "auth_type": auth_type,
-        "submission_methods": random.choice(SUBMISSION_METHODS),
+        "submission_methods": secrets.choice(SUBMISSION_METHODS),
     }
 
 
+def validate_api_url(api_url: str) -> None:
+    parsed_url = urllib.parse.urlparse(api_url)
+
+    if parsed_url.scheme != "http":
+        raise SystemExit("The development seed API URL must use HTTP.")
+
+    if parsed_url.hostname not in {"127.0.0.1", "localhost"}:
+        raise SystemExit("The development seed API URL must target localhost.")
+
+    if parsed_url.path != "/api/auths":
+        raise SystemExit("The development seed API URL must target /api/auths.")
+
+
 def create_record(record: dict[str, str]) -> dict:
+    validate_api_url(API_URL)
+
     payload = json.dumps(record).encode("utf-8")
 
     request = urllib.request.Request(
@@ -85,7 +101,10 @@ def create_record(record: dict[str, str]) -> dict:
         method="POST",
     )
 
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with urllib.request.urlopen(  # nosec B310
+        request,
+        timeout=10,
+    ) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -98,18 +117,24 @@ def seed_records(count: int) -> None:
         try:
             create_record(record)
             created += 1
-            print(f"Created: {record['client_name']} | {record['facility']} | {record['loc']}")
+            print(
+                f"Created: {record['client_name']} | {record['facility']} | {record['loc']}"
+            )
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8")
             raise SystemExit(f"API rejected record: {error_body}") from exc
         except urllib.error.URLError as exc:
-            raise SystemExit(f"Could not connect to the API at {API_URL}: {exc}") from exc
+            raise SystemExit(
+                f"Could not connect to the API at {API_URL}: {exc}"
+            ) from exc
 
     print(f"Seeded {created} development authorization records.")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Seed local development authorization records.")
+    parser = argparse.ArgumentParser(
+        description="Seed local development authorization records."
+    )
     parser.add_argument(
         "--count",
         type=int,
