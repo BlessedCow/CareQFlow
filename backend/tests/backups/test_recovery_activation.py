@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 import sqlite3
 import subprocess
@@ -869,24 +870,55 @@ def test_verify_exclusive_database_access_rejects_locked_database():
         locking_connection.close()
 
 
-def test_verify_api_port_available_accepts_refused_connection():
+def test_verify_api_port_available_accepts_bindable_port():
     with patch(
-        "authstatus_api.backups.recovery_activation.socket.create_connection",
-        side_effect=ConnectionRefusedError,
-    ):
+        "authstatus_api.backups.recovery_activation.socket.socket"
+    ) as socket_factory:
         verify_api_port_available(
             host="127.0.0.1",
             port=8000,
         )
 
-
-def test_verify_api_port_available_rejects_listening_port():
-    connection = patch(
-        "authstatus_api.backups.recovery_activation.socket.create_connection"
+    socket_instance = socket_factory.return_value.__enter__.return_value
+    socket_instance.bind.assert_called_once_with(
+        ("127.0.0.1", 8000),
     )
 
-    with connection as mocked_connection:
-        mocked_connection.return_value.__enter__.return_value = object()
+
+def test_verify_api_port_available_rejects_listening_port():
+    address_in_use = OSError(
+        errno.EADDRINUSE,
+        "Address already in use",
+    )
+
+    with patch(
+        "authstatus_api.backups.recovery_activation.socket.socket"
+    ) as socket_factory:
+        socket_instance = socket_factory.return_value.__enter__.return_value
+        socket_instance.bind.side_effect = address_in_use
+
+        with pytest.raises(
+            RecoveryActivationError,
+            match="port 8000 is still in use",
+        ):
+            verify_api_port_available(
+                host="127.0.0.1",
+                port=8000,
+            )
+
+
+def test_verify_api_port_available_handles_windows_address_in_use():
+    address_in_use = OSError(
+        10048,
+        "Only one usage of each socket address is permitted",
+    )
+    address_in_use.winerror = 10048
+
+    with patch(
+        "authstatus_api.backups.recovery_activation.socket.socket"
+    ) as socket_factory:
+        socket_instance = socket_factory.return_value.__enter__.return_value
+        socket_instance.bind.side_effect = address_in_use
 
         with pytest.raises(
             RecoveryActivationError,

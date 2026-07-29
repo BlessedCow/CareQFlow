@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 import platform
 import socket
@@ -217,28 +218,41 @@ def verify_api_port_available(
         raise RecoveryActivationError("The socket timeout must be greater than zero.")
 
     try:
-        with socket.create_connection(
-            (host, port),
-            timeout=timeout_seconds,
-        ):
-            pass
-    except ConnectionRefusedError:
-        return
-    except TimeoutError as exc:
-        raise RecoveryActivationError(
-            "Unable to determine whether the CareQueue API " "port is available."
-        ) from exc
+        with socket.socket(
+            socket.AF_INET,
+            socket.SOCK_STREAM,
+        ) as port_socket:
+            port_socket.settimeout(timeout_seconds)
+
+            if os.name == "nt" and hasattr(
+                socket,
+                "SO_EXCLUSIVEADDRUSE",
+            ):
+                port_socket.setsockopt(
+                    socket.SOL_SOCKET,
+                    socket.SO_EXCLUSIVEADDRUSE,
+                    1,
+                )
+
+            port_socket.bind(
+                (host, port),
+            )
     except OSError as exc:
-        if getattr(exc, "winerror", None) == 10061:
-            return
+        if (
+            exc.errno
+            in {
+                errno.EADDRINUSE,
+                getattr(errno, "WSAEADDRINUSE", 10048),
+            }
+            or getattr(exc, "winerror", None) == 10048
+        ):
+            raise RecoveryActivationError(
+                f"Recovery activation refused: port {port} " "is still in use."
+            ) from exc
 
         raise RecoveryActivationError(
             "Unable to determine whether the CareQueue API " "port is available."
         ) from exc
-
-    raise RecoveryActivationError(
-        f"Recovery activation refused: port {port} is still in use."
-    )
 
 
 def resolve_recovery_activation_paths(
