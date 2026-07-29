@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 from authstatus_api.backups.recovery_activation import (
     RECOVERY_CONFIRMATION_PHRASE,
     RecoveryActivationError,
+    activate_staged_database_recovery,
     create_verified_active_database_backup,
     find_database_sidecars,
     format_recovery_activation_plan,
@@ -17,6 +19,7 @@ from authstatus_api.backups.recovery_activation import (
     require_recovery_activation_confirmation,
     require_same_filesystem,
     resolve_recovery_activation_paths,
+    validate_active_database,
     verify_api_port_available,
     verify_exclusive_database_access,
     verify_managed_service_stopped,
@@ -476,6 +479,297 @@ def test_require_recovery_activation_confirmation_rejects_mismatch(
         match="confirmation phrase did not match exactly",
     ):
         require_recovery_activation_confirmation(confirmation)
+
+
+def test_validate_active_database_accepts_valid_database():
+    init_db()
+
+    validate_active_database()
+
+
+def test_activate_staged_database_recovery_completes_atomic_cutover(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    safety_backup.write_bytes(b"verified backup")
+
+    original_database_bytes = database_path.read_bytes()
+    staged_database_bytes = staged_database.read_bytes()
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ),
+    ):
+        result = activate_staged_database_recovery(
+            plan=plan,
+            confirmation=RECOVERY_CONFIRMATION_PHRASE,
+        )
+
+    assert database_path.read_bytes() == staged_database_bytes
+    assert rollback_database.read_bytes() == original_database_bytes
+    assert not staged_database.exists()
+    assert not (restore_directory / "pending_recovery.json").exists()
+    assert result == {
+        "active_database": database_path.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+    }
+
+
+def test_activate_staged_database_recovery_rechecks_confirmation(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    staged_database = tmp_path / "restores" / "staged.db"
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+
+    plan = {
+        "active_database": database_path,
+        "staged_database": staged_database,
+        "rollback_database": rollback_database,
+        "safety_backup": safety_backup,
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with pytest.raises(
+        RecoveryActivationError,
+        match="confirmation phrase did not match exactly",
+    ):
+        activate_staged_database_recovery(
+            plan=plan,
+            confirmation="yes",
+        )
+
+
+def test_activate_staged_database_recovery_rejects_sidecars(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    safety_backup.write_bytes(b"verified backup")
+
+    wal_path = Path(f"{database_path.resolve()}-wal")
+    wal_path.write_bytes(b"wal")
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [wal_path],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="sidecar files are still present",
+        ):
+            activate_staged_database_recovery(
+                plan=plan,
+                confirmation=RECOVERY_CONFIRMATION_PHRASE,
+            )
+
+    assert database_path.exists()
+    assert staged_database.exists()
+    assert not rollback_database.exists()
+    assert wal_path.exists()
+
+
+def test_activate_staged_database_recovery_restores_original_when_validation_fails(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    safety_backup.write_bytes(b"verified backup")
+
+    original_database_bytes = database_path.read_bytes()
+    staged_database_bytes = staged_database.read_bytes()
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "validate_active_database",
+            side_effect=RecoveryActivationError("validation failed"),
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="original database was restored",
+        ):
+            activate_staged_database_recovery(
+                plan=plan,
+                confirmation=RECOVERY_CONFIRMATION_PHRASE,
+            )
+
+    assert database_path.read_bytes() == original_database_bytes
+    assert staged_database.read_bytes() == staged_database_bytes
+    assert not rollback_database.exists()
+    assert (restore_directory / "pending_recovery.json").exists()
+
+
+def test_activate_staged_database_recovery_restores_original_when_staged_move_fails(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    safety_backup.write_bytes(b"verified backup")
+
+    original_database_bytes = database_path.read_bytes()
+    real_replace = os.replace
+
+    def fail_staged_move(
+        source,
+        destination,
+    ):
+        if Path(source).resolve() == staged_database.resolve():
+            raise OSError("staged move failed")
+
+        return real_replace(
+            source,
+            destination,
+        )
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.os.replace",
+            side_effect=fail_staged_move,
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="original database was restored",
+        ):
+            activate_staged_database_recovery(
+                plan=plan,
+                confirmation=RECOVERY_CONFIRMATION_PHRASE,
+            )
+
+    assert database_path.read_bytes() == original_database_bytes
+    assert staged_database.exists()
+    assert not rollback_database.exists()
+
+
+def test_activate_staged_database_recovery_rejects_changed_staging(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    safety_backup.write_bytes(b"verified backup")
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": (restore_directory / "different.restored.db").resolve(),
+        "rollback_database": (tmp_path / "auth_tracker.pre_recovery.db").resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with pytest.raises(
+        RecoveryActivationError,
+        match="staged recovery changed after preflight",
+    ):
+        activate_staged_database_recovery(
+            plan=plan,
+            confirmation=RECOVERY_CONFIRMATION_PHRASE,
+        )
+
+    assert database_path.exists()
+    assert staged_database.exists()
 
 
 def test_require_same_filesystem_accepts_matching_filesystems(

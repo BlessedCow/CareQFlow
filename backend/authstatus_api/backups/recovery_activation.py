@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import TypedDict
 
 from authstatus_api.backups.service import (
+    PENDING_RECOVERY_MANIFEST,
+    REQUIRED_DATABASE_TABLES,
     BackupConfigError,
     BackupError,
     create_encrypted_database_backup,
@@ -38,6 +40,12 @@ class RecoveryActivationPlan(TypedDict):
     service_name: str | None
     api_host: str
     api_port: int
+
+
+class RecoveryActivationResult(TypedDict):
+    active_database: Path
+    rollback_database: Path
+    safety_backup: Path
 
 
 DATABASE_SIDECAR_SUFFIXES = (
@@ -418,6 +426,222 @@ def require_recovery_activation_confirmation(
             "Recovery activation canceled: the confirmation "
             "phrase did not match exactly."
         )
+
+
+def validate_active_database() -> None:
+    conn = None
+
+    try:
+        conn = get_conn()
+
+        integrity_row = conn.execute("PRAGMA quick_check").fetchone()
+
+        if integrity_row is None:
+            raise RecoveryActivationError(
+                "The activated database integrity check " "returned no result."
+            )
+
+        integrity_result = str(integrity_row[0])
+
+        if integrity_result.lower() != "ok":
+            raise RecoveryActivationError(
+                "The activated database failed its integrity "
+                f"check: {integrity_result}"
+            )
+
+        table_rows = conn.execute("""
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+            """).fetchall()
+
+        table_names = {str(row[0]) for row in table_rows}
+        missing_tables = sorted(REQUIRED_DATABASE_TABLES - table_names)
+
+        if missing_tables:
+            raise RecoveryActivationError(
+                "The activated database is missing required "
+                f"CareQueue tables: {missing_tables}"
+            )
+    except RecoveryActivationError:
+        raise
+    except Exception as exc:
+        raise RecoveryActivationError(
+            "Unable to open and validate the activated database."
+        ) from exc
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _restore_database_after_failed_activation(
+    *,
+    active_database: Path,
+    staged_database: Path,
+    rollback_database: Path,
+) -> None:
+    staged_restored = False
+
+    if active_database.exists():
+        try:
+            os.replace(
+                active_database,
+                staged_database,
+            )
+            staged_restored = True
+        except OSError:
+            staged_restored = False
+
+    try:
+        os.replace(
+            rollback_database,
+            active_database,
+        )
+    except OSError as exc:
+        raise RecoveryActivationError(
+            "Database recovery activation failed and the "
+            "original database could not be restored. Use the "
+            "verified encrypted safety backup for recovery."
+        ) from exc
+
+    if not staged_restored and staged_database.exists():
+        return
+
+
+def activate_staged_database_recovery(
+    *,
+    plan: RecoveryActivationPlan,
+    confirmation: str,
+) -> RecoveryActivationResult:
+    require_recovery_activation_confirmation(
+        confirmation,
+    )
+
+    active_database = plan["active_database"].resolve()
+    staged_database = plan["staged_database"].resolve()
+    rollback_database = plan["rollback_database"].resolve()
+    safety_backup = plan["safety_backup"].resolve()
+    manifest_path = staged_database.parent / PENDING_RECOVERY_MANIFEST
+
+    if not safety_backup.exists() or not safety_backup.is_file():
+        raise RecoveryActivationError(
+            "Recovery activation refused: the verified safety "
+            "backup no longer exists."
+        )
+
+    recovery_info = get_staged_database_recovery(
+        restore_directory=staged_database.parent,
+    )
+
+    if recovery_info is None:
+        raise RecoveryActivationError("No database recovery is currently staged.")
+
+    current_staged_database = (
+        staged_database.parent / recovery_info["staged_filename"]
+    ).resolve()
+
+    if current_staged_database != staged_database:
+        raise RecoveryActivationError(
+            "Recovery activation refused: the staged recovery "
+            "changed after preflight."
+        )
+
+    if not active_database.exists() or not active_database.is_file():
+        raise RecoveryActivationError(
+            "Recovery activation refused: the active database " "no longer exists."
+        )
+
+    if rollback_database.exists():
+        raise RecoveryActivationError(
+            "Recovery activation refused: the rollback database " "already exists."
+        )
+
+    require_same_filesystem(
+        active_database,
+        staged_database,
+        rollback_database,
+    )
+
+    verify_managed_service_stopped(
+        service_name=plan["service_name"],
+    )
+    verify_api_port_available(
+        host=plan["api_host"],
+        port=plan["api_port"],
+    )
+    verify_exclusive_database_access()
+
+    sidecars = find_database_sidecars(
+        active_database,
+    )
+
+    if sidecars:
+        sidecar_names = ", ".join(sidecar.name for sidecar in sidecars)
+        raise RecoveryActivationError(
+            "Recovery activation refused: SQLite sidecar files "
+            f"are still present: {sidecar_names}"
+        )
+
+    try:
+        os.replace(
+            active_database,
+            rollback_database,
+        )
+    except OSError as exc:
+        raise RecoveryActivationError(
+            "Unable to move the active database to the rollback "
+            "path. No recovery database was activated."
+        ) from exc
+
+    try:
+        os.replace(
+            staged_database,
+            active_database,
+        )
+    except OSError as exc:
+        try:
+            os.replace(
+                rollback_database,
+                active_database,
+            )
+        except OSError as rollback_exc:
+            raise RecoveryActivationError(
+                "The staged database could not be activated and "
+                "the original database could not be restored. "
+                "Use the verified encrypted safety backup."
+            ) from rollback_exc
+
+        raise RecoveryActivationError(
+            "The staged database could not be activated. The "
+            "original database was restored."
+        ) from exc
+
+    try:
+        validate_active_database()
+        manifest_path.unlink()
+    except Exception as exc:
+        _restore_database_after_failed_activation(
+            active_database=active_database,
+            staged_database=staged_database,
+            rollback_database=rollback_database,
+        )
+
+        if isinstance(exc, RecoveryActivationError):
+            raise RecoveryActivationError(
+                "The activated database failed final validation. "
+                "The original database was restored."
+            ) from exc
+
+        raise RecoveryActivationError(
+            "Recovery activation could not be finalized. The "
+            "original database was restored."
+        ) from exc
+
+    return {
+        "active_database": active_database,
+        "rollback_database": rollback_database,
+        "safety_backup": safety_backup,
+    }
 
 
 def find_database_sidecars(

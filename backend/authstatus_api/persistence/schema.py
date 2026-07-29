@@ -19,5 +19,10 @@ def initialize_schema(conn: Any) -> None:
 
 
 def init_db() -> None:
-    with get_conn() as conn:
+    conn = get_conn()
+
+    try:
         initialize_schema(conn)
+        conn.commit()
+    finally:
+        conn.close()
