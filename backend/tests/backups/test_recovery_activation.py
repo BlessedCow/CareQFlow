@@ -9,6 +9,7 @@ import pytest
 
 from authstatus_api.backups.recovery_activation import (
     RecoveryActivationError,
+    create_verified_active_database_backup,
     find_database_sidecars,
     require_same_filesystem,
     resolve_recovery_activation_paths,
@@ -17,8 +18,10 @@ from authstatus_api.backups.recovery_activation import (
     verify_managed_service_stopped,
 )
 from authstatus_api.backups.service import (
+    BackupError,
     create_encrypted_database_backup,
     stage_encrypted_database_recovery,
+    verify_encrypted_database_backup,
 )
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.persistence.schema import init_db
@@ -131,6 +134,99 @@ def test_resolve_recovery_activation_paths_rejects_existing_rollback(
             database_path=database_path,
             restore_directory=restore_directory,
         )
+
+
+def test_create_verified_active_database_backup_returns_verified_backup(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+
+    init_db()
+
+    with patch(
+        "authstatus_api.backups.recovery_activation."
+        "verify_encrypted_database_backup",
+        wraps=verify_encrypted_database_backup,
+    ) as mocked_verify:
+        backup_path = create_verified_active_database_backup(
+            database_path=database_path,
+            backup_directory=backup_directory,
+        )
+
+    assert backup_path.exists()
+    assert backup_path.is_file()
+    assert backup_path.parent == backup_directory.resolve()
+    assert backup_path.name.endswith(".db.enc")
+    mocked_verify.assert_called_once_with(
+        backup_path=backup_path,
+    )
+
+
+def test_create_verified_active_database_backup_wraps_creation_failure(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+
+    database_path.write_bytes(b"database")
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "create_encrypted_database_backup",
+            side_effect=BackupError("creation failed"),
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_encrypted_database_backup",
+        ) as mocked_verify,
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Unable to create and verify",
+        ):
+            create_verified_active_database_backup(
+                database_path=database_path,
+                backup_directory=backup_directory,
+            )
+
+    mocked_verify.assert_not_called()
+
+
+def test_create_verified_active_database_backup_removes_unverified_backup(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    backup_path = backup_directory / "auth_tracker_safety.db.enc"
+
+    database_path.write_bytes(b"database")
+    backup_directory.mkdir()
+    backup_path.write_bytes(b"invalid encrypted backup")
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "create_encrypted_database_backup",
+            return_value=backup_path,
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_encrypted_database_backup",
+            side_effect=BackupError("verification failed"),
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Unable to create and verify",
+        ):
+            create_verified_active_database_backup(
+                database_path=database_path,
+                backup_directory=backup_directory,
+            )
+
+    assert not backup_path.exists()
 
 
 def test_require_same_filesystem_accepts_matching_filesystems(

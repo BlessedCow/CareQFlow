@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import TypedDict
 
 from authstatus_api.backups.service import (
+    BackupConfigError,
     BackupError,
+    create_encrypted_database_backup,
     get_staged_database_recovery,
+    verify_encrypted_database_backup,
 )
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.paths import get_database_path
@@ -271,6 +274,52 @@ def resolve_recovery_activation_paths(
         "staged_database": staged_database,
         "rollback_database": rollback_database,
     }
+
+
+def create_verified_active_database_backup(
+    *,
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+) -> Path:
+    settings = get_settings()
+    active_database = (
+        database_path.resolve()
+        if database_path is not None
+        else get_database_path().resolve()
+    )
+    destination_directory = resolve_project_path(
+        backup_directory or settings.backup_directory
+    )
+
+    backup_path: Path | None = None
+
+    try:
+        backup_path = create_encrypted_database_backup(
+            database_path=active_database,
+            backup_directory=destination_directory,
+        )
+        verify_encrypted_database_backup(
+            backup_path=backup_path,
+        )
+    except (
+        BackupConfigError,
+        BackupError,
+    ) as exc:
+        if backup_path is not None and backup_path.exists():
+            try:
+                backup_path.unlink()
+            except OSError as cleanup_exc:
+                raise RecoveryActivationError(
+                    "The active database safety backup failed "
+                    "verification and could not be removed."
+                ) from cleanup_exc
+
+        raise RecoveryActivationError(
+            "Unable to create and verify an encrypted safety "
+            "backup of the active database."
+        ) from exc
+
+    return backup_path
 
 
 def find_database_sidecars(
