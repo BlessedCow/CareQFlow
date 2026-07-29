@@ -157,7 +157,10 @@ def renew_session(
 ) -> dict[str, Any] | None:
     init_db()
 
-    token_hash = hash_session_token(token)
+    current_token_hash = hash_session_token(token)
+    renewed_token = generate_session_token()
+    renewed_token_hash = hash_session_token(renewed_token)
+
     now_datetime = utc_now()
     now = format_datetime(now_datetime)
     expires_at = format_datetime(now_datetime + timedelta(minutes=minutes))
@@ -167,6 +170,7 @@ def renew_session(
             """
             UPDATE sessions
             SET
+                token_hash = ?,
                 last_seen_at = ?,
                 expires_at = ?
             WHERE token_hash = ?
@@ -174,9 +178,10 @@ def renew_session(
               AND expires_at > ?
             """,
             (
+                renewed_token_hash,
                 now,
                 expires_at,
-                token_hash,
+                current_token_hash,
                 now,
             ),
         )
@@ -184,7 +189,15 @@ def renew_session(
     if cursor.rowcount == 0:
         return None
 
-    return get_active_session_by_token(token)
+    session = get_active_session_by_token(renewed_token)
+
+    if session is None:
+        raise RuntimeError("Unable to retrieve the renewed session.")
+
+    return {
+        "token": renewed_token,
+        "session": session,
+    }
 
 
 def revoke_session(token: str) -> bool:

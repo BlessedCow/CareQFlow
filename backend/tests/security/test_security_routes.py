@@ -1360,6 +1360,12 @@ def test_user_can_renew_active_session(client):
 
     original_expiration = login_response.json()["session"]["expires_at"]
 
+    original_session_cookie = client.cookies.get("carequeue_session")
+    original_csrf_cookie = client.cookies.get("carequeue_csrf")
+
+    assert original_session_cookie
+    assert original_csrf_cookie
+
     renew_response = client.post(
         "/api/security/session/renew",
         headers=csrf_headers(client),
@@ -1370,6 +1376,14 @@ def test_user_can_renew_active_session(client):
     renewed_expiration = renew_response.json()["expires_at"]
 
     assert renewed_expiration >= original_expiration
+
+    renewed_session_cookie = client.cookies.get("carequeue_session")
+    renewed_csrf_cookie = client.cookies.get("carequeue_csrf")
+
+    assert renewed_session_cookie
+    assert renewed_csrf_cookie
+    assert renewed_session_cookie != original_session_cookie
+    assert renewed_csrf_cookie != original_csrf_cookie
 
     set_cookie_headers = renew_response.headers.get_list("set-cookie")
 

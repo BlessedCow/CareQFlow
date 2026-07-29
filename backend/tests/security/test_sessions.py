@@ -112,7 +112,7 @@ def test_touch_session_updates_last_seen_at():
     assert refreshed["last_seen_at"] >= before
 
 
-def test_renew_session_extends_expiration():
+def test_renew_session_rotates_token_and_extends_expiration():
     user = create_user(
         "renew@example.com",
         "password value",
@@ -122,16 +122,23 @@ def test_renew_session_extends_expiration():
         user["id"],
         minutes=5,
     )
+    original_token = created_session["token"]
     original_expiration = created_session["session"]["expires_at"]
 
     renewed = renew_session(
-        created_session["token"],
+        original_token,
         minutes=30,
     )
 
     assert renewed is not None
-    assert renewed["expires_at"] > original_expiration
-    assert renewed["last_seen_at"] >= created_session["session"]["last_seen_at"]
+    assert renewed["token"] != original_token
+    assert renewed["session"]["expires_at"] > original_expiration
+    assert (
+        renewed["session"]["last_seen_at"] >= created_session["session"]["last_seen_at"]
+    )
+
+    assert get_active_session_by_token(original_token) is None
+    assert get_active_session_by_token(renewed["token"]) == renewed["session"]
 
 
 def test_renew_session_rejects_expired_session():

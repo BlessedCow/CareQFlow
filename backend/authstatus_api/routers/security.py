@@ -455,20 +455,21 @@ def renew_current_session(
     user: dict = AuthenticatedUserDependency,
 ) -> SessionResponse:
     token = extract_session_token(request)
-    session = renew_session(token)
+    renewed_session = renew_session(token)
 
-    if session is None:
+    if renewed_session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required.",
         )
 
     settings = get_settings()
-    csrf_token = request.cookies.get(settings.csrf_cookie_name)
+    csrf_token = generate_csrf_token()
+    session = renewed_session["session"]
 
     response.set_cookie(
         key=settings.session_cookie_name,
-        value=token,
+        value=renewed_session["token"],
         max_age=DEFAULT_SESSION_MINUTES * 60,
         httponly=True,
         secure=settings.session_cookie_secure,
@@ -476,16 +477,15 @@ def renew_current_session(
         path="/api",
     )
 
-    if csrf_token:
-        response.set_cookie(
-            key=settings.csrf_cookie_name,
-            value=csrf_token,
-            max_age=DEFAULT_SESSION_MINUTES * 60,
-            httponly=False,
-            secure=settings.session_cookie_secure,
-            samesite="lax",
-            path="/",
-        )
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=csrf_token,
+        max_age=DEFAULT_SESSION_MINUTES * 60,
+        httponly=False,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
 
     return SessionResponse(
         expires_at=session["expires_at"],
