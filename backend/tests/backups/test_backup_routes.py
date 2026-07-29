@@ -5,6 +5,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from authstatus_api.backups import router as backup_router
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
@@ -117,6 +118,13 @@ def test_admin_can_create_verified_restore_point(client):
     assert data["backup"]["filename"].endswith(".db.enc")
     assert data["backup"]["size_bytes"] > 0
     assert data["backup"]["created_at"]
+    assert data["retention"] == {
+        "retention_days": 90,
+        "minimum_count": 5,
+        "deleted": [],
+        "protected": [],
+        "failed": [],
+    }
 
     list_response = client.get("/api/admin/system/backups")
 
@@ -124,6 +132,152 @@ def test_admin_can_create_verified_restore_point(client):
     assert list_response.json()["backups"] == [
         data["backup"],
     ]
+
+
+def test_admin_restore_point_reports_retention_cleanup(
+    client,
+    monkeypatch,
+):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    headers = login_headers(
+        client,
+        username="admin@example.com",
+        password="correct horse battery staple",
+    )
+
+    monkeypatch.setattr(
+        backup_router,
+        "prune_encrypted_database_backups",
+        lambda **_kwargs: {
+            "deleted": [
+                "auth_tracker_20260101_120000_000001.db.enc",
+            ],
+            "protected": [
+                "auth_tracker_20260102_120000_000001.db.enc",
+            ],
+            "retained": [],
+            "failed": [],
+        },
+    )
+
+    response = client.post(
+        "/api/admin/system/backups",
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["verified"] is True
+    assert data["retention"] == {
+        "retention_days": 90,
+        "minimum_count": 5,
+        "deleted": [
+            "auth_tracker_20260101_120000_000001.db.enc",
+        ],
+        "protected": [
+            "auth_tracker_20260102_120000_000001.db.enc",
+        ],
+        "failed": [],
+    }
+
+
+def test_admin_restore_point_survives_retention_exception(
+    client,
+    monkeypatch,
+):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    headers = login_headers(
+        client,
+        username="admin@example.com",
+        password="correct horse battery staple",
+    )
+
+    def raise_retention_error(**_kwargs):
+        raise backup_router.BackupRetentionError("retention unavailable")
+
+    monkeypatch.setattr(
+        backup_router,
+        "prune_encrypted_database_backups",
+        raise_retention_error,
+    )
+
+    response = client.post(
+        "/api/admin/system/backups",
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["verified"] is True
+    assert data["backup"]["filename"].endswith(".db.enc")
+    assert data["retention"] == {
+        "retention_days": 90,
+        "minimum_count": 5,
+        "deleted": [],
+        "protected": [],
+        "failed": [
+            "Backup retention cleanup could not be completed.",
+        ],
+    }
+
+
+def test_admin_restore_point_reports_individual_prune_failures(
+    client,
+    monkeypatch,
+):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    headers = login_headers(
+        client,
+        username="admin@example.com",
+        password="correct horse battery staple",
+    )
+
+    monkeypatch.setattr(
+        backup_router,
+        "prune_encrypted_database_backups",
+        lambda **_kwargs: {
+            "deleted": [],
+            "protected": [],
+            "retained": [],
+            "failed": [
+                {
+                    "filename": ("auth_tracker_20260101_120000_000001.db.enc"),
+                    "reason": "access denied",
+                }
+            ],
+        },
+    )
+
+    response = client.post(
+        "/api/admin/system/backups",
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["verified"] is True
+    assert data["retention"]["failed"] == [
+        "auth_tracker_20260101_120000_000001.db.enc",
+    ]
+    assert "access denied" not in response.text
 
 
 def test_admin_can_verify_existing_restore_point(client):
@@ -203,6 +357,11 @@ def test_backup_actions_are_recorded_in_audit_log(client):
         {
             "filename": filename,
             "verified": True,
+            "retention_days": 90,
+            "retention_minimum_count": 5,
+            "retention_deleted": [],
+            "retention_protected": [],
+            "retention_failed": [],
         },
         {
             "filename": filename,

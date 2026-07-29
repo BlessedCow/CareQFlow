@@ -28,11 +28,15 @@ def isolate_test_settings(monkeypatch, tmp_path):
         "test",
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_ENCRYPTION", "plaintext"
+        "AUTHSTATUS_APP_ENVIRONMENT",
+        "test",
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_SQLCIPHER_KEY", ""
+        "AUTHSTATUS_DATABASE_ENCRYPTION",
+        "plaintext",
     )
+    monkeypatch.setenv("AUTHSTATUS_DATABASE_ENCRYPTION", "plaintext")
+    monkeypatch.setenv("AUTHSTATUS_SQLCIPHER_KEY", "")
     get_settings.cache_clear()
 
     yield

@@ -25,6 +25,7 @@ import {
   type ApiEndpointStatus,
   type ApplicationHealth,
   type BackupFile,
+  type BackupRetentionResult,
   type DatabaseReadiness,
   type StagedRecovery,
 } from "../api/system";
@@ -80,7 +81,8 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
     useState<RestorePointVerificationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
+  const [retentionResult, setRetentionResult] =
+    useState<BackupRetentionResult | null>(null);
   const [apiEndpoints, setApiEndpoints] = useState<ApiEndpointStatus[]>([]);
   const [isEndpointInventoryOpen, setIsEndpointInventoryOpen] = useState(false);
   const [isLoadingEndpoints, setIsLoadingEndpoints] = useState(false);
@@ -131,9 +133,12 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
     setIsCreating(true);
     setError(null);
     setSuccessMessage(null);
+    setRetentionResult(null);
 
     try {
       const result = await createRestorePoint();
+
+      setRetentionResult(result.retention);
 
       setRestorePoints((current) => [
         result.backup,
@@ -350,6 +355,120 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
         >
           {successMessage}
         </div>
+      )}
+
+      {retentionResult && (
+        <section
+          aria-labelledby="backup-retention-result-heading"
+          className={cn(
+            "rounded-xl border p-4 text-sm",
+            retentionResult.failed.length > 0
+              ? darkMode
+                ? "border-amber-900 bg-amber-950/30"
+                : "border-amber-200 bg-amber-50"
+              : darkMode
+              ? "border-blue-900 bg-blue-950/30"
+              : "border-blue-200 bg-blue-50"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            {retentionResult.failed.length > 0 ? (
+              <CircleAlert className="h-5 w-5 text-amber-500" />
+            ) : (
+              <ShieldCheck className="h-5 w-5 text-blue-500" />
+            )}
+
+            <h2 id="backup-retention-result-heading" className="font-semibold">
+              Backup Retention
+            </h2>
+          </div>
+
+          <p
+            className={cn("mt-2", darkMode ? "text-gray-300" : "text-gray-700")}
+          >
+            Encrypted restore points are retained for{" "}
+            <strong>{retentionResult.retention_days} days</strong>, with at
+            least <strong>{retentionResult.minimum_count}</strong> recent
+            restore points preserved.
+          </p>
+
+          <dl className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div>
+              <dt
+                className={cn(
+                  "font-medium",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}
+              >
+                Pruned
+              </dt>
+              <dd className="mt-1">{retentionResult.deleted.length}</dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "font-medium",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}
+              >
+                Recovery protected
+              </dt>
+              <dd className="mt-1">{retentionResult.protected.length}</dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "font-medium",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}
+              >
+                Cleanup failures
+              </dt>
+              <dd className="mt-1">{retentionResult.failed.length}</dd>
+            </div>
+          </dl>
+
+          {retentionResult.deleted.length > 0 && (
+            <div className="mt-3">
+              <p className="font-medium">Deleted restore points</p>
+              <ul className="mt-1 space-y-1">
+                {retentionResult.deleted.map((filename) => (
+                  <li key={filename} className="break-all font-mono text-xs">
+                    {filename}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {retentionResult.protected.length > 0 && (
+            <div className="mt-3">
+              <p className="font-medium">Protected by pending recovery</p>
+              <ul className="mt-1 space-y-1">
+                {retentionResult.protected.map((filename) => (
+                  <li key={filename} className="break-all font-mono text-xs">
+                    {filename}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {retentionResult.failed.length > 0 && (
+            <div className="mt-3">
+              <p className="font-medium">Cleanup could not complete for</p>
+              <ul className="mt-1 space-y-1">
+                {retentionResult.failed.map((failure) => (
+                  <li key={failure} className="break-all font-mono text-xs">
+                    {failure}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       )}
 
       <section className="grid gap-6 md:grid-cols-2">

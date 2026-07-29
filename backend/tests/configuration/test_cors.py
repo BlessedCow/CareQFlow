@@ -10,7 +10,12 @@ TRUSTED_ORIGIN = "http://localhost:5173"
 
 def create_test_client(
     monkeypatch,
+    tmp_path,
 ) -> TestClient:
+    monkeypatch.setenv(
+        "AUTHSTATUS_DATABASE_PATH",
+        str(tmp_path / "auth_tracker.db"),
+    )
     monkeypatch.setenv(
         "AUTHSTATUS_CORS_ORIGINS",
         TRUSTED_ORIGIN,
@@ -22,8 +27,9 @@ def create_test_client(
 
 def test_trusted_origin_preflight_allows_supported_method_and_headers(
     monkeypatch,
+    tmp_path,
 ):
-    with create_test_client(monkeypatch) as client:
+    with create_test_client(monkeypatch, tmp_path) as client:
         response = client.options(
             "/api/auths",
             headers={
@@ -60,8 +66,9 @@ def test_trusted_origin_preflight_allows_supported_method_and_headers(
 
 def test_preflight_rejects_unsupported_method(
     monkeypatch,
+    tmp_path,
 ):
-    with create_test_client(monkeypatch) as client:
+    with create_test_client(monkeypatch, tmp_path) as client:
         response = client.options(
             "/api/auths",
             headers={
@@ -76,8 +83,9 @@ def test_preflight_rejects_unsupported_method(
 
 def test_preflight_rejects_unsupported_header(
     monkeypatch,
+    tmp_path,
 ):
-    with create_test_client(monkeypatch) as client:
+    with create_test_client(monkeypatch, tmp_path) as client:
         response = client.options(
             "/api/auths",
             headers={
@@ -93,8 +101,9 @@ def test_preflight_rejects_unsupported_header(
 
 def test_preflight_rejects_untrusted_origin(
     monkeypatch,
+    tmp_path,
 ):
-    with create_test_client(monkeypatch) as client:
+    with create_test_client(monkeypatch, tmp_path) as client:
         response = client.options(
             "/api/auths",
             headers={
@@ -110,8 +119,9 @@ def test_preflight_rejects_untrusted_origin(
 
 def test_simple_request_from_trusted_origin_gets_cors_headers(
     monkeypatch,
+    tmp_path,
 ):
-    with create_test_client(monkeypatch) as client:
+    with create_test_client(monkeypatch, tmp_path) as client:
         response = client.get(
             "/api/health",
             headers={

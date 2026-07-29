@@ -7,9 +7,18 @@ from fastapi.testclient import TestClient
 
 from authstatus_api.errors import SAFE_INTERNAL_ERROR_MESSAGE
 from authstatus_api.main import create_app
+from authstatus_api.settings import get_settings
 
 
-def test_unhandled_exception_does_not_log_sensitive_message():
+def test_unhandled_exception_does_not_log_sensitive_message(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv(
+        "AUTHSTATUS_DATABASE_PATH",
+        str(tmp_path / "auth_tracker.db"),
+    )
+    get_settings.cache_clear()
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     handler.setFormatter(

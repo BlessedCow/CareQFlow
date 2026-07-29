@@ -37,9 +37,18 @@ interface BackupListResponse {
   backups: BackupFile[];
 }
 
+export interface BackupRetentionResult {
+  retention_days: number;
+  minimum_count: number;
+  deleted: string[];
+  protected: string[];
+  failed: string[];
+}
+
 export interface BackupCreateResponse {
   backup: BackupFile;
   verified: boolean;
+  retention: BackupRetentionResult;
 }
 
 export interface BackupVerifyResponse {

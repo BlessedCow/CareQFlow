@@ -25,8 +25,6 @@ Security features in this project reduce risk, but they do not create HIPAA comp
 
 ### Frontend
 
-### Frontend
-
 - React, TypeScript, Vite, and Tailwind interface
 - Login screen and authenticated session restoration
 - Twenty-minute server-enforced sessions
@@ -45,8 +43,6 @@ Security features in this project reduce risk, but they do not create HIPAA comp
 - Settings for registered facilities, insurances, portals, workflow views, dashboard cards, and session-timer visibility
 - Dark mode
 - Local browser persistence for non-sensitive UI preferences
-
-### Backend
 
 ### Backend
 

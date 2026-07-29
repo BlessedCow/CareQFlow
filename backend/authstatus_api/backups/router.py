@@ -6,10 +6,15 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from authstatus_api.audit.service import record_audit_event
+from authstatus_api.backups.retention import (
+    BackupRetentionError,
+    prune_encrypted_database_backups,
+)
 from authstatus_api.backups.schemas import (
     BackupCreateResponse,
     BackupFileResponse,
     BackupListResponse,
+    BackupRetentionResponse,
     BackupVerifyRequest,
     BackupVerifyResponse,
     RecoveryCancelResponse,
@@ -30,6 +35,7 @@ from authstatus_api.backups.service import (
     verify_encrypted_database_backup,
 )
 from authstatus_api.security.dependencies import require_role
+from authstatus_api.settings import get_settings
 
 router = APIRouter(
     prefix="/api/admin/system/backups",
@@ -78,6 +84,8 @@ def create_manual_restore_point(
     request: Request,
     current_user: dict = AdminUserDependency,
 ) -> BackupCreateResponse:
+    settings = get_settings()
+
     try:
         backup_path = create_encrypted_database_backup()
         verify_encrypted_database_backup(
@@ -89,6 +97,22 @@ def create_manual_restore_point(
             detail="Unable to create and verify the restore point.",
         ) from exc
 
+    retention_deleted: list[str] = []
+    retention_protected: list[str] = []
+    retention_failed: list[str] = []
+
+    try:
+        prune_result = prune_encrypted_database_backups(
+            retention_days=settings.backup_retention_days,
+            minimum_count=settings.backup_minimum_count,
+        )
+    except BackupRetentionError:
+        retention_failed.append("Backup retention cleanup could not be completed.")
+    else:
+        retention_deleted = prune_result["deleted"]
+        retention_protected = prune_result["protected"]
+        retention_failed = [failure["filename"] for failure in prune_result["failed"]]
+
     record_audit_event(
         action="backup.create",
         resource_type="backup",
@@ -96,6 +120,11 @@ def create_manual_restore_point(
         metadata={
             "filename": backup_path.name,
             "verified": True,
+            "retention_days": settings.backup_retention_days,
+            "retention_minimum_count": settings.backup_minimum_count,
+            "retention_deleted": retention_deleted,
+            "retention_protected": retention_protected,
+            "retention_failed": retention_failed,
         },
         request=request,
     )
@@ -103,6 +132,13 @@ def create_manual_restore_point(
     return BackupCreateResponse(
         backup=_backup_file_response(backup_path),
         verified=True,
+        retention=BackupRetentionResponse(
+            retention_days=settings.backup_retention_days,
+            minimum_count=settings.backup_minimum_count,
+            deleted=retention_deleted,
+            protected=retention_protected,
+            failed=retention_failed,
+        ),
     )
 
 

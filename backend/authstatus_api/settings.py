@@ -146,6 +146,17 @@ class Settings(BaseSettings):
         validation_alias="AUTHSTATUS_BACKUP_DIRECTORY",
     )
 
+    backup_retention_days: int = Field(
+        default=90,
+        ge=1,
+        validation_alias="AUTHSTATUS_BACKUP_RETENTION_DAYS",
+    )
+    backup_minimum_count: int = Field(
+        default=5,
+        ge=1,
+        validation_alias="AUTHSTATUS_BACKUP_MINIMUM_COUNT",
+    )
+
     restore_directory: Path = Field(
         default=Path("backend/restores"),
         validation_alias="AUTHSTATUS_RESTORE_DIRECTORY",

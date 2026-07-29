@@ -307,6 +307,13 @@ describe("system API", () => {
         created_at: "2026-07-28T03:16:31+00:00",
       },
       verified: true,
+      retention: {
+        retention_days: 90,
+        minimum_count: 5,
+        deleted: [],
+        protected: [],
+        failed: [],
+      },
     };
 
     mockedAuthenticatedFetch.mockResolvedValue(

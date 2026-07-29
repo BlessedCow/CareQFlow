@@ -13,9 +13,18 @@ class BackupListResponse(BaseModel):
     backups: list[BackupFileResponse]
 
 
+class BackupRetentionResponse(BaseModel):
+    retention_days: int
+    minimum_count: int
+    deleted: list[str]
+    protected: list[str]
+    failed: list[str]
+
+
 class BackupCreateResponse(BaseModel):
     backup: BackupFileResponse
     verified: bool
+    retention: BackupRetentionResponse
 
 
 class BackupVerifyRequest(BaseModel):

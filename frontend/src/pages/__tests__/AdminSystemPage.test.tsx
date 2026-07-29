@@ -5,6 +5,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   cancelDatabaseRecovery,
   createRestorePoint,
@@ -16,8 +18,6 @@ import {
   stageDatabaseRecovery,
   verifyRestorePoint,
 } from "../../api/system";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { AdminSystemPage } from "../AdminSystemPage";
 
 vi.mock("../../api/system", () => ({
@@ -46,6 +46,14 @@ const existingBackup = {
   filename: "auth_tracker_20260728.db.enc",
   size_bytes: 4096,
   created_at: "2026-07-28T03:16:31+00:00",
+};
+
+const emptyRetentionResult = {
+  retention_days: 90,
+  minimum_count: 5,
+  deleted: [],
+  protected: [],
+  failed: [],
 };
 
 describe("AdminSystemPage", () => {
@@ -356,6 +364,7 @@ describe("AdminSystemPage", () => {
     mockedCreateRestorePoint.mockResolvedValue({
       backup: newBackup,
       verified: true,
+      retention: emptyRetentionResult,
     });
 
     render(<AdminSystemPage darkMode={false} />);
@@ -381,6 +390,22 @@ describe("AdminSystemPage", () => {
         name: "Verified",
       })
     ).toBeDisabled();
+
+    const retentionSection = screen
+      .getByRole("heading", {
+        name: "Backup Retention",
+      })
+      .closest("section");
+
+    expect(retentionSection).not.toBeNull();
+
+    expect(retentionSection).toHaveTextContent(
+      "Encrypted restore points are retained for 90 days"
+    );
+
+    expect(retentionSection).toHaveTextContent(
+      "with at least 5 recent restore points preserved"
+    );
 
     expect(mockedCreateRestorePoint).toHaveBeenCalledTimes(1);
   });
@@ -481,7 +506,7 @@ describe("AdminSystemPage", () => {
 
   it("disables restore point actions while creating", async () => {
     let resolveCreation:
-      | ((value: { backup: typeof existingBackup; verified: boolean }) => void)
+      | ((value: Awaited<ReturnType<typeof createRestorePoint>>) => void)
       | undefined;
 
     mockedCreateRestorePoint.mockImplementation(
@@ -516,6 +541,7 @@ describe("AdminSystemPage", () => {
     resolveCreation?.({
       backup: existingBackup,
       verified: true,
+      retention: emptyRetentionResult,
     });
 
     await waitFor(() => {
@@ -525,5 +551,99 @@ describe("AdminSystemPage", () => {
         })
       ).toBeEnabled();
     });
+  });
+
+  it("shows files pruned and protected by the retention policy", async () => {
+    const newBackup = {
+      filename: "auth_tracker_20260729.db.enc",
+      size_bytes: 8192,
+      created_at: "2026-07-29T03:16:31+00:00",
+    };
+
+    mockedCreateRestorePoint.mockResolvedValue({
+      backup: newBackup,
+      verified: true,
+      retention: {
+        retention_days: 90,
+        minimum_count: 5,
+        deleted: ["auth_tracker_20260101_120000_000001.db.enc"],
+        protected: ["auth_tracker_20260102_120000_000001.db.enc"],
+        failed: [],
+      },
+    });
+
+    render(<AdminSystemPage darkMode={false} />);
+
+    await screen.findByText(existingBackup.filename);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Create Restore Point",
+      })
+    );
+
+    expect(
+      await screen.findByText("auth_tracker_20260101_120000_000001.db.enc")
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText("auth_tracker_20260102_120000_000001.db.enc")
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("Deleted restore points")).toBeInTheDocument();
+
+    expect(
+      screen.getByText("Protected by pending recovery")
+    ).toBeInTheDocument();
+  });
+
+  it("shows retention cleanup failures without hiding backup success", async () => {
+    const newBackup = {
+      filename: "auth_tracker_20260729.db.enc",
+      size_bytes: 8192,
+      created_at: "2026-07-29T03:16:31+00:00",
+    };
+
+    mockedCreateRestorePoint.mockResolvedValue({
+      backup: newBackup,
+      verified: true,
+      retention: {
+        retention_days: 90,
+        minimum_count: 5,
+        deleted: [],
+        protected: [],
+        failed: ["auth_tracker_20260101_120000_000001.db.enc"],
+      },
+    });
+
+    render(<AdminSystemPage darkMode={false} />);
+
+    await screen.findByText(existingBackup.filename);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Create Restore Point",
+      })
+    );
+
+    expect(
+      await screen.findByText(
+        `Restore point ${newBackup.filename} was created and verified.`
+      )
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText("Cleanup could not complete for")
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText("auth_tracker_20260101_120000_000001.db.enc")
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole("button", {
+        name: "Verified",
+      })
+    ).toBeDisabled();
   });
 });

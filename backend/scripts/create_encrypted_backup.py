@@ -21,12 +21,17 @@ os.environ.setdefault(
     "AUTHSTATUS_BACKUP_DIRECTORY", str(PROJECT_ROOT / "backend" / "backups")
 )
 
+from authstatus_api.backups.retention import (  # noqa: E402
+    BackupRetentionError,
+    prune_encrypted_database_backups,
+)
 from authstatus_api.backups.service import (  # noqa: E402
     BackupConfigError,
     BackupError,
     create_encrypted_database_backup,
     verify_encrypted_database_backup,
 )
+from authstatus_api.settings import get_settings  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +56,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    settings = get_settings()
 
     try:
         backup_path = create_encrypted_database_backup(
@@ -65,6 +71,37 @@ def main() -> int:
         return 1
 
     print(f"Created and verified encrypted backup: {backup_path}")
+
+    try:
+        prune_result = prune_encrypted_database_backups(
+            retention_days=settings.backup_retention_days,
+            minimum_count=settings.backup_minimum_count,
+            backup_directory=args.backup_directory,
+        )
+    except BackupRetentionError as exc:
+        print(
+            f"Backup retention cleanup failed: {exc}",
+            file=sys.stderr,
+        )
+        return 2
+
+    if prune_result["deleted"]:
+        print("Pruned encrypted backups: " + ", ".join(prune_result["deleted"]))
+    else:
+        print("No encrypted backups were eligible for pruning.")
+
+    if prune_result["protected"]:
+        print("Protected by pending recovery: " + ", ".join(prune_result["protected"]))
+
+    if prune_result["failed"]:
+        for failure in prune_result["failed"]:
+            print(
+                "Unable to prune " f"{failure['filename']}: {failure['reason']}",
+                file=sys.stderr,
+            )
+
+        return 2
+
     return 0
 
 

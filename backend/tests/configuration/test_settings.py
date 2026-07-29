@@ -43,6 +43,68 @@ def test_default_environment_is_development(monkeypatch):
     assert settings.app_environment == "development"
 
 
+def test_backup_retention_defaults_are_safe():
+    settings = Settings(_env_file=None)
+
+    assert settings.backup_retention_days == 90
+    assert settings.backup_minimum_count == 5
+
+
+def test_backup_retention_settings_accept_environment_values():
+    settings = Settings(
+        _env_file=None,
+        AUTHSTATUS_BACKUP_RETENTION_DAYS="60",
+        AUTHSTATUS_BACKUP_MINIMUM_COUNT="10",
+    )
+
+    assert settings.backup_retention_days == 60
+    assert settings.backup_minimum_count == 10
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "value"),
+    [
+        ("AUTHSTATUS_BACKUP_RETENTION_DAYS", 0),
+        ("AUTHSTATUS_BACKUP_RETENTION_DAYS", -1),
+        ("AUTHSTATUS_BACKUP_MINIMUM_COUNT", 0),
+        ("AUTHSTATUS_BACKUP_MINIMUM_COUNT", -1),
+    ],
+)
+def test_backup_retention_settings_reject_values_below_one(
+    setting_name,
+    value,
+):
+    with pytest.raises(
+        ValidationError,
+        match="greater than or equal to 1",
+    ):
+        Settings(
+            _env_file=None,
+            **{
+                setting_name: value,
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "setting_name",
+    [
+        "AUTHSTATUS_BACKUP_RETENTION_DAYS",
+        "AUTHSTATUS_BACKUP_MINIMUM_COUNT",
+    ],
+)
+def test_backup_retention_settings_reject_non_integer_values(
+    setting_name,
+):
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            **{
+                setting_name: "invalid",
+            },
+        )
+
+
 @pytest.mark.parametrize(
     "value",
     [
