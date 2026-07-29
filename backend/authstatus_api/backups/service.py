@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import tempfile
 from datetime import UTC, datetime
@@ -48,6 +49,8 @@ REQUIRED_DATABASE_TABLES = {
 
 
 PENDING_RECOVERY_MANIFEST = "pending_recovery.json"
+
+ENCRYPTED_BACKUP_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.db\.enc$")
 
 
 def _backup_timestamp() -> str:
@@ -344,16 +347,12 @@ def resolve_encrypted_database_backup_path(
         backup_directory or settings.backup_directory
     )
 
-    if not filename or filename in {".", ".."}:
-        raise BackupError("Invalid backup filename.")
+    normalized_filename = os.path.basename(filename)
 
     if (
-        "\x00" in filename
-        or "/" in filename
-        or "\\" in filename
-        or Path(filename).name != filename
-        or filename.startswith(".")
-        or not filename.endswith(".db.enc")
+        not filename
+        or filename != normalized_filename
+        or not ENCRYPTED_BACKUP_FILENAME_PATTERN.fullmatch(normalized_filename)
     ):
         raise BackupError("Invalid backup filename.")
 
@@ -363,7 +362,11 @@ def resolve_encrypted_database_backup_path(
     if not source_directory.is_dir():
         raise BackupError("Backup directory path is not a directory.")
 
-    backup_path = source_directory / filename
+    resolved_directory = source_directory.resolve(strict=True)
+    backup_path = (resolved_directory / normalized_filename).resolve(strict=False)
+
+    if backup_path.parent != resolved_directory:
+        raise BackupError("Invalid backup filename.")
 
     if backup_path.is_symlink():
         raise BackupError("Backup file must not be a symbolic link.")
@@ -374,13 +377,36 @@ def resolve_encrypted_database_backup_path(
     if not backup_path.is_file():
         raise BackupError("Backup path is not a file.")
 
-    resolved_directory = source_directory.resolve()
-    resolved_backup_path = backup_path.resolve()
+    return backup_path
 
-    if resolved_backup_path.parent != resolved_directory:
-        raise BackupError("Invalid backup filename.")
 
-    return resolved_backup_path
+def _validate_encrypted_backup_path(
+    backup_path: Path,
+) -> Path:
+    normalized_filename = os.path.basename(os.fspath(backup_path))
+
+    if (
+        backup_path.name != normalized_filename
+        or not ENCRYPTED_BACKUP_FILENAME_PATTERN.fullmatch(normalized_filename)
+    ):
+        raise BackupError("Invalid backup path.")
+
+    source_directory = backup_path.parent.resolve(strict=True)
+    validated_path = (source_directory / normalized_filename).resolve(strict=False)
+
+    if validated_path.parent != source_directory:
+        raise BackupError("Invalid backup path.")
+
+    if validated_path.is_symlink():
+        raise BackupError("Backup file must not be a symbolic link.")
+
+    if not validated_path.exists():
+        raise BackupError(f"Backup file does not exist: {validated_path}")
+
+    if not validated_path.is_file():
+        raise BackupError(f"Backup path is not a file: {validated_path}")
+
+    return validated_path
 
 
 def create_encrypted_database_backup(
@@ -429,48 +455,33 @@ def create_encrypted_database_backup(
 
 
 def decrypt_backup_file(backup_path: Path) -> bytes:
-    if not backup_path.exists():
-        raise BackupError(f"Backup file does not exist: {backup_path}")
+    validated_path = _validate_encrypted_backup_path(backup_path)
 
-    return decrypt_backup_bytes(backup_path.read_bytes())
+    return decrypt_backup_bytes(validated_path.read_bytes())
 
 
 def verify_encrypted_database_backup(
     *,
     backup_path: Path,
 ) -> None:
-    if backup_path.suffix != ".enc":
-        raise BackupError(f"Backup file must end with .enc: {backup_path}")
+    validated_path = _validate_encrypted_backup_path(backup_path)
 
-    if not backup_path.exists():
-        raise BackupError(f"Backup file does not exist: {backup_path}")
+    if validated_path.stat().st_size == 0:
+        raise BackupError(f"Backup file is empty: {validated_path}")
 
-    if not backup_path.is_file():
-        raise BackupError(f"Backup path is not a file: {backup_path}")
+    decrypted_bytes = decrypt_backup_bytes(validated_path.read_bytes())
 
-    if backup_path.stat().st_size == 0:
-        raise BackupError(f"Backup file is empty: {backup_path}")
+    with tempfile.TemporaryDirectory(
+        prefix="carequeue-backup-verify-",
+    ) as temporary_directory:
+        temporary_path = Path(temporary_directory) / "restored.db"
 
-    decrypted_bytes = decrypt_backup_file(backup_path)
-    temporary_path: Path | None = None
-
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="wb",
-            dir=backup_path.parent,
-            prefix=f".{backup_path.name}.verify.",
-            suffix=".db",
-            delete=False,
-        ) as temporary_file:
+        with temporary_path.open("wb") as temporary_file:
             temporary_file.write(decrypted_bytes)
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
-            temporary_path = Path(temporary_file.name)
 
         _validate_restored_database(temporary_path)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
 
 
 def restore_encrypted_database_backup(

@@ -130,6 +130,51 @@ def test_verify_encrypted_database_backup_removes_invalid_decrypted_file(
     assert not list(backup_directory.glob(".*.verify.*"))
 
 
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "../auth_tracker_20260729_120000_000001.db.enc",
+        r"..\auth_tracker_20260729_120000_000001.db.enc",
+        "/tmp/auth_tracker_20260729_120000_000001.db.enc",
+        ".auth_tracker_20260729_120000_000001.db.enc",
+        "backup.sqlite",
+        "backup.enc",
+        "backup.db",
+        "backup file.db.enc",
+        "backup\nfile.db.enc",
+    ],
+)
+def test_resolve_encrypted_backup_rejects_untrusted_filename(
+    filename,
+):
+    with pytest.raises(
+        BackupError,
+        match="Invalid backup filename",
+    ):
+        resolve_encrypted_database_backup_path(
+            filename=filename,
+        )
+
+
+def test_verify_encrypted_backup_rejects_path_with_nested_component(
+    tmp_path,
+):
+    backup_directory = tmp_path / "backups"
+    nested_directory = backup_directory / "nested"
+    nested_directory.mkdir(parents=True)
+
+    backup_path = nested_directory / "auth_tracker_20260729_120000_000001.db.enc"
+    backup_path.write_bytes(b"encrypted data")
+
+    with pytest.raises(
+        BackupError,
+        match="Unable to decrypt backup file",
+    ):
+        verify_encrypted_database_backup(
+            backup_path=backup_path,
+        )
+
+
 @pytest.fixture(autouse=True)
 def configure_test_settings(tmp_path, monkeypatch):
     monkeypatch.setenv(
