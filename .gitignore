@@ -23,6 +23,7 @@ backend/backups/
 *.db.enc
 backend/restores/
 *.restored.db
+local_backups/
 
 # Python virtual environments
 .venv/

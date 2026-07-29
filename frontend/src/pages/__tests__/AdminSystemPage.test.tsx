@@ -376,10 +376,16 @@ describe("AdminSystemPage", () => {
 
     expect(screen.getByText(newBackup.filename)).toBeInTheDocument();
 
+    expect(
+      screen.getByRole("button", {
+        name: "Verified",
+      })
+    ).toBeDisabled();
+
     expect(mockedCreateRestorePoint).toHaveBeenCalledTimes(1);
   });
 
-  it("verifies a selected restore point", async () => {
+  it("marks a successfully verified restore point as verified", async () => {
     mockedVerifyRestorePoint.mockResolvedValue({
       filename: existingBackup.filename,
       verified: true,
@@ -395,15 +401,60 @@ describe("AdminSystemPage", () => {
       })
     );
 
+    const dialog = await screen.findByRole("dialog", {
+      name: "Restore Point Verified",
+    });
+
+    expect(dialog).toHaveTextContent(
+      `${existingBackup.filename} verified successfully.`
+    );
+
     expect(
-      await screen.findByText(
-        `Restore point ${existingBackup.filename} passed verification.`
-      )
-    ).toBeInTheDocument();
+      screen.getByRole("button", {
+        name: "Verified",
+      })
+    ).toBeDisabled();
 
     expect(mockedVerifyRestorePoint).toHaveBeenCalledWith(
       existingBackup.filename
     );
+  });
+
+  it("shows a verification failure and keeps the restore point retryable", async () => {
+    mockedVerifyRestorePoint.mockRejectedValue(
+      new Error("The encrypted backup failed validation.")
+    );
+
+    render(<AdminSystemPage darkMode={false} />);
+
+    await screen.findByText(existingBackup.filename);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Verify",
+      })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Verification Failed",
+    });
+
+    expect(dialog).toHaveTextContent(
+      `${existingBackup.filename} could not be verified: ` +
+        "The encrypted backup failed validation."
+    );
+
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Close",
+      })
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Verify",
+      })
+    ).toBeEnabled();
   });
 
   it("shows an error when system information cannot load", async () => {

@@ -34,6 +34,12 @@ interface AdminSystemPageProps {
   darkMode: boolean;
 }
 
+interface RestorePointVerificationResult {
+  filename: string;
+  succeeded: boolean;
+  message: string;
+}
+
 function formatFileSize(sizeBytes: number): string {
   if (sizeBytes < 1024) {
     return `${sizeBytes} B`;
@@ -67,6 +73,11 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
   const [verifyingFilename, setVerifyingFilename] = useState<string | null>(
     null
   );
+  const [verifiedFilenames, setVerifiedFilenames] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [verificationResult, setVerificationResult] =
+    useState<RestorePointVerificationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -131,6 +142,14 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
         ),
       ]);
 
+      if (result.verified) {
+        setVerifiedFilenames((current) => {
+          const updated = new Set(current);
+          updated.add(result.backup.filename);
+          return updated;
+        });
+      }
+
       setSuccessMessage(
         `Restore point ${result.backup.filename} was created and verified.`
       );
@@ -149,17 +168,37 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
     setVerifyingFilename(filename);
     setError(null);
     setSuccessMessage(null);
+    setVerificationResult(null);
 
     try {
-      await verifyRestorePoint(filename);
+      const result = await verifyRestorePoint(filename);
 
-      setSuccessMessage(`Restore point ${filename} passed verification.`);
+      if (!result.verified) {
+        throw new Error("The restore point did not pass verification.");
+      }
+
+      setVerifiedFilenames((current) => {
+        const updated = new Set(current);
+        updated.add(filename);
+        return updated;
+      });
+
+      setVerificationResult({
+        filename,
+        succeeded: true,
+        message: `${filename} verified successfully.`,
+      });
     } catch (verifyError) {
-      setError(
+      const message =
         verifyError instanceof Error
           ? verifyError.message
-          : "Unable to verify the restore point."
-      );
+          : "Unable to verify the restore point.";
+
+      setVerificationResult({
+        filename,
+        succeeded: false,
+        message: `${filename} could not be verified: ${message}`,
+      });
     } finally {
       setVerifyingFilename(null);
     }
@@ -789,20 +828,27 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                             void handleVerifyRestorePoint(backup.filename)
                           }
                           disabled={
+                            verifiedFilenames.has(backup.filename) ||
                             isCreating ||
                             verifyingFilename !== null ||
                             stagingFilename !== null ||
                             isCancelingRecovery
                           }
                           className={cn(
-                            "rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                            darkMode
-                              ? "border-gray-700 hover:bg-gray-800"
-                              : "border-gray-300 hover:bg-gray-100"
+                            "rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed",
+                            verifiedFilenames.has(backup.filename)
+                              ? darkMode
+                                ? "border-green-800 bg-green-950/40 text-green-300"
+                                : "border-green-300 bg-green-50 text-green-700"
+                              : darkMode
+                              ? "border-gray-700 hover:bg-gray-800 disabled:opacity-60"
+                              : "border-gray-300 hover:bg-gray-100 disabled:opacity-60"
                           )}
                         >
                           {verifyingFilename === backup.filename
                             ? "Verifying..."
+                            : verifiedFilenames.has(backup.filename)
+                            ? "Verified"
                             : "Verify"}
                         </button>
 
@@ -838,6 +884,67 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
           </div>
         )}
       </section>
+
+      {verificationResult && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="verification-result-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div
+            className={cn(
+              "w-full max-w-lg rounded-xl border p-6 shadow-xl",
+              darkMode
+                ? "border-gray-700 bg-gray-900"
+                : "border-gray-200 bg-white"
+            )}
+          >
+            <div className="flex items-start gap-3">
+              {verificationResult.succeeded ? (
+                <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-green-500" />
+              ) : (
+                <CircleAlert className="mt-0.5 h-6 w-6 shrink-0 text-red-500" />
+              )}
+
+              <div>
+                <h2
+                  id="verification-result-title"
+                  className="text-lg font-semibold"
+                >
+                  {verificationResult.succeeded
+                    ? "Restore Point Verified"
+                    : "Verification Failed"}
+                </h2>
+
+                <p
+                  className={cn(
+                    "mt-3 break-words text-sm",
+                    darkMode ? "text-gray-300" : "text-gray-700"
+                  )}
+                >
+                  {verificationResult.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setVerificationResult(null)}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium text-white",
+                  verificationResult.succeeded
+                    ? "bg-green-600 hover:bg-green-700"
+                    : "bg-red-600 hover:bg-red-700"
+                )}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {recoveryConfirmationFilename && (
         <div
