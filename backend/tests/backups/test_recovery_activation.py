@@ -8,9 +8,13 @@ from unittest.mock import patch
 import pytest
 
 from authstatus_api.backups.recovery_activation import (
+    RECOVERY_CONFIRMATION_PHRASE,
     RecoveryActivationError,
     create_verified_active_database_backup,
     find_database_sidecars,
+    format_recovery_activation_plan,
+    prepare_recovery_activation,
+    require_recovery_activation_confirmation,
     require_same_filesystem,
     resolve_recovery_activation_paths,
     verify_api_port_available,
@@ -227,6 +231,251 @@ def test_create_verified_active_database_backup_removes_unverified_backup(
             )
 
     assert not backup_path.exists()
+
+
+def test_prepare_recovery_activation_returns_complete_plan(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    staged_database = tmp_path / "restores" / "staged.db"
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    wal_path = Path(f"{database_path.resolve()}-wal")
+
+    resolved_paths = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "resolve_recovery_activation_paths",
+            return_value=resolved_paths,
+        ) as mocked_resolve,
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ) as mocked_service_check,
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ) as mocked_port_check,
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ) as mocked_database_check,
+        patch(
+            "authstatus_api.backups.recovery_activation." "find_database_sidecars",
+            return_value=[wal_path],
+        ) as mocked_sidecar_check,
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "create_verified_active_database_backup",
+            return_value=safety_backup,
+        ) as mocked_backup,
+    ):
+        plan = prepare_recovery_activation(
+            database_path=database_path,
+            backup_directory=tmp_path / "backups",
+            restore_directory=tmp_path / "restores",
+            service_name="CareQueue",
+            api_host="127.0.0.1",
+            api_port=8000,
+        )
+
+    assert plan == {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup,
+        "sidecars": [wal_path],
+        "service_name": "CareQueue",
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    mocked_resolve.assert_called_once_with(
+        database_path=database_path,
+        restore_directory=tmp_path / "restores",
+    )
+    mocked_service_check.assert_called_once_with(
+        service_name="CareQueue",
+    )
+    mocked_port_check.assert_called_once_with(
+        host="127.0.0.1",
+        port=8000,
+    )
+    mocked_database_check.assert_called_once_with()
+    mocked_sidecar_check.assert_called_once_with(
+        database_path.resolve(),
+    )
+    mocked_backup.assert_called_once_with(
+        database_path=database_path.resolve(),
+        backup_directory=tmp_path / "backups",
+    )
+
+
+def test_prepare_recovery_activation_does_not_create_backup_when_port_is_in_use(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+
+    resolved_paths = {
+        "active_database": database_path.resolve(),
+        "staged_database": (tmp_path / "restores" / "staged.db").resolve(),
+        "rollback_database": (tmp_path / "auth_tracker.pre_recovery.db").resolve(),
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "resolve_recovery_activation_paths",
+            return_value=resolved_paths,
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+            side_effect=RecoveryActivationError("port 8000 is still in use"),
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "create_verified_active_database_backup",
+        ) as mocked_backup,
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="port 8000 is still in use",
+        ):
+            prepare_recovery_activation(
+                database_path=database_path,
+            )
+
+    mocked_backup.assert_not_called()
+
+
+def test_prepare_recovery_activation_does_not_create_backup_when_database_is_locked(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+
+    resolved_paths = {
+        "active_database": database_path.resolve(),
+        "staged_database": (tmp_path / "restores" / "staged.db").resolve(),
+        "rollback_database": (tmp_path / "auth_tracker.pre_recovery.db").resolve(),
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "resolve_recovery_activation_paths",
+            return_value=resolved_paths,
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+            side_effect=RecoveryActivationError("database is locked or in use"),
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "create_verified_active_database_backup",
+        ) as mocked_backup,
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="database is locked or in use",
+        ):
+            prepare_recovery_activation(
+                database_path=database_path,
+            )
+
+    mocked_backup.assert_not_called()
+
+
+def test_format_recovery_activation_plan_displays_paths_and_sidecars(
+    tmp_path,
+):
+    active_database = tmp_path / "auth_tracker.db"
+    staged_database = tmp_path / "restores" / "staged.db"
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    wal_path = Path(f"{active_database}-wal")
+
+    output = format_recovery_activation_plan(
+        {
+            "active_database": active_database,
+            "staged_database": staged_database,
+            "rollback_database": rollback_database,
+            "safety_backup": safety_backup,
+            "sidecars": [wal_path],
+            "service_name": "CareQueue",
+            "api_host": "127.0.0.1",
+            "api_port": 8000,
+        }
+    )
+
+    assert str(active_database) in output
+    assert str(staged_database) in output
+    assert str(rollback_database) in output
+    assert str(safety_backup) in output
+    assert str(wal_path) in output
+    assert "CareQueue" in output
+    assert "127.0.0.1:8000" in output
+    assert "No database files have been replaced." in output
+
+
+def test_format_recovery_activation_plan_reports_no_sidecars(
+    tmp_path,
+):
+    output = format_recovery_activation_plan(
+        {
+            "active_database": tmp_path / "auth_tracker.db",
+            "staged_database": tmp_path / "restores" / "staged.db",
+            "rollback_database": (tmp_path / "auth_tracker.pre_recovery.db"),
+            "safety_backup": tmp_path / "backups" / "safety.db.enc",
+            "sidecars": [],
+            "service_name": None,
+            "api_host": "127.0.0.1",
+            "api_port": 8000,
+        }
+    )
+
+    assert "None detected" in output
+    assert "Managed service:  Not configured" in output
+
+
+def test_require_recovery_activation_confirmation_accepts_exact_phrase():
+    require_recovery_activation_confirmation(RECOVERY_CONFIRMATION_PHRASE)
+
+
+@pytest.mark.parametrize(
+    "confirmation",
+    [
+        "",
+        "yes",
+        "activate recovery",
+        " ACTIVATE RECOVERY",
+        "ACTIVATE RECOVERY ",
+    ],
+)
+def test_require_recovery_activation_confirmation_rejects_mismatch(
+    confirmation,
+):
+    with pytest.raises(
+        RecoveryActivationError,
+        match="confirmation phrase did not match exactly",
+    ):
+        require_recovery_activation_confirmation(confirmation)
 
 
 def test_require_same_filesystem_accepts_matching_filesystems(

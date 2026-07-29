@@ -29,11 +29,25 @@ class RecoveryActivationPaths(TypedDict):
     rollback_database: Path
 
 
+class RecoveryActivationPlan(TypedDict):
+    active_database: Path
+    staged_database: Path
+    rollback_database: Path
+    safety_backup: Path
+    sidecars: list[Path]
+    service_name: str | None
+    api_host: str
+    api_port: int
+
+
 DATABASE_SIDECAR_SUFFIXES = (
     "-wal",
     "-shm",
     "-journal",
 )
+
+
+RECOVERY_CONFIRMATION_PHRASE = "ACTIVATE RECOVERY"
 
 
 def _nearest_existing_path(path: Path) -> Path:
@@ -320,6 +334,90 @@ def create_verified_active_database_backup(
         ) from exc
 
     return backup_path
+
+
+def prepare_recovery_activation(
+    *,
+    database_path: Path | None = None,
+    backup_directory: Path | None = None,
+    restore_directory: Path | None = None,
+    service_name: str | None = None,
+    api_host: str = "127.0.0.1",
+    api_port: int = 8000,
+) -> RecoveryActivationPlan:
+    paths = resolve_recovery_activation_paths(
+        database_path=database_path,
+        restore_directory=restore_directory,
+    )
+
+    verify_managed_service_stopped(
+        service_name=service_name,
+    )
+    verify_api_port_available(
+        host=api_host,
+        port=api_port,
+    )
+    verify_exclusive_database_access()
+
+    sidecars = find_database_sidecars(
+        paths["active_database"],
+    )
+
+    safety_backup = create_verified_active_database_backup(
+        database_path=paths["active_database"],
+        backup_directory=backup_directory,
+    )
+
+    return {
+        "active_database": paths["active_database"],
+        "staged_database": paths["staged_database"],
+        "rollback_database": paths["rollback_database"],
+        "safety_backup": safety_backup,
+        "sidecars": sidecars,
+        "service_name": service_name,
+        "api_host": api_host,
+        "api_port": api_port,
+    }
+
+
+def format_recovery_activation_plan(
+    plan: RecoveryActivationPlan,
+) -> str:
+    service_display = plan["service_name"] or "Not configured"
+
+    if plan["sidecars"]:
+        sidecar_display = "\n".join(f"  - {sidecar}" for sidecar in plan["sidecars"])
+    else:
+        sidecar_display = "  None detected"
+
+    return "\n".join(
+        (
+            "CareQueue Database Recovery Activation Plan",
+            "",
+            f"Active database:  {plan['active_database']}",
+            f"Staged database:  {plan['staged_database']}",
+            f"Rollback database: {plan['rollback_database']}",
+            f"Safety backup:    {plan['safety_backup']}",
+            f"Managed service:  {service_display}",
+            f"API socket:       {plan['api_host']}:{plan['api_port']}",
+            "",
+            "Detected SQLite sidecars:",
+            sidecar_display,
+            "",
+            "No database files have been replaced.",
+            "The next operation will begin the atomic cutover.",
+        )
+    )
+
+
+def require_recovery_activation_confirmation(
+    confirmation: str,
+) -> None:
+    if confirmation != RECOVERY_CONFIRMATION_PHRASE:
+        raise RecoveryActivationError(
+            "Recovery activation canceled: the confirmation "
+            "phrase did not match exactly."
+        )
 
 
 def find_database_sidecars(
