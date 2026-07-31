@@ -1,0 +1,25 @@
+<service>
+  <id>CareQueueApi</id>
+  <name>CareQueue API</name>
+  <description>Runs the CareQueue FastAPI backend behind the local Caddy reverse proxy.</description>
+
+  <executable>powershell.exe</executable>
+  <arguments>-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "C:\Program Files\CareQueue\deployment\windows\run-api.ps1"</arguments>
+
+  <workingdirectory>C:\Program Files\CareQueue</workingdirectory>
+
+  <startmode>Automatic</startmode>
+
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <onfailure action="restart" delay="60 sec" />
+
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>30 sec</stoptimeout>
+
+  <logpath>C:\ProgramData\CareQueue\Logs\Api</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10485760</sizeThreshold>
+    <keepFiles>10</keepFiles>
+  </log>
+</service>
