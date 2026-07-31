@@ -22,8 +22,8 @@ from authstatus_api.registered_options.router import (
 from authstatus_api.routers.analytics import router as analytics_router
 from authstatus_api.routers.auths import router as auths_router
 from authstatus_api.routers.security import router as security_router
-from authstatus_api.system.router import router as system_router
 from authstatus_api.settings import get_settings
+from authstatus_api.system.router import router as system_router
 
 CORS_ALLOWED_METHODS = [
     "GET",

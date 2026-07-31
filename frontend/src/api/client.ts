@@ -1,7 +1,15 @@
-export const API_BASE_URL =
-  import.meta.env.VITE_AUTHSTATUS_API_BASE_URL ??
-  import.meta.env.VITE_API_BASE_URL ??
-  "http://localhost:8000";
+function normalizeApiBaseUrl(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  return value.replace(/\/+$/, "");
+}
+
+export const API_BASE_URL = normalizeApiBaseUrl(
+  import.meta.env.VITE_AUTHSTATUS_API_BASE_URL ||
+    import.meta.env.VITE_API_BASE_URL
+);
 
 const CSRF_COOKIE_NAME = "carequeue_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
