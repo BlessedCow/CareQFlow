@@ -1,0 +1,24 @@
+# Replace carequeue.example.com with the production hostname.
+carequeue.example.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle {
+		root * "C:\Program Files\CareQueue\frontend\dist"
+		try_files {path} /index.html
+		file_server
+	}
+}
