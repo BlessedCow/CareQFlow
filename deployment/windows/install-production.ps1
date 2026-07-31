@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory)]
     [ValidatePattern("^https://")]
-    [string]$PublicOrigin,
+    [string]$ApplicationOrigin,
 
     [string]$SourceDirectory = (
         Resolve-Path (
@@ -112,30 +112,30 @@ if (-not (Test-Administrator)) {
 }
 
 try {
-    $publicUri = [Uri]$PublicOrigin
+    $applicationUri = [Uri]$ApplicationOrigin
 }
 catch {
-    throw "PublicOrigin must be a valid absolute HTTPS origin."
+    throw "ApplicationOrigin must be a valid absolute HTTPS origin."
 }
 
 if (
-    -not $publicUri.IsAbsoluteUri `
-    -or $publicUri.Scheme -ne "https" `
-    -or -not $publicUri.Host `
-    -or $publicUri.UserInfo `
-    -or $publicUri.AbsolutePath -ne "/" `
-    -or $publicUri.Query `
-    -or $publicUri.Fragment
+    -not $applicationUri.IsAbsoluteUri `
+        -or $applicationUri.Scheme -ne "https" `
+        -or -not $applicationUri.Host `
+        -or $applicationUri.UserInfo `
+        -or $applicationUri.AbsolutePath -ne "/" `
+        -or $applicationUri.Query `
+        -or $applicationUri.Fragment
 ) {
     throw (
-        "PublicOrigin must contain only an HTTPS scheme, hostname, " +
+        "ApplicationOrigin must contain only an HTTPS scheme, hostname, " +
         "and optional port. Paths, credentials, queries, and fragments " +
         "are not allowed."
     )
 }
 
-$normalizedPublicOrigin = (
-    $publicUri.GetLeftPart(
+$normalizedApplicationOrigin = (
+    $applicationUri.GetLeftPart(
         [System.UriPartial]::Authority
     )
 ).TrimEnd("/")
@@ -185,15 +185,15 @@ if (-not $npmCommand) {
 
 if (
     (Test-Path -LiteralPath $InstallDirectory) `
-    -and -not $Force
+        -and -not $Force
 ) {
     $existingItems = Get-ChildItem `
         -LiteralPath $InstallDirectory `
         -Force `
         -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.Name -ne "Service"
-        }
+    Where-Object {
+        $_.Name -ne "Service"
+    }
 
     if ($existingItems) {
         throw (
@@ -204,8 +204,8 @@ if (
 }
 
 $stagingRoot = Join-Path `
-    ([System.IO.Path]::GetTempPath()) `
-    ("CareQueue-Install-" + [guid]::NewGuid().ToString("N"))
+([System.IO.Path]::GetTempPath()) `
+("CareQueue-Install-" + [guid]::NewGuid().ToString("N"))
 
 $stagingInstallDirectory = Join-Path `
     $stagingRoot `
@@ -299,8 +299,8 @@ try {
         -not (
             Test-Path `
                 -LiteralPath (
-                    Join-Path $frontendBuildDirectory "index.html"
-                ) `
+                Join-Path $frontendBuildDirectory "index.html"
+            ) `
                 -PathType Leaf
         )
     ) {
@@ -317,31 +317,31 @@ try {
 
     Copy-Item `
         -LiteralPath (
-            Join-Path $sourceBackendDirectory "authstatus_api"
-        ) `
+        Join-Path $sourceBackendDirectory "authstatus_api"
+    ) `
         -Destination $stagingBackendDirectory `
         -Recurse `
         -Force
 
     Copy-Item `
         -LiteralPath (
-            Join-Path $sourceBackendDirectory "scripts"
-        ) `
+        Join-Path $sourceBackendDirectory "scripts"
+    ) `
         -Destination $stagingBackendDirectory `
         -Recurse `
         -Force
 
     Copy-Item `
         -LiteralPath (
-            Join-Path $sourceBackendDirectory "requirements.txt"
-        ) `
+        Join-Path $sourceBackendDirectory "requirements.txt"
+    ) `
         -Destination $stagingBackendDirectory `
         -Force
 
     Copy-Item `
         -LiteralPath (
-            Join-Path $resolvedSourceDirectory "deployment\windows"
-        ) `
+        Join-Path $resolvedSourceDirectory "deployment\windows"
+    ) `
         -Destination $stagingDeploymentDirectory `
         -Recurse `
         -Force
@@ -377,7 +377,7 @@ try {
         )
     }
 
-    $caddyHostname = $publicUri.Authority
+    $caddyHostname = $applicationUri.Authority
 
     $caddyConfiguration = $caddyConfiguration.Replace(
         "carequeue.example.com",
@@ -467,7 +467,7 @@ try {
         }
 
         $corsOrigins = ConvertTo-Json `
-            -InputObject @($normalizedPublicOrigin) `
+            -InputObject @($normalizedApplicationOrigin) `
             -Compress
 
         $environmentContent = @"
@@ -496,25 +496,6 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
             -Encoding UTF8
     }
 
-    if (-not $SkipPermissionHardening) {
-        Write-Host "Restricting runtime directory permissions..."
-
-        & icacls.exe `
-            $DataDirectory `
-            /inheritance:r `
-            /grant:r `
-            "*S-1-5-18:(OI)(CI)F" `
-            "*S-1-5-32-544:(OI)(CI)F" `
-            /T `
-            /C | Out-Null
-
-        if ($LASTEXITCODE -ne 0) {
-            throw (
-                "Unable to restrict permissions on the production " +
-                "runtime directory."
-            )
-        }
-    }
 
     Write-Host "Installing staged application files..."
 
@@ -588,13 +569,13 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     Invoke-ExternalCommand `
         -Executable $PythonExecutable `
         -Arguments @(
-            "-m",
-            "venv",
-            $installedVirtualEnvironment
-        ) `
+        "-m",
+        "venv",
+        $installedVirtualEnvironment
+    ) `
         -FailureMessage (
-            "Production virtual environment creation failed."
-        )
+        "Production virtual environment creation failed."
+    )
 
     $installedPythonExecutable = Join-Path `
         $installedVirtualEnvironment `
@@ -622,30 +603,30 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     Invoke-ExternalCommand `
         -Executable $installedPythonExecutable `
         -Arguments @(
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-input",
-            "--upgrade",
-            "pip"
-        ) `
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-input",
+        "--upgrade",
+        "pip"
+    ) `
         -FailureMessage "Production pip upgrade failed."
 
     Invoke-ExternalCommand `
         -Executable $installedPythonExecutable `
         -Arguments @(
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-input",
-            "--requirement",
-            $installedRequirementsFile
-        ) `
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-input",
+        "--requirement",
+        $installedRequirementsFile
+    ) `
         -FailureMessage (
-            "Production backend dependency installation failed."
-        )
+        "Production backend dependency installation failed."
+    )
 
     Write-Host "Validating the installed backend..."
 
@@ -657,8 +638,8 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
         if (
             -not $line `
-            -or $line.StartsWith("#") `
-            -or -not $line.Contains("=")
+                -or $line.StartsWith("#") `
+                -or -not $line.Contains("=")
         ) {
             continue
         }
@@ -683,47 +664,84 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         Invoke-ExternalCommand `
             -Executable $installedPythonExecutable `
             -Arguments @(
-                "-c",
-                (
-                    "import authstatus_api.main; " +
-                    "import uvicorn; " +
-                    "print('CareQueue production backend validated.')"
-                )
-            ) `
-            -FailureMessage (
-                "The installed CareQueue backend could not be imported."
+            "-c",
+            (
+                "import authstatus_api.main; " +
+                "import uvicorn; " +
+                "print('CareQueue production backend validated.')"
             )
+        ) `
+            -FailureMessage (
+            "The installed CareQueue backend could not be imported."
+        )
     }
     finally {
         Pop-Location
     }
 
-    if (
-        Test-Path `
-            -LiteralPath $installedServiceDirectory `
-            -PathType Container
-    ) {
-        $serviceExecutable = Join-Path `
-            $installedServiceDirectory `
-            "CareQueueApi.exe"
-
-        if (
-            Test-Path `
-                -LiteralPath $serviceExecutable `
-                -PathType Leaf
-        ) {
-            Copy-Item `
-                -LiteralPath (
-                    Join-Path `
-                        $installedDeploymentDirectory `
-                        "windows\CareQueueApi.xml"
-                ) `
-                -Destination (
-                    Join-Path `
-                        $installedServiceDirectory `
-                        "CareQueueApi.xml"
-                ) `
-                -Force
+    if (-not $SkipPermissionHardening) {
+        Write-Host "Restricting runtime directory permissions..."
+    
+        $installerAccount = (
+            [Security.Principal.WindowsIdentity]::GetCurrent()
+        ).Name
+    
+        & icacls.exe `
+            $DataDirectory `
+            /reset `
+            /T `
+            /C | Out-Null
+    
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to reset production runtime permissions."
+        }
+    
+        & icacls.exe `
+            $DataDirectory `
+            /inheritance:r | Out-Null
+    
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to disable inherited runtime permissions."
+        }
+    
+        $systemGrant = "SYSTEM:(OI)(CI)F"
+        $administratorsGrant = "BUILTIN\Administrators:(OI)(CI)F"
+        $installerGrant = "${installerAccount}:(OI)(CI)F"
+    
+        & icacls.exe `
+            $DataDirectory `
+            /grant:r `
+            $systemGrant `
+            $administratorsGrant `
+            $installerGrant | Out-Null
+    
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to apply production runtime permissions."
+        }
+    
+        $childPath = Join-Path $DataDirectory "*"
+    
+        & icacls.exe `
+            $childPath `
+            /reset `
+            /T `
+            /C | Out-Null
+    
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to propagate production runtime permissions."
+        }
+    
+        try {
+            Get-Content `
+                -LiteralPath $environmentFile `
+                -TotalCount 1 `
+                -ErrorAction Stop | Out-Null
+        }
+        catch {
+            throw (
+                "Permission hardening prevented the installing " +
+                "administrator from reading the environment file."
+            )
         }
     }
 
@@ -732,7 +750,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     Write-Host "Application directory: $InstallDirectory"
     Write-Host "Runtime data directory: $DataDirectory"
     Write-Host "Environment file: $environmentFile"
-    Write-Host "Public origin: $normalizedPublicOrigin"
+    Write-Host "Application origin: $normalizedApplicationOrigin"
     Write-Host ""
     Write-Host "The API and Caddy services were not started automatically."
     Write-Host (
