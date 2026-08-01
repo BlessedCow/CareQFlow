@@ -1,0 +1,30 @@
+<service>
+  <id>CareQueueCaddy</id>
+  <name>CareQueue HTTPS</name>
+  <description>Serves the CareQueue frontend and proxies API requests over private HTTPS.</description>
+
+  <executable>C:\Program Files (x86)\Caddy\caddy.exe</executable>
+  <arguments>run --config "C:\Program Files\CareQueue\deployment\windows\Caddyfile" --adapter caddyfile</arguments>
+
+  <workingdirectory>C:\Program Files\CareQueue</workingdirectory>
+
+  <env name="XDG_DATA_HOME" value="C:\ProgramData\CareQueue\Caddy\Data" />
+  <env name="XDG_CONFIG_HOME" value="C:\ProgramData\CareQueue\Caddy\Config" />
+
+  <startmode>Automatic</startmode>
+
+  <depend>CareQueueApi</depend>
+
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <onfailure action="restart" delay="60 sec" />
+
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>30 sec</stoptimeout>
+
+  <logpath>C:\ProgramData\CareQueue\Logs\Caddy</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10485760</sizeThreshold>
+    <keepFiles>10</keepFiles>
+  </log>
+</service>

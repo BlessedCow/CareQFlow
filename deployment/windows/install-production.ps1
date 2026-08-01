@@ -238,6 +238,15 @@ $sourceBackendDirectory = Join-Path `
 $previousApiBaseUrl = $env:VITE_AUTHSTATUS_API_BASE_URL
 $previousLegacyApiBaseUrl = $env:VITE_API_BASE_URL
 
+$frontendEnvironmentFiles = @(
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".env.production.local"
+)
+
+$temporarilyMovedEnvironmentFiles = @()
+
 try {
     New-Item `
         -ItemType Directory `
@@ -259,6 +268,32 @@ try {
     Push-Location $sourceFrontendDirectory
 
     try {
+        foreach ($environmentFileName in $frontendEnvironmentFiles) {
+            $environmentFilePath = Join-Path `
+                $sourceFrontendDirectory `
+                $environmentFileName
+
+            if (
+                Test-Path `
+                    -LiteralPath $environmentFilePath `
+                    -PathType Leaf
+            ) {
+                $temporaryEnvironmentFilePath = (
+                    $environmentFilePath + ".carequeue-production-backup"
+                )
+
+                Move-Item `
+                    -LiteralPath $environmentFilePath `
+                    -Destination $temporaryEnvironmentFilePath `
+                    -Force
+
+                $temporarilyMovedEnvironmentFiles += [PSCustomObject]@{
+                    OriginalPath  = $environmentFilePath
+                    TemporaryPath = $temporaryEnvironmentFilePath
+                }
+            }
+        }
+
         Remove-Item `
             Env:VITE_AUTHSTATUS_API_BASE_URL `
             -ErrorAction SilentlyContinue
@@ -278,9 +313,24 @@ try {
             -FailureMessage "Frontend production build failed."
     }
     finally {
+        foreach (
+            $movedEnvironmentFile in
+            $temporarilyMovedEnvironmentFiles
+        ) {
+            if (
+                Test-Path `
+                    -LiteralPath $movedEnvironmentFile.TemporaryPath `
+                    -PathType Leaf
+            ) {
+                Move-Item `
+                    -LiteralPath $movedEnvironmentFile.TemporaryPath `
+                    -Destination $movedEnvironmentFile.OriginalPath `
+                    -Force
+            }
+        }
+    
         Pop-Location
     }
-
     $frontendBuildDirectory = Join-Path `
         $sourceFrontendDirectory `
         "dist"
