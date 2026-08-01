@@ -1,531 +1,305 @@
 # CareQueue
 
-CareQueue is a local-first utilization review workflow and authorization management application for tracking prior authorization work, review dates, payer decisions, timeline events, documentation intake, and follow-up queues.
+CareQueue is a local-first application for managing utilization review and prior authorization work.
 
-It combines a FastAPI backend with a React, TypeScript, Vite, and Tailwind frontend. CareQueue includes application-level security controls, encrypted storage options, encrypted backup and recovery utilities, role-based access, audit logging, and operational deployment helpers.
+It brings authorization records, review dates, payer decisions, timeline events, follow-up work, and PDF-assisted intake into one place. The goal is to make day-to-day authorization tracking easier to follow without relying on scattered spreadsheets, notes, and reminders.
 
-CareQueue is intended for private workflow development, testing, and controlled deployment evaluation. It is not HIPAA compliant by itself, and deploying it does not replace an organization’s required administrative, physical, technical, legal, contractual, and operational safeguards.
+CareQueue is built for private use and controlled deployment. It is not a hosted service, and it is not HIPAA compliant simply because it includes security controls. Any organization using it with protected health information remains responsible for its own legal, administrative, physical, and technical safeguards.
 
-## Important Disclaimer
+## What CareQueue Does
 
-CareQueue may handle sensitive operational or health-adjacent information during local testing. Do not use real patient data unless you understand and accept the privacy, security, compliance, legal, and organizational responsibilities involved.
+CareQueue supports the main parts of an authorization workflow:
 
-Security features in this project reduce risk, but they do not create HIPAA compliance on their own. See `DISCLAIMER.md` and `SECURITY.md`.
+- Track initial and continued-stay authorizations
+- Record facilities, payers, levels of care, member details, and review dates
+- Follow pending, approved, denied, appealed, peer-to-peer, discharged, and completed work
+- Keep a timeline of authorization events
+- View work through dashboard, calendar, queue, and detail screens
+- Filter records by facility, payer, level of care, status, and due date
+- Review information extracted from intake PDFs before saving it
+- Manage users, roles, registered facilities, insurers, and portal details
+- Create encrypted backups and stage safe recoveries
 
-## Features
+## Screens and Workflow
 
-### Authorization workflow
+The frontend includes:
 
-- Track initial, continued stay, and level-of-care authorization work
-- Store facility, payer, level of care, member details, authorization dates, review dates, and outcomes
-- Track pending, approved, denied, appealed, P2P, no-PA-required, discharged, and completed workflows
-- Maintain authorization timeline events
-- Support continued stay / LOC workflow transitions
-- View authorization records in dashboard, calendar, table, and detail views
-
-### Frontend
-
-- React, TypeScript, Vite, and Tailwind interface
-- Login screen and authenticated session restoration
-- Twenty-minute server-enforced sessions
-- Mandatory warning during the final five minutes of a session
-- Session renewal without exposing the session token to application code
-- Optional bottom-right session countdown that is off by default
-- Role-aware UI controls
-- Dashboard KPI cards and workload summaries
-- Level-of-care and work-queue filtering
-- Calendar view for review dates, start dates, end dates, and closed authorization events
-- Authorization work queue with filters, sorting, and pagination
-- Read-only authorization detail view
+- A dashboard with workload summaries and due-date information
+- A searchable and filterable authorization queue
+- Calendar views for review dates and authorization milestones
+- Read-only detail views for reviewing a record without opening an edit form
 - Timeline event management
-- PDF intake review workflow with confidence and needs-review indicators
-- Explicit confirmation before accepting fields marked for review
-- Settings for registered facilities, insurances, portals, workflow views, dashboard cards, and session-timer visibility
-- Dark mode
-- Local browser persistence for non-sensitive UI preferences
+- PDF intake review with confidence and needs-review indicators
+- Administrative pages for users and audit activity
+- Settings for facilities, insurers, portals, dashboard cards, and workflow preferences
+- Dark mode and local display preferences
+
+## Security at a Glance
+
+CareQueue includes several layers of application security:
+
+- Argon2id password hashing
+- Role-based access for Admin, UR, and Read Only users
+- Server-side sessions with hashed session tokens
+- Secure browser cookies
+- CSRF protection for authenticated changes
+- Session expiration and renewal controls
+- Field-level encryption for selected sensitive values
+- SQLCipher support for encrypted database storage
+- Separately encrypted database backups
+- Audit logging for security and authorization activity
+- Production log sanitization intended to keep credentials, tokens, and sensitive field values out of logs
+
+These controls reduce risk, but they do not replace a complete security or compliance program. See [SECURITY.md](SECURITY.md) and [DISCLAIMER.md](DISCLAIMER.md) before using CareQueue with sensitive information.
+
+## Technology
+
+CareQueue uses:
+
+- **Backend:** Python, FastAPI, Pydantic, SQLite, and SQLCipher
+- **Frontend:** React, TypeScript, Vite, and Tailwind CSS
+- **Authentication:** Secure cookie sessions, CSRF protection, and Argon2id
+- **Testing:** Pytest, Vitest, Testing Library, and Ruff
+- **Windows deployment:** WinSW services and Caddy for private HTTPS
+
+## Project Layout
+
+Only the main areas are shown here.
+
+```text
+CareQueue/
+├── backend/
+│   ├── authstatus_api/     # API, business logic, storage, security, and backups
+│   ├── scripts/            # User, backup, recovery, PDF, and database utilities
+│   └── tests/              # Backend tests organized by application area
+├── frontend/
+│   └── src/                # React application
+├── deployment/
+│   ├── windows/            # Production installer, services, Caddy, and backup tasks
+│   └── linux/              # Linux service and scheduling files
+├── docs/                   # Longer workflow and operating documentation
+├── ARCHITECTURE.md
+├── SECURITY.md
+├── ROADMAP.md
+└── DISCLAIMER.md
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a technical description of how these pieces work together.
+
+## Local Development
+
+### Requirements
+
+- Python 3.11 or newer
+- Node.js and npm
+- A SQLCipher-compatible Python package when using SQLCipher mode
+
+The project is currently developed and tested on Windows. Other platforms may require small command or deployment changes.
 
 ### Backend
 
-- FastAPI API
-- SQLite storage with SQLCipher database-encryption support
-- Field-level encryption for selected sensitive authorization fields
-- Argon2id password hashing
-- Server-side sessions with hashed session tokens
-- CSRF protection for authenticated state-changing requests
-- Configurable session renewal and expiration
-- Role-based access control
-- Audit logging for authentication, user administration, and authorization changes
-- PHI-conscious production logging with centralized sanitization
-- Structured authorization, security, persistence, audit, backup, and PDF-intake modules
-- Local PDF text extraction without requiring an external OCR service
-- Confidence and review metadata for extracted intake fields
-- Encrypted database backup and safe restore utilities
-- Windows Task Scheduler deployment scripts for automated encrypted backups
-- Linux systemd service and timer definitions for automated encrypted backups
-- SQLCipher migration, verification, and cutover preparation scripts
-- Domain-organized backend tests covering API, persistence, security, audit, backups, logging, PDF intake, and SQLCipher behavior
+Create and activate a virtual environment:
 
-## Current Security Model
-
-CareQueue currently uses layered local security controls:
-
-```text
-Field-level encryption:
-Sensitive fields are encrypted before being stored.
-
-SQLCipher mode:
-The SQLite database file can be encrypted at rest.
-
-Encrypted backups:
-Backup copies are encrypted separately and may be scheduled through Windows Task Scheduler or a Linux systemd timer.
-
-Authentication:
-Users log in with hashed passwords.
-
-Sessions:
-Raw session tokens remain in secure browser cookies. The backend stores token hashes.
-
-Session expiration:
-Authenticated sessions expire after 20 minutes. A mandatory warning appears during the final 5 minutes, and authorized users may renew an active session.
-
-CSRF protection:
-Authenticated state-changing requests require a matching CSRF token.
-
-Logging:
-Production logging applies centralized sanitization intended to prevent credentials, session values, sensitive fields, and exception details from being written to logs.
-
-Roles:
-Admin and UR users can manage records. Read Only users can view records.
-
-Audit logging:
-Security and authorization actions are recorded without storing PHI values in audit metadata.
-```
-
-The three key types are separate and should not be mixed:
-
-```env
-AUTHSTATUS_ENCRYPTION_KEY=field-level Fernet encryption key
-AUTHSTATUS_SQLCIPHER_KEY=SQLCipher database key
-AUTHSTATUS_BACKUP_ENCRYPTION_KEY=encrypted backup file key
-```
-
-## Project Structure
-
-```text
-├── backend/
-│   ├── authstatus_api/
-│   │   ├── audit/
-│   │   ├── authorizations/
-│   │   ├── backups/
-│   │   ├── database_encryption/
-│   │   ├── observability/
-│   │   ├── pdf_intake/
-│   │   ├── persistence/
-│   │   ├── registered_options/
-│   │   ├── routers/
-│   │   ├── security/
-│   │   ├── crypto.py
-│   │   ├── errors.py
-│   │   ├── main.py
-│   │   ├── schemas.py
-│   │   └── settings.py
-│   ├── scripts/
-│   ├── tests/
-│   │   ├── audit/
-│   │   ├── authorizations/
-│   │   ├── backups/
-│   │   ├── configuration/
-│   │   ├── database_encryption/
-│   │   ├── observability/
-│   │   ├── pdf_intake/
-│   │   ├── registered_options/
-│   │   ├── schemas/
-│   │   ├── security/
-│   │   └── conftest.py
-│   ├── requirements.txt
-│   ├── requirements-dev.txt
-│   └── pyproject.toml
-│
-├── deployment/
-│   ├── linux/
-│   │   └── systemd/
-│   │       ├── carequeue-backup.service
-│   │       └── carequeue-backup.timer
-│   └── windows/
-│       ├── install-backup-task.ps1
-│       ├── remove-backup-task.ps1
-│       └── run-backup.ps1
-│
-├── docs/
-│   ├── README.md
-│   ├── assets/
-│   │   └── screenshots/
-│   └── workflows/
-│       └── backup-and-recovery.md
-│
-├── frontend/
-│   ├── src/
-│   │   ├── api/
-│   │   ├── components/
-│   │   │   ├── layout/
-│   │   │   └── security/
-│   │   ├── hooks/
-│   │   ├── pages/
-│   │   ├── types/
-│   │   └── utils/
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── .env.example
-├── ARCHITECTURE.md
-├── CONTRIBUTING.md
-├── DISCLAIMER.md
-├── README.md
-├── ROADMAP.md
-├── SECURITY.md
-├── LICENSE
-└── .gitignore
-```
-
-## Backend Setup
-
-From the repository root:
-
-```bash
+```powershell
 cd backend
-py -3.12 -m venv .venv
-.venv\Scripts\activate
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-dev.txt
 ```
 
-Create a root runtime environment file:
+Copy the root environment example:
 
-```text
-.env
+```powershell
+cd ..
+Copy-Item .env.example .env
 ```
 
-Use `.env.example` as the template.
+Fill in the required keys and local paths in `.env`. Do not commit that file.
 
-Generate keys:
+Start the API from `backend`:
 
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-Run that command separately for:
-
-```env
-AUTHSTATUS_ENCRYPTION_KEY=
-AUTHSTATUS_BACKUP_ENCRYPTION_KEY=
-```
-
-For `AUTHSTATUS_SQLCIPHER_KEY`, use a long local passphrase or another securely generated value.
-
-Recommended SQLCipher `.env` configuration:
-
-```env
-AUTHSTATUS_ENCRYPTION_KEY=your-field-encryption-key
-AUTHSTATUS_SQLCIPHER_KEY=your-sqlcipher-key
-AUTHSTATUS_BACKUP_ENCRYPTION_KEY=your-backup-encryption-key
-
-AUTHSTATUS_DATABASE_PATH=backend/data/auth_tracker.sqlcipher.db
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
-AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=false
-
-AUTHSTATUS_BACKUP_DIRECTORY=backend/backups
-AUTHSTATUS_RESTORE_DIRECTORY=backend/restores
-AUTHSTATUS_CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
-```
-
-Plaintext SQLite fallback configuration:
-
-```env
-AUTHSTATUS_ENCRYPTION_KEY=your-field-encryption-key
-AUTHSTATUS_SQLCIPHER_KEY=your-sqlcipher-key
-AUTHSTATUS_BACKUP_ENCRYPTION_KEY=your-backup-encryption-key
-
-AUTHSTATUS_DATABASE_PATH=backend/data/auth_tracker.db
-AUTHSTATUS_DATABASE_ENCRYPTION=plaintext
-AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=false
-
-AUTHSTATUS_BACKUP_DIRECTORY=backend/backups
-AUTHSTATUS_RESTORE_DIRECTORY=backend/restores
-AUTHSTATUS_CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
-```
-
-Only one database mode should be active at a time.
-
-Start the backend:
-
-```bash
+```powershell
 uvicorn authstatus_api.main:create_app --factory --host 127.0.0.1 --port 8000
 ```
 
-Health check:
-
-```text
-http://127.0.0.1:8000/api/health
-```
-
-## Frontend Setup
-
-From the repository root:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The frontend uses this default backend API URL if no Vite environment override is provided:
+The development API is available at:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-The frontend usually runs at:
+### Frontend
+
+In a second terminal:
+
+```powershell
+cd frontend
+npm install
+Copy-Item .env.example .env.development.local
+npm run dev
+```
+
+The development frontend normally opens at:
 
 ```text
 http://localhost:5173
 ```
 
-## Creating the First User
+The development environment file points the frontend directly to the local FastAPI server. Production builds use same-origin `/api` requests through the reverse proxy.
 
-There is no public signup screen. Create users locally from the backend script.
+## Create the First User
 
-From the repository root:
+CareQueue does not include public account registration. Users are created from the backend script.
 
-```bash
-python backend/scripts/create_user.py --username admin@example.com --role Admin
+With the backend environment active and the root `.env` configured:
+
+```powershell
+python backend/scripts/create_user.py --username carequeue.admin --role Admin
 ```
+
+The script prompts for a password without printing it to the terminal.
 
 Available roles:
 
-```text
-Admin
-UR
-Read Only
-```
+- **Admin:** Full record access plus user and administrative controls
+- **UR:** Create, view, edit, and manage authorization work
+- **Read Only:** View records without create, edit, or delete controls
 
-Role behavior:
+## Private Windows Deployment
 
-```text
-Admin:
-Can view, create, edit, and delete authorization records and timeline events.
-
-UR:
-Can view, create, edit, and delete authorization records and timeline events.
-
-Read Only:
-Can view records but does not see create, edit, or delete controls.
-```
-
-## Documentation
-
-Additional project documentation is available in the repository root and under `docs/`.
-
-- `ARCHITECTURE.md` explains the frontend, backend, persistence, security, audit, backup, logging, and PDF-intake structure.
-- `ROADMAP.md` tracks completed milestones, near-term priorities, and longer-term development direction.
-- `SECURITY.md` describes security controls, key handling, sessions, CSRF protection, logging, encrypted storage, backups, and reporting guidance.
-- `DISCLAIMER.md` explains project limitations, PHI and PII warnings, and compliance boundaries.
-- `CONTRIBUTING.md` explains contribution expectations, testing, privacy rules, repository organization, and pull request guidance.
-- `docs/workflows/backup-and-recovery.md` documents manual and scheduled encrypted backups, restoration, verification, Windows Task Scheduler, and Linux systemd operation.
-- `deployment/windows/` contains Windows backup runner, installer, and removal scripts.
-- `deployment/linux/systemd/` contains the Linux backup service and timer definitions.
-- `docs/assets/screenshots/` is reserved for sanitized screenshots created with entirely synthetic data.
-
-## API Endpoints
-
-```text
-GET    /api/health
-
-POST   /api/security/login
-POST   /api/security/logout
-GET    /api/security/me
-POST   /api/security/session/renew
-
-GET    /api/auths
-POST   /api/auths
-GET    /api/auths/{auth_id}
-PATCH  /api/auths/{auth_id}
-DELETE /api/auths/{auth_id}
-
-GET    /api/auths/{auth_id}/events
-POST   /api/auths/{auth_id}/events
-PATCH  /api/auths/{auth_id}/events/{event_id}
-DELETE /api/auths/{auth_id}/events/{event_id}
-
-GET    /api/analytics/summary
-```
-
-Most API routes require an authenticated secure cookie. State-changing authenticated requests also require CSRF validation.
-
-## Encrypted Backups
-
-Create an encrypted backup of the active database:
-
-```bash
-python backend/scripts/create_encrypted_backup.py
-```
-
-Backups are written to:
-
-```text
-backend/backups/
-```
-
-Backup files end in:
-
-```text
-.db.enc
-```
-
-Restore an encrypted backup to a safe restore location:
-
-```bash
-python backend/scripts/restore_encrypted_backup.py backend/backups/<backup-file>.db.enc
-```
-
-Restores are written to:
-
-```text
-backend/restores/
-```
-
-The restore script does not overwrite the active database.
-
-### Automated backup scheduling
-
-CareQueue includes platform-specific scheduling files:
+CareQueue includes a Windows production installer and service definitions under:
 
 ```text
 deployment/windows/
-deployment/linux/systemd/
-```
-Windows deployments may register the encrypted backup utility through Task Scheduler. Linux deployments may use the supplied systemd service and timer.
-
-Detailed setup, verification, removal, recovery, and troubleshooting instructions are available in:
-`docs/workflows/backup-and-recovery.md`
-
-Scheduled backups should write to an isolated storage path outside the active application installation and database directory. Backup files, environment files, and encryption keys must remain restricted to authorized service accounts and administrators.
-
-## SQLCipher Workflow
-
-CareQueue supports optional SQLCipher database-file encryption.
-
-Prepare a safe SQLCipher cutover:
-
-```bash
-python backend/scripts/prepare_sqlcipher_cutover.py --force
 ```
 
-This will:
+The current Windows deployment can:
 
-```text
-1. Create an encrypted backup of the plaintext database
-2. Create a SQLCipher encrypted database copy
-3. Verify required CareQueue tables
-4. Print the .env values needed to switch to SQLCipher mode
-5. Avoid deleting the plaintext database
+- Build the production frontend
+- Install the backend into `C:\Program Files\CareQueue`
+- Store runtime data under `C:\ProgramData\CareQueue`
+- Generate and preserve independent production encryption keys
+- Run the FastAPI backend as a Windows service
+- Serve the frontend and proxy `/api` through Caddy
+- Provide private HTTPS through a local hostname such as `carequeue.local`
+- Preserve service state during upgrades
+- Install scheduled encrypted backups
+
+The production installer is intended for private or restricted-network use. It should not be treated as a public internet deployment template without additional review and hardening.
+
+Technical deployment details belong in the deployment scripts and [ARCHITECTURE.md](ARCHITECTURE.md). Security responsibilities and limitations are covered in [SECURITY.md](SECURITY.md).
+
+## Backups and Recovery
+
+CareQueue can create encrypted backups of the active database:
+
+```powershell
+python backend/scripts/create_encrypted_backup.py
 ```
 
-The SQLCipher database is usually created at:
+A backup can be decrypted and staged in a safe restore location without overwriting the active database:
 
-```text
-backend/data/auth_tracker.sqlcipher.db
+```powershell
+python backend/scripts/restore_encrypted_backup.py path\to\backup.db.enc
 ```
 
-Verify a SQLCipher database manually:
+CareQueue also includes:
 
-```bash
-python backend/scripts/verify_sqlcipher_database.py
-```
+- Backup verification
+- Retention rules
+- A minimum protected backup count
+- Windows Task Scheduler integration
+- Linux systemd scheduling files
+- Staged recovery activation
 
-Create only the SQLCipher copy manually:
+Detailed instructions are in [docs/workflows/backup-and-recovery.md](docs/workflows/backup-and-recovery.md).
 
-```bash
-python backend/scripts/migrate_to_sqlcipher.py
-```
+Backups are useful only when restoration is tested. Keep backup keys separate from backup files and restrict both to authorized administrators or service accounts.
 
-Recommended local switch to SQLCipher mode:
+## PDF Intake
 
-```env
-AUTHSTATUS_DATABASE_PATH=../data/auth_tracker.sqlcipher.db
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
-AUTHSTATUS_SQLCIPHER_KEY=your-sqlcipher-key
-```
+CareQueue can read text from supported PDFs locally and present likely intake values for review.
 
-Keep the plaintext database until SQLCipher mode has been tested through normal app use.
+The intake workflow is designed to:
+
+- Keep processing local
+- Avoid sending documents to an external OCR service
+- Mark uncertain fields for review
+- Require confirmation before accepting flagged values
+- Avoid treating extracted data as automatically correct
+
+Scanned or malformed documents may not contain usable embedded text. Extracted values must be reviewed before they are saved.
 
 ## Testing
 
-Backend tests:
+### Backend
 
-```bash
-cd backend
+From `backend`, with the project virtual environment active:
+
+```powershell
 pytest tests -n auto -q
-```
-
-Ruff:
-
-```bash
 python -m ruff check . --fix
 ```
 
-Security scan:
-```bash
+Additional security checks used during development include:
+
+```powershell
 bandit -r authstatus_api
+pip-audit
 ```
 
-Frontend build check:
+### Frontend
 
-```bash
-cd frontend
+From `frontend`:
+
+```powershell
+npm test
 npm run build
 ```
 
-## Files That Should Not Be Committed
+## Sensitive Files
 
-The following files and directories are local runtime data, generated artifacts, or sensitive configuration and should remain ignored:
+Do not commit local configuration, databases, backups, restored databases, intake documents, or screenshots containing real information.
+
+Common local-only paths include:
 
 ```text
 .env
+backend/.venv/
 backend/data/
 backend/backups/
 backend/restores/
+frontend/node_modules/
 local_backups/
 local_config/
 local_vobs/
-*.db
-*.sqlite
-*.sqlite3
-*.db.enc
-*.restored.db
-frontend/node_modules/
-backend/.venv/
-__pycache__/
 ```
 
-Before committing, check the staged and unstaged files:
+Before committing:
 
-```bash
+```powershell
 git status --short
 ```
 
-Do not commit databases, encrypted backups, restored databases, environment files, encryption keys, real intake PDFs, screenshots containing sensitive information, virtual environments, caches, or `node_modules`.
+Use synthetic data in tests, screenshots, examples, and public documentation.
 
+## Documentation
 
-## Development Notes
+- [ARCHITECTURE.md](ARCHITECTURE.md) explains the technical structure and request flow.
+- [SECURITY.md](SECURITY.md) documents security controls, reporting, deployment assumptions, and limitations.
+- [ROADMAP.md](ROADMAP.md) tracks completed work and planned priorities.
+- [DISCLAIMER.md](DISCLAIMER.md) explains privacy, compliance, and use limitations.
+- [CONTRIBUTING.md](CONTRIBUTING.md) covers contribution and testing expectations.
+- [docs/workflows/backup-and-recovery.md](docs/workflows/backup-and-recovery.md) covers backup scheduling, restoration, and recovery.
 
-- The FastAPI backend lives in `backend/authstatus_api`.
-- Backend tests are organized by application domain under `backend/tests`.
-- The frontend lives in `frontend/src`.
-- The application uses a local-first architecture and should not be exposed publicly without a documented deployment model and additional production hardening.
-- Session expiration is enforced by the backend. The frontend countdown is informational only.
-- The visible session countdown is optional and off by default. The five-minute expiration warning remains mandatory.
-- Uploaded PDFs are processed for intake extraction and should not be persisted or logged by the intake workflow.
-- Screenshots and examples must use synthetic data only.
-- Scheduled backup success does not replace periodic restore testing.
-- Security controls reduce risk but do not independently establish regulatory compliance.
+## Status
+
+CareQueue is under active development. The core authorization workflow, authentication, encrypted storage options, encrypted backups, PDF-assisted intake, frontend testing, and private Windows deployment are implemented.
+
+The roadmap still includes additional deployment documentation, upgrade and rollback improvements, broader browser-level testing, accessibility work, Linux deployment work, and a separate synthetic-data demo environment.
+
+## License
+
+See [LICENSE](LICENSE).

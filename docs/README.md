@@ -1,3 +1,565 @@
 # CareQueue Documentation
 
-This folder is for additional CareQueue documentation, screenshots, workflow notes, setup references, and future implementation documentation.
+This directory contains CareQueue’s detailed deployment, operations, administration, workflow, development, and troubleshooting documentation.
+
+The root-level documents provide the project overview:
+
+```text
+README.md
+ARCHITECTURE.md
+SECURITY.md
+ROADMAP.md
+```
+
+The files under `docs/` provide task-specific guidance.
+
+## Start Here
+
+### Project Overview
+
+See:
+
+```text
+../README.md
+```
+
+Use it for:
+
+- Project purpose
+- Main workflows
+- Technology stack
+- Local development overview
+- Production overview
+- Testing summary
+- Security summary
+
+### Architecture
+
+See:
+
+```text
+../ARCHITECTURE.md
+```
+
+Use it for:
+
+- Frontend and backend structure
+- Authentication and session flow
+- Database and encryption boundaries
+- Backup and recovery architecture
+- PDF intake architecture
+- Windows production services
+- Current architectural limitations
+
+### Security
+
+See:
+
+```text
+../SECURITY.md
+```
+
+Use it for:
+
+- Security reporting
+- Sensitive-data rules
+- Authentication and roles
+- Session and CSRF controls
+- Encryption and key handling
+- Backup security
+- PDF security
+- Logging and audit boundaries
+- Production responsibilities
+
+### Roadmap
+
+See:
+
+```text
+../ROADMAP.md
+```
+
+Use it for:
+
+- Current state
+- Completed work
+- Near-term priorities
+- Longer-term plans
+- Known limitations
+
+## Deployment
+
+### Windows
+
+See:
+
+```text
+deployment/windows.md
+```
+
+Use it for:
+
+- First-time production installation
+- Runtime and application paths
+- Caddy and WinSW prerequisites
+- Private hostname setup
+- API and Caddy services
+- HTTPS and certificate trust
+- First production user
+- Scheduled backups
+- Service management
+- Removal and reinstallation
+
+This is the primary production deployment guide.
+
+### Linux
+
+See:
+
+```text
+deployment/linux.md
+```
+
+Use it for:
+
+- Intended filesystem layout
+- Dedicated service account
+- Environment configuration
+- Frontend build
+- Caddy configuration
+- Backup systemd service and timer
+- Firewall and permission review
+- Current Linux limitations
+
+Linux support remains partial. The repository does not yet include a complete Linux installer or a CareQueue API systemd service.
+
+## Operations
+
+### Upgrades
+
+See:
+
+```text
+operations/upgrades.md
+```
+
+Use it for:
+
+- Pre-upgrade checks
+- Required tests
+- Backup confirmation
+- Forced production upgrades
+- Service stop and start order
+- Installed file replacement
+- Environment preservation
+- Backend validation
+- Permission hardening
+- Failure handling
+- Rollback planning
+
+### Health Checks
+
+See:
+
+```text
+operations/health-checks.md
+```
+
+Use it for:
+
+- Liveness
+- Readiness
+- Service status
+- Direct API checks
+- HTTPS checks
+- Certificate and hostname checks
+- Post-installation smoke tests
+- Post-upgrade smoke tests
+- Post-recovery smoke tests
+- Monitoring guidance
+
+## Administration
+
+### Users and Security
+
+See:
+
+```text
+administration/users-and-security.md
+```
+
+Use it for:
+
+- User creation
+- Roles
+- Temporary passwords
+- Password resets
+- Required password changes
+- Session expiration and renewal
+- CSRF behavior
+- Deactivation
+- Offboarding
+
+### Audit Log
+
+See:
+
+```text
+administration/audit-log.md
+```
+
+Use it for:
+
+- Audit-event structure
+- Action names
+- Filters
+- Metadata rules
+- Review workflow
+- Retention
+- Integrity limitations
+- Current interface limitations
+
+### Registered Options
+
+See:
+
+```text
+administration/registered-options.md
+```
+
+Use it for:
+
+- Facilities
+- Insurances
+- Web portals
+- Protected `Other` values
+- Normalization
+- Duplicate handling
+- PDF intake matching
+- Filter behavior
+- Maintenance
+
+## Workflows
+
+### Authorization Workflow
+
+See:
+
+```text
+workflows/authorization-workflow.md
+```
+
+Use it for:
+
+- Authorization fields
+- Record creation
+- Editing
+- Deletion
+- Queue behavior
+- Filters
+- Dashboard and calendar interaction
+- Timeline events
+- Current-state versus history
+
+### PDF Intake
+
+See:
+
+```text
+workflows/pdf-intake.md
+```
+
+Use it for:
+
+- Supported PDF behavior
+- Template matching
+- Fillable fields
+- Embedded text
+- Confidence levels
+- Needs-review flags
+- Member and group identifier selection
+- Registered-option matching
+- Local inspection tooling
+- Synthetic fixtures
+- Future OCR considerations
+
+### Backup and Recovery
+
+See:
+
+```text
+workflows/backup-and-recovery.md
+```
+
+Use it for:
+
+- Manual encrypted backups
+- Backup verification
+- Retention
+- Windows scheduled backups
+- Linux scheduled backups
+- Restore staging
+- Recovery preflight
+- Recovery activation
+- Rollback databases
+- Safety backups
+- Recovery drills
+- Key-loss risks
+
+## Development
+
+### Local Development
+
+See:
+
+```text
+development/local-development.md
+```
+
+Use it for:
+
+- Backend setup
+- Frontend setup
+- Development environment
+- Local keys
+- Database mode
+- First local user
+- Synthetic seed data
+- Tests
+- Ruff
+- Frontend build
+- Local reset and dependency recreation
+
+## Troubleshooting
+
+See:
+
+```text
+troubleshooting/index.md
+```
+
+Use it to locate the authoritative guide for:
+
+- Startup problems
+- HTTPS or certificate problems
+- Login and session problems
+- Database problems
+- Backup and recovery problems
+- Upgrade failures
+- PDF intake issues
+- Registered-option issues
+- Audit issues
+- Local development failures
+
+The troubleshooting page is a symptom-based index. It intentionally links to the documents that own each procedure rather than duplicating them.
+
+## Documentation Structure
+
+```text
+docs/
+├── README.md
+├── administration/
+│   ├── audit-log.md
+│   ├── registered-options.md
+│   └── users-and-security.md
+├── deployment/
+│   ├── linux.md
+│   └── windows.md
+├── development/
+│   └── local-development.md
+├── operations/
+│   ├── health-checks.md
+│   └── upgrades.md
+├── troubleshooting/
+│   └── index.md
+└── workflows/
+    ├── authorization-workflow.md
+    ├── backup-and-recovery.md
+    └── pdf-intake.md
+```
+
+New documents should be placed in the most relevant existing area.
+
+Create a new folder only when the subject does not fit cleanly into the current structure.
+
+## Documentation Conventions
+
+### Commands
+
+State the working directory when it changes.
+
+Windows commands use PowerShell unless otherwise noted.
+
+Linux commands use a POSIX-compatible shell unless otherwise noted.
+
+### Paths
+
+Repository-relative paths:
+
+```text
+backend/authstatus_api/
+frontend/src/
+deployment/windows/
+```
+
+Installed Windows paths:
+
+```text
+C:\Program Files\CareQueue
+C:\ProgramData\CareQueue
+```
+
+Installed Linux paths:
+
+```text
+/opt/carequeue
+/var/lib/carequeue
+/etc/carequeue
+```
+
+### Sensitive Values
+
+Documentation must not contain:
+
+- Real patient information
+- Real member IDs
+- Real group numbers
+- Real dates of birth
+- Real authorization numbers
+- Credentials
+- Passwords
+- Session tokens
+- CSRF tokens
+- Encryption keys
+- Authentication cookies
+- Production environment contents
+- Real database contents
+- Real intake documents
+
+Use clearly synthetic examples.
+
+### Screenshots
+
+Screenshots must use synthetic data only.
+
+Store images under:
+
+```text
+docs/images/
+```
+
+Organize them by relevant documentation area.
+
+Example:
+
+```text
+docs/images/
+├── administration/
+├── deployment/
+├── development/
+├── operations/
+└── workflows/
+```
+
+Use descriptive lowercase filenames.
+
+Before committing a screenshot:
+
+- Review it at full resolution
+- Remove personal usernames and machine names where practical
+- Remove browser profile details
+- Remove unrelated bookmarks
+- Confirm no real data is visible
+- Confirm no environment values are visible
+- Confirm no tokens, cookies, or request bodies are visible
+- Confirm no terminal history reveals sensitive values
+- Confirm filenames contain no sensitive information
+
+### Links
+
+Use relative repository links.
+
+Examples:
+
+```markdown
+[Security](../SECURITY.md)
+[Windows Deployment](deployment/windows.md)
+[Backup and Recovery](workflows/backup-and-recovery.md)
+```
+
+Do not use links that depend on a local filesystem path.
+
+## Updating Documentation
+
+Update documentation when a change affects:
+
+- Installation
+- Configuration
+- Runtime paths
+- Service names
+- Environment variables
+- Security behavior
+- Roles or permissions
+- Authorization workflows
+- Backup behavior
+- Recovery behavior
+- PDF intake behavior
+- Testing commands
+- Known limitations
+- Operator responsibilities
+
+Do not leave obsolete commands, filenames, paths, or screenshots in the repository.
+
+## Review Checklist
+
+Before merging documentation changes:
+
+- Paths match the current repository
+- Service names match deployment files
+- Commands use current script names
+- Environment-variable names are correct
+- Internal links resolve
+- Security claims are limited and accurate
+- No HIPAA compliance claim is made
+- No real PHI or PII is present
+- No key or credential is present
+- Headings are clear
+- Repeated content is intentional
+- Screenshots use synthetic data
+- Current limitations are stated where needed
+- Examples match current behavior
+
+## Testing Documentation Changes
+
+Markdown-only changes do not require pytest by themselves.
+
+When documentation accompanies code changes, run the relevant checks.
+
+Backend:
+
+```powershell
+pytest tests -n auto -q
+python -m ruff check . --fix
+```
+
+Frontend:
+
+```powershell
+npm test
+npm run build
+```
+
+Deployment documentation should also be validated against the relevant manual workflow.
+
+## Reference point
+
+The current repository files remain authoritative.
+
+When documentation and code disagree:
+
+1. Review the current source.
+2. Confirm whether behavior changed.
+3. Update the documentation or implementation.
+4. Add tests when the mismatch reflects missing coverage.
+
+Do not rely on old screenshots, copied commands, or previous release notes without checking the current repository.

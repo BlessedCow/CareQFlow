@@ -77,7 +77,6 @@ const adminNavigationItems: {
   },
 ];
 
-
 const PAGE_TITLES: Record<AppPage, string> = {
   dashboard: "Dashboard",
   authorizations: "Authorizations",
@@ -124,9 +123,8 @@ export function AppShell({
       >
         <div className="flex h-16 items-center border-b border-inherit px-6">
           <Activity className="mr-2 h-6 w-6 text-blue-500" />
-          <span className="text-lg font-bold tracking-wide">UR Analytics</span>
+          <span className="text-lg font-bold tracking-wide">CareQueue</span>
         </div>
-
         <nav className="flex-1 space-y-2 px-4 py-6">
           {[
             ...navigationItems,
@@ -186,9 +184,7 @@ export function AppShell({
         >
           <div className="flex items-center md:hidden">
             <Activity className="mr-2 h-6 w-6 text-blue-500" />
-            <span className="text-lg font-bold tracking-wide">
-              UR Analytics
-            </span>
+            <span className="text-lg font-bold tracking-wide">CareQueue</span>
           </div>
 
           <div className="hidden md:block">

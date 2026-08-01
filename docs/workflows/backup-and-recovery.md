@@ -1,12 +1,16 @@
-# Backup and Recovery Guide
+# Backup and Recovery
 
-This guide describes how to create, restore, and verify encrypted CareQueue database backups.
+CareQueue creates encrypted database backups and uses a staged recovery process designed to protect the active database.
 
-CareQueue backups are intended to protect the active local database without directly modifying or overwriting it during recovery.
+The central rule is:
 
-## Important Key Requirements
+> Never replace the active database until the selected backup has been decrypted, validated, staged, and reviewed.
 
-CareQueue uses separate keys for separate protection layers:
+Backup creation, restore staging, recovery staging, and recovery activation are separate operations.
+
+## Protection Layers
+
+CareQueue uses separate keys:
 
 ```env
 AUTHSTATUS_ENCRYPTION_KEY=
@@ -14,438 +18,720 @@ AUTHSTATUS_SQLCIPHER_KEY=
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=
 ```
 
-Each key has a different purpose:
+Purpose:
 
-- `AUTHSTATUS_ENCRYPTION_KEY` decrypts selected sensitive fields stored inside the database.
-- `AUTHSTATUS_SQLCIPHER_KEY` unlocks the SQLCipher database file.
-- `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` decrypts encrypted `.db.enc` backup files.
+- `AUTHSTATUS_ENCRYPTION_KEY` protects selected sensitive field values
+- `AUTHSTATUS_SQLCIPHER_KEY` opens the encrypted database file
+- `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` encrypts and decrypts `.db.enc` backups
 
-A restored database may be unusable if any required key is missing or incorrect.
+Generate and store them independently.
 
-Store the keys securely outside the repository. Do not commit them, include them in screenshots, or paste them into issues or documentation.
+A backup may decrypt successfully and still be unusable when the SQLCipher or field-level encryption key is wrong.
 
-## Before Creating a Backup
+## Key Custody
 
-Confirm that the root `.env` points to the intended active database:
+Keep recoverable copies of all required keys in an approved secret-management process.
 
-```env
-AUTHSTATUS_DATABASE_PATH=backend/data/auth_tracker.sqlcipher.db
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
-```
+Do not store keys:
 
-Also confirm that the SQLCipher and backup encryption keys are configured.
+- In source control
+- Beside backups
+- In screenshots
+- In scheduled-task arguments
+- In service XML
+- In ordinary email or chat
+- Only on the database host
 
-From the repository root:
+Document ownership, approved retrieval, rotation, and recovery testing.
 
-```powershell
-backend\.venv\Scripts\python.exe -c "import sys; sys.path.insert(0, 'backend'); from authstatus_api.settings import get_settings; s=get_settings(); print(s.database_path); print(s.database_encryption); print(bool(s.sqlcipher_key)); print(bool(s.backup_encryption_key))"
-```
+## Standard Paths
 
-Expected output:
-
-```text
-backend\data\auth_tracker.sqlcipher.db
-sqlcipher
-True
-True
-```
-
-Do not proceed if either key prints `False`.
-
-## Create an Encrypted Backup
-
-Run from the repository root:
-
-```powershell
-backend\.venv\Scripts\python.exe backend\scripts\create_encrypted_backup.py
-```
-
-The encrypted backup is written to:
+### Windows production
 
 ```text
+Database:
+C:\ProgramData\CareQueue\Data
+
+Backups:
+C:\ProgramData\CareQueue\Backups
+
+Restores:
+C:\ProgramData\CareQueue\Restores
+
+Recovery:
+C:\ProgramData\CareQueue\Recovery
+
+Environment:
+C:\ProgramData\CareQueue\Config\carequeue.env
+```
+
+### Development
+
+```text
+backend/data/
 backend/backups/
+backend/restores/
 ```
 
-Backup filenames end in:
+These local directories must remain uncommitted.
+
+## Backup Format
+
+Encrypted backups end with:
 
 ```text
 .db.enc
 ```
 
-CareQueue creates a consistent database snapshot before encrypting the backup. It does not simply copy the active database file while it may be changing.
+CareQueue creates a consistent database snapshot, encrypts it, writes the output atomically, and verifies the result.
 
-## Find the Newest Backup
+It does not simply copy the live database file while it may be changing.
+
+## Create a Development Backup
 
 From the repository root:
 
 ```powershell
-Get-ChildItem backend\backups -Filter *.db.enc |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1 |
-    Format-List FullName, Length, LastWriteTime
+backend\.venv\Scripts\python.exe `
+    backend\scripts\create_encrypted_backup.py
 ```
 
-Confirm that the file exists and its size is greater than zero.
+A successful result includes:
 
-## Restore an Encrypted Backup
+```text
+Created and verified encrypted backup: <path>
+```
 
-Restoring a backup creates a separate database under `backend/restores/`. It does not overwrite the active CareQueue database.
+Retention is applied after successful creation.
 
-Run:
+## Create a Windows Production Backup
+
+Use the installed runner:
 
 ```powershell
-backend\.venv\Scripts\python.exe backend\scripts\restore_encrypted_backup.py "G:\CareQueue\backend\backups\<backup-file>.db.enc"
+& "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1"
 ```
 
-Replace `<backup-file>` with the exact backup filename.
-
-The restored database is written to:
+Default destination:
 
 ```text
-backend/restores/
+C:\ProgramData\CareQueue\Backups
 ```
 
-Restored filenames normally end in:
+The runner loads the protected production environment and returns a nonzero exit code when creation or retention fails.
 
-```text
-.restored.db
-```
+## Custom Backup Directory
 
-The restore process:
-
-1. Decrypts the backup.
-2. Writes it to a temporary file.
-3. Runs a database integrity check.
-4. Verifies that required CareQueue tables exist.
-5. Moves the validated database into the restore directory.
-6. Removes temporary files if validation fails.
-
-## Find the Newest Restored Database
+Development:
 
 ```powershell
-Get-ChildItem backend\restores -Filter *.db |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1 |
-    Format-List FullName, Length, LastWriteTime
+backend\.venv\Scripts\python.exe `
+    backend\scripts\create_encrypted_backup.py `
+    --backup-directory "G:\CareQueue\local_backups"
 ```
 
-## Verify a Restored SQLCipher Database
-
-Run:
+Windows production:
 
 ```powershell
-backend\.venv\Scripts\python.exe backend\scripts\verify_sqlcipher_database.py --database-path "G:\CareQueue\backend\restores\<restored-file>.db"
+& "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1" `
+    -BackupDirectory "D:\CareQueueBackups"
 ```
 
-Replace `<restored-file>` with the exact restored filename.
+External storage may require:
 
-Expected output includes:
-
-```text
-Verified SQLCipher database
-Required tables found:
-- audit_events
-- auth_events
-- auths
-- sessions
-- users
-```
-
-## Confirm Plain SQLite Cannot Read the Restored File
-
-A SQLCipher database should not be readable through ordinary SQLite.
-
-Run this from an activated backend virtual environment:
-
-```powershell
-python -c "import sqlite3; p=r'G:\CareQueue\backend\restores\<restored-file>.db'; c=sqlite3.connect(p); ok=False;
-try:
- c.execute('SELECT name FROM sqlite_master LIMIT 1').fetchone()
-except sqlite3.DatabaseError:
- ok=True
-finally:
- c.close()
-print('PASS: plaintext SQLite cannot read the restored SQLCipher database' if ok else 'FAIL: plaintext SQLite read the restored database')"
-```
-
-Expected:
-
-```text
-PASS: plaintext SQLite cannot read the restored SQLCipher database
-```
-
-## Recovery Checklist
-
-Before considering a restored database usable:
-
-1. Confirm the backup decrypted successfully.
-2. Confirm restore validation completed.
-3. Run the independent SQLCipher verification script.
-4. Confirm ordinary SQLite cannot read the restored file.
-5. Keep the active database unchanged during verification.
-6. Confirm all required encryption keys are available.
-7. Preserve the original active database as a rollback copy.
-8. Test the restored database through CareQueue before replacing anything.
-
-## Replacing the Active Database
-
-CareQueue does not automatically replace the active database during restore.
-
-Do not overwrite the active database until the restored copy has been independently verified.
-
-Before any manual replacement:
-
-1. Stop the CareQueue backend.
-2. Create another encrypted backup of the current active database.
-3. Preserve the current active database as a rollback copy.
-4. Confirm the restored database uses the expected SQLCipher key.
-5. Confirm the root `.env` points to the intended database path.
-6. Restart CareQueue and verify login, authorization records, users, and audit events.
-
-Manual replacement should be treated as a recovery operation, not a routine restore step.
-
-## Files That Must Not Be Committed
-
-Do not commit:
-
-```text
-backend/backups/
-backend/restores/
-backend/data/
-*.db
-*.db.enc
-*.restored.db
-.env
-```
-
-Before committing documentation or source changes:
-
-```powershell
-git status --short
-```
-
-Encrypted backup files should still be treated as sensitive even though their contents are encrypted.
-
-## Automated Backup Scheduling
-
-CareQueue includes deployment files for scheduled encrypted backups on Windows and Linux.
-
-The scheduling files invoke the same encrypted backup utility used for manual backups. They do not contain database keys or backup-encryption keys.
-
-### Windows Task Scheduler
-
-Windows deployment files are located under:
-
-```text
-deployment/windows/
-├── install-backup-task.ps1
-├── remove-backup-task.ps1
-└── run-backup.ps1
-```
-The scheduled task defaults to:
-
-- Task name: `CareQueue Encrypted Backup`
-- Run time: `02:00`
-- Service account: `SYSTEM`
-- Production installation directory: `C:\Program Files\CareQueue`
-- Backup directory: `C:\ProgramData\CareQueue\Backups`
-- Environment file: `C:\ProgramData\CareQueue\Config\carequeue.env`
-
-Run PowerShell as Administrator before installing or removing the scheduled task.
-
-### Install the Windows Scheduled Task
-
-For a production installation:
-
-`.\deployment\windows\install-backup-task.ps1`
-
-For a custom installation path:
-
-```ps1
-.\deployment\windows\install-backup-task.ps1 `
-  -InstallDirectory "G:\CareQueue" `
-  -BackupDirectory "G:\CareQueue\local_backups" `
-  -EnvironmentFile "G:\CareQueue\.env"
-```
-
-The root `.env` example above is appropriate only for local testing. Production deployments should keep configuration and secrets outside the application installation directory.
-
-### Confirm the Windows Task
-```ps1
-Get-ScheduledTask -TaskName "CareQueue Encrypted Backup"
-```
-
-A correctly installed task should normally show:
-`State : Ready`
-
-#### Run the Windows Task Manually
-```ps1
-Start-ScheduledTask -TaskName "CareQueue Encrypted Backup"
-```
-Wait for the task to finish, then inspect its result:
-```ps1
-Get-ScheduledTaskInfo -TaskName "CareQueue Encrypted Backup"
-```
-A successful run reports:
-`LastTaskResult : 0`
-
-Confirm that a nonempty encrypted backup was created:
-```ps1
-Get-ChildItem "G:\CareQueue\local_backups" |
-  Sort-Object LastWriteTime -Descending |
-  Select-Object -First 5 Name, Length, LastWriteTime
-```
-Production deployments should replace the example path with the configured backup directory.
-
-#### Remove the Windows Scheduled Task
-Run PowerShell as Administrator:
-```ps1
-.\deployment\windows\remove-backup-task.ps1
-```
-Confirm that it no longer exists:
-```ps1
-Get-ScheduledTask `
-  -TaskName "CareQueue Encrypted Backup" `
-  -ErrorAction SilentlyContinue
-```
-The removal script deletes only the scheduled task. It does not delete backups, configuration files, databases, or encryption keys.
-
-#### Windows Troubleshooting
-`Access is denied`
-
-- Open PowerShell as Administrator.
-- Re-run the installer.
-- Confirm that the account can register scheduled tasks.
-
-`Backup runner was not found`
-
-- Confirm that `-InstallDirectory` points to the CareQueue repository or installation root.
-- Confirm that `deployment\windows\run-backup.ps1` exists underneath that directory.
-
-`Environment file was not found`
-- Pass the correct path using `-EnvironmentFile`.
-- Do not use `.env.example` as a production configuration file.
-- Do not paste environment-file contents into logs, issues, or screenshots.
-
-`LastTaskResult is not 0`
-- Run `run-backup.ps1` manually with the same arguments.
-- Confirm that the configured Python executable exists.
-- Confirm that the database and backup encryption keys are available.
-- Confirm that the service account can read the database and environment file.
-- Confirm that the service account can write to the backup directory.
-
-### Linux systemd Timer
-Linux deployment files are located under:
-```bash
-deployment/linux/systemd/
-├── carequeue-backup.service
-└── carequeue-backup.timer
-```
-The supplied timer runs once daily around 2:00 AM and uses:
-```bash
-/var/lib/carequeue/backups
-```
-as the isolated backup destination.
-
-The service expects CareQueue to be installed at:
-```bash
-/opt/carequeue
-```
-and expects its environment file at:
-```bash
-/etc/carequeue/carequeue.env
-```
-The service account must be able to:
-- Read the CareQueue installation and active database.
-- Read the protected environment file.
-- Write to the isolated backup directory.
-- Execute the backend virtual environment’s Python interpreter.
-
-The environment file must include the required database and encryption settings. For an external backup directory, it should also include:
 ```env
-AUTHSTATUS_BACKUP_DIRECTORY=/var/lib/carequeue/backups
 AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=true
 ```
-The external path is intentional for deployment isolation. Filesystem ownership and permissions must restrict access to the CareQueue service account and authorized administrators.
 
-#### Verify the Unit Files
-On the Linux deployment host:
+That setting permits the path. It does not secure it.
+
+The destination still requires appropriate permissions, volume protection, retention, and off-host policy.
+
+## Inspect Recent Backups
+
+Production example:
+
+```powershell
+Get-ChildItem `
+    "C:\ProgramData\CareQueue\Backups" `
+    -Filter "*.db.enc" |
+Sort-Object LastWriteTime -Descending |
+Select-Object -First 10 `
+    Name,
+    Length,
+    LastWriteTime
+```
+
+Confirm:
+
+- A recent file exists
+- File size is greater than zero
+- Timestamp matches the expected run
+- Correct directory is being inspected
+
+A file listing does not prove recoverability.
+
+## Verification
+
+Backup verification confirms that CareQueue can:
+
+1. Read the encrypted file.
+2. Decrypt it with the backup key.
+3. Open the decrypted database in the configured mode.
+4. Run an integrity check.
+5. Confirm required CareQueue tables exist.
+
+Verification is stronger than checking for a file, but it is not a full recovery drill.
+
+## Admin Backup Interface
+
+Admin-only backup operations are available under:
+
+```text
+/api/admin/system/backups
+```
+
+Current workflow supports:
+
+- Listing backups
+- Creating a restore point
+- Verifying a restore point
+- Viewing pending recovery status
+- Staging a backup
+- Canceling staged recovery
+
+Backup and recovery events are recorded in the Audit Log.
+
+## Retention
+
+Retention settings:
+
+```env
+AUTHSTATUS_BACKUP_RETENTION_DAYS=
+AUTHSTATUS_BACKUP_MINIMUM_COUNT=
+```
+
+Default Windows values are equivalent to:
+
+```text
+Retention period: 90 days
+Minimum retained backups: 5
+```
+
+Rules:
+
+- Old backups may become eligible for deletion
+- The minimum count remains protected
+- A backup tied to pending recovery remains protected
+
+A pruning failure does not necessarily mean the newly created backup is invalid.
+
+## Windows Scheduled Backups
+
+Deployment scripts:
+
+```text
+deployment/windows/install-backup-task.ps1
+deployment/windows/remove-backup-task.ps1
+deployment/windows/run-backup.ps1
+```
+
+Default task:
+
+```text
+Name: CareQueue Encrypted Backup
+Schedule: Daily at 02:00
+Account: SYSTEM
+```
+
+Install:
+
+```powershell
+& "C:\Program Files\CareQueue\deployment\windows\install-backup-task.ps1"
+```
+
+Custom time:
+
+```powershell
+& "C:\Program Files\CareQueue\deployment\windows\install-backup-task.ps1" `
+    -RunAt "03:30"
+```
+
+Validate:
+
+```powershell
+Get-ScheduledTask `
+    -TaskName "CareQueue Encrypted Backup"
+
+Start-ScheduledTask `
+    -TaskName "CareQueue Encrypted Backup"
+
+Get-ScheduledTaskInfo `
+    -TaskName "CareQueue Encrypted Backup"
+```
+
+Then confirm a new nonempty backup exists.
+
+Remove the task:
+
+```powershell
+& "C:\Program Files\CareQueue\deployment\windows\remove-backup-task.ps1"
+```
+
+Removing the task does not delete existing backups.
+
+## Linux Scheduled Backups
+
+Systemd files:
+
+```text
+deployment/linux/systemd/carequeue-backup.service
+deployment/linux/systemd/carequeue-backup.timer
+```
+
+Expected paths:
+
+```text
+Install: /opt/carequeue
+Environment: /etc/carequeue/carequeue.env
+Backups: /var/lib/carequeue/backups
+```
+
+Validate:
+
 ```bash
 systemd-analyze verify \
   deployment/linux/systemd/carequeue-backup.service \
   deployment/linux/systemd/carequeue-backup.timer
 ```
-#### Install the Unit Files
-```bash
-sudo cp deployment/linux/systemd/carequeue-backup.service \
-  /etc/systemd/system/
 
-sudo cp deployment/linux/systemd/carequeue-backup.timer \
-  /etc/systemd/system/
+Install and test the service before enabling the timer.
 
-sudo systemctl daemon-reload
-```
-#### Run the Linux Backup Manually
-Before enabling the timer:
 ```bash
 sudo systemctl start carequeue-backup.service
-```
-Check the result:
-```bash
 sudo systemctl status carequeue-backup.service
+sudo journalctl -u carequeue-backup.service --since today
 ```
-Review the service logs:
-```bash
-sudo journalctl \
-  -u carequeue-backup.service \
-  --since today
-```
-Confirm that a nonempty `.db.enc` file exists:
-```bash
-sudo find /var/lib/carequeue/backups \
-  -maxdepth 1 \
-  -type f \
-  -name "*.db.enc" \
-  -printf "%TY-%Tm-%Td %TH:%TM:%TS %s %f\n"
-```
-#### Enable the Linux Timer
-Enable the timer only after the manual service run succeeds:
+
+Enable the timer only after a successful manual run:
+
 ```bash
 sudo systemctl enable --now carequeue-backup.timer
 ```
-Confirm the next scheduled run:
-```bash
-systemctl list-timers carequeue-backup.timer
+
+## Restore to a Safe File
+
+Restoring does not activate a backup.
+
+Development example:
+
+```powershell
+backend\.venv\Scripts\python.exe `
+    backend\scripts\restore_encrypted_backup.py `
+    "G:\CareQueue\backend\backups\<backup-file>.db.enc"
 ```
-#### Disable the Linux Timer
-```bash
-sudo systemctl disable --now carequeue-backup.timer
+
+Successful output includes:
+
+```text
+Restored backup to: <path>
+This did not overwrite the active database.
 ```
-Disabling the timer does not delete existing backups.
 
-### Scheduled Backup Validation
-A scheduler reporting success is not enough by itself.
+Restored files normally end with:
 
-Administrators should periodically confirm that:
+```text
+.restored.db
+```
 
-1. A recent encrypted backup exists.
-2. The backup file is greater than zero bytes.
-3. Backup timestamps match the expected schedule.
-4. Failed runs are investigated.
-5. At least one backup can be restored and verified.
-6. Backup files remain inaccessible to unauthorized accounts.
-7. Encryption keys are backed up separately and securely.
+## Restore Validation
 
-## Recommended Backup Routine
+Restore processing:
 
-For local personal workflow use:
+1. Resolves the backup through approved storage.
+2. Rejects unsafe paths.
+3. Decrypts into a temporary file.
+4. Opens the database in the configured mode.
+5. Runs an integrity check.
+6. Confirms required tables.
+7. Moves the validated file into the restore directory.
+8. Cleans temporary files after failure.
 
-- Create an encrypted backup before database migrations or major upgrades.
-- Create an encrypted backup before changing encryption settings or keys.
-- Create periodic backups during regular use.
-- Keep more than one recent backup.
-- Periodically perform a restore-and-verification drill.
-- Store at least one protected backup separately from the active computer.
-- Verify that the required keys are also backed up securely.
+A restored file is still not active.
 
-A backup should not be considered reliable until it has been successfully restored and verified.
+## Stage a Recovery
+
+Staging prepares a verified backup for later activation.
+
+It creates:
+
+- A validated staged database
+- A pending-recovery manifest
+- Metadata identifying the source backup and staged filename
+
+Only one pending recovery should exist at a time.
+
+Staging does not stop services or replace the active database.
+
+## Cancel a Staged Recovery
+
+Canceling removes the pending state and records an audit event.
+
+It does not delete the original encrypted backup.
+
+Cancel when:
+
+- Wrong backup was selected
+- A newer restore point is needed
+- Review raised concerns
+- Recovery was postponed
+- A drill is complete
+
+## Activation Requirements
+
+Recovery activation is offline and interactive.
+
+Before activation:
+
+- API service is stopped
+- API port is free
+- Database is not locked
+- Staged and active databases are on the same filesystem
+- No SQLite sidecar files remain
+- A verified encrypted safety backup is created
+- Exact confirmation phrase is entered
+
+Confirmation phrase:
+
+```text
+ACTIVATE RECOVERY
+```
+
+The application remains stopped after activation for review.
+
+## Activate on Windows
+
+Stop services:
+
+```powershell
+Stop-Service -Name "CareQueueCaddy"
+Stop-Service -Name "CareQueueApi"
+```
+
+Load the production environment into the current PowerShell process, then run:
+
+```powershell
+Set-Location "C:\Program Files\CareQueue\backend"
+
+& ".\.venv\Scripts\python.exe" `
+    ".\scripts\activate_staged_recovery.py" `
+    --service-name "CareQueueApi" `
+    --api-host "127.0.0.1" `
+    --api-port 8000
+```
+
+Review the printed plan:
+
+- Active database path
+- Staged database path
+- Rollback path
+- Safety backup path
+- Managed service
+- API socket
+- Detected sidecars
+
+Then enter:
+
+```text
+ACTIVATE RECOVERY
+```
+
+exactly.
+
+## Recovery Preflight
+
+Before cutover, the script:
+
+1. Resolves active, staged, and rollback paths.
+2. Confirms the service is stopped.
+3. Confirms the API socket is free.
+4. Requests exclusive database access.
+5. Detects sidecar files.
+6. Creates and verifies a safety backup.
+7. Confirms files are on the same filesystem.
+8. Prints the activation plan.
+9. Waits for confirmation.
+
+No active database file is replaced during preflight.
+
+## Atomic Cutover
+
+After confirmation:
+
+1. Service and socket checks run again.
+2. Exclusive access is rechecked.
+3. Sidecar files cause refusal.
+4. Active database moves to rollback path.
+5. Staged database moves to active path.
+6. New active database is validated.
+7. Pending manifest is removed after success.
+
+## Failed Final Validation
+
+When final validation fails, the script attempts to:
+
+1. Move the failed activated database back to staging.
+2. Restore the rollback database.
+3. Preserve the encrypted safety backup.
+
+Keep CareQueue stopped until the final state is understood.
+
+## Post-Activation Validation
+
+Before restarting:
+
+- Confirm active database exists
+- Confirm rollback database exists
+- Confirm safety backup exists
+- Confirm pending manifest is gone
+- Confirm no unexpected sidecars exist
+- Review activation output
+
+Start the API:
+
+```powershell
+Start-Service -Name "CareQueueApi"
+```
+
+Check direct readiness:
+
+```powershell
+Invoke-RestMethod `
+    -Uri "http://127.0.0.1:8000/api/health/ready"
+```
+
+Start Caddy:
+
+```powershell
+Start-Service -Name "CareQueueCaddy"
+```
+
+Check HTTPS readiness:
+
+```powershell
+Invoke-RestMethod `
+    -Uri "https://carequeue.local/api/health/ready"
+```
+
+Then verify:
+
+- Login
+- Representative authorization records
+- Timeline events
+- Registered options
+- Audit continuity
+- Dashboard summaries
+
+See [Health Checks](../operations/health-checks.md#post-recovery-smoke-test).
+
+## Rollback and Safety Backup
+
+The previous active database remains as a rollback database.
+
+Recovery activation also creates a fresh encrypted safety backup before cutover.
+
+Keep both until:
+
+- Services start successfully
+- Readiness passes
+- Login succeeds
+- Critical records are verified
+- Recovery is accepted
+- Retention requirements permit removal
+
+## Sidecar Files
+
+Common sidecars:
+
+```text
+-wal
+-shm
+-journal
+```
+
+Their presence may indicate the database is in use or did not shut down cleanly.
+
+Do not delete them blindly.
+
+Confirm all services and maintenance processes are stopped, then retry preflight.
+
+## Recovery Drills
+
+A backup is not fully proven until restored and validated.
+
+A drill should include:
+
+1. Select a recent backup.
+2. Confirm all required keys are available.
+3. Restore to an isolated directory.
+4. Verify integrity and required tables.
+5. Confirm SQLCipher protection.
+6. Start an isolated test instance.
+7. Verify login and representative records.
+8. Record elapsed time and issues.
+9. Remove drill data securely.
+
+Do not wait for an emergency to perform the first drill.
+
+## Off-Host Backups
+
+Local backups do not protect against:
+
+- Device theft
+- Disk failure
+- Ransomware
+- Fire
+- Whole-machine administrative error
+- Loss of both data and keys
+
+Use an approved off-host process when required.
+
+CareQueue does not currently upload backups externally by itself.
+
+## Monitoring
+
+Monitor:
+
+- Last successful backup
+- File size
+- Scheduled-task result
+- Retention failures
+- Available storage
+- Last restore test
+- Last key-recovery test
+
+## Common Failures
+
+### Backup key missing or wrong
+
+A new key cannot decrypt old backups.
+
+Restore the correct key from approved custody.
+
+### SQLCipher key wrong
+
+The backup may decrypt but database validation will fail.
+
+Confirm the key belongs to that database.
+
+### Field-level key wrong
+
+The database may open while selected values fail to decrypt.
+
+Do not accept the recovery until representative encrypted fields are verified.
+
+### Backup corrupted or truncated
+
+Do not stage it.
+
+Select another verified backup and investigate storage integrity.
+
+### Backup directory full
+
+Free space through approved retention or archival procedures.
+
+Do not delete the only recent verified backup.
+
+### Scheduled task fails
+
+Run the installed backup runner manually and check permissions, environment loading, script paths, and task history.
+
+### Unsafe restore path
+
+Use configured backup and restore directories.
+
+Do not bypass path validation merely to make the command succeed.
+
+### Service or port still active during recovery
+
+Stop Caddy, stop the API, confirm port 8000 is free, and retry.
+
+### Database locked
+
+Close all services, development servers, backup scripts, restore scripts, and database tools.
+
+### Activation fails after cutover
+
+Keep CareQueue stopped.
+
+Confirm which file is active, locate rollback and safety backup files, and do not make manual moves until the state is understood.
+
+## Files That Must Not Be Committed
+
+```text
+backend/data/
+backend/backups/
+backend/restores/
+local_backups/
+*.db
+*.sqlite
+*.sqlite3
+*.db.enc
+*.restored.db
+*.rollback.db
+.env
+```
+
+Encrypted backups remain sensitive.
+
+## Recovery Record
+
+For a real recovery, record:
+
+- Incident or change reference
+- Recovery owner
+- Approval
+- Start time
+- Selected backup
+- Backup timestamp
+- Verification result
+- Safety backup path
+- Rollback path
+- Activation time
+- Validation results
+- Service restart time
+- Final acceptance
+- Follow-up actions
+
+Do not include PHI, credentials, or keys.
+
+## Minimum Recovery Checklist
+
+Before declaring success:
+
+- Selected backup was verified
+- Required keys were available
+- Services were stopped
+- Preflight passed
+- Safety backup was created
+- Exact confirmation phrase was entered
+- Final database validation passed
+- Rollback database was preserved
+- Direct readiness passed
+- HTTPS readiness passed
+- Login succeeded
+- Representative records were reviewed
+- Audit continuity was reviewed
+- Recovery owner accepted the result
+- Recovery record was completed
+
+## Related Documentation
+
+```text
+docs/operations/health-checks.md
+docs/operations/upgrades.md
+docs/deployment/windows.md
+docs/deployment/linux.md
+docs/administration/audit-log.md
+docs/troubleshooting/index.md
+```
