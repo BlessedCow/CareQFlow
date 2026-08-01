@@ -14,6 +14,8 @@ param(
 
     [string]$FrontendBuildDirectory,
 
+    [string]$BackendWheelDirectory,
+    
     [switch]$Force,
 
     [switch]$SkipPermissionHardening
@@ -314,7 +316,43 @@ else {
         )
     }
 }
+$resolvedBackendWheelDirectory = $null
 
+if ($BackendWheelDirectory) {
+    $resolvedBackendWheelDirectory = (
+        Resolve-Path `
+            -LiteralPath $BackendWheelDirectory `
+            -ErrorAction Stop
+    ).Path
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $resolvedBackendWheelDirectory `
+                -PathType Container
+        )
+    ) {
+        throw (
+            "The backend wheel directory was not found: " +
+            $resolvedBackendWheelDirectory
+        )
+    }
+
+    $backendWheels = @(
+        Get-ChildItem `
+            -LiteralPath $resolvedBackendWheelDirectory `
+            -Filter "*.whl" `
+            -File `
+            -ErrorAction Stop
+    )
+
+    if ($backendWheels.Count -eq 0) {
+        throw (
+            "The backend wheel directory does not contain any " +
+            "Python wheel files: $resolvedBackendWheelDirectory"
+        )
+    }
+}
 if (
     (Test-Path -LiteralPath $InstallDirectory) `
         -and -not $Force
@@ -806,33 +844,58 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
     Write-Host "Installing production backend dependencies..."
 
-    Invoke-ExternalCommand `
-        -Executable $installedPythonExecutable `
-        -Arguments @(
-        "-m",
-        "pip",
-        "install",
-        "--disable-pip-version-check",
-        "--no-input",
-        "--upgrade",
-        "pip"
-    ) `
-        -FailureMessage "Production pip upgrade failed."
-
-    Invoke-ExternalCommand `
-        -Executable $installedPythonExecutable `
-        -Arguments @(
-        "-m",
-        "pip",
-        "install",
-        "--disable-pip-version-check",
-        "--no-input",
-        "--requirement",
-        $installedRequirementsFile
-    ) `
-        -FailureMessage (
-        "Production backend dependency installation failed."
-    )
+    if ($resolvedBackendWheelDirectory) {
+        Write-Host "Using packaged offline backend dependencies..."
+        
+        Invoke-ExternalCommand `
+            -Executable $installedPythonExecutable `
+            -Arguments @(
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            "--no-index",
+            "--find-links",
+            $resolvedBackendWheelDirectory,
+            "--requirement",
+            $installedRequirementsFile
+        ) `
+            -FailureMessage (
+            "Offline production backend dependency installation failed."
+        )
+    }
+    else {
+        Write-Host "Using the configured Python package index..."
+        
+        Invoke-ExternalCommand `
+            -Executable $installedPythonExecutable `
+            -Arguments @(
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            "--upgrade",
+            "pip"
+        ) `
+            -FailureMessage "Production pip upgrade failed."
+        
+        Invoke-ExternalCommand `
+            -Executable $installedPythonExecutable `
+            -Arguments @(
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            "--requirement",
+            $installedRequirementsFile
+        ) `
+            -FailureMessage (
+            "Production backend dependency installation failed."
+        )
+    }
 
     Write-Host "Validating the installed backend..."
 
