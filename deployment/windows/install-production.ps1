@@ -106,6 +106,85 @@ function Invoke-ExternalCommand {
         throw "$FailureMessage Exit code: $LASTEXITCODE"
     }
 }
+function Stop-CareQueueService {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [string]$DisplayName
+    )
+
+    $service = Get-Service `
+        -Name $Name `
+        -ErrorAction SilentlyContinue
+
+    if (-not $service) {
+        return $false
+    }
+
+    if ($service.Status -eq "Stopped") {
+        return $false
+    }
+
+    Write-Host "Stopping $DisplayName..."
+
+    Stop-Service `
+        -Name $Name `
+        -ErrorAction Stop
+
+    $service.WaitForStatus(
+        [System.ServiceProcess.ServiceControllerStatus]::Stopped,
+        [TimeSpan]::FromSeconds(30)
+    )
+
+    $service.Refresh()
+
+    if ($service.Status -ne "Stopped") {
+        throw "$DisplayName did not stop within the expected time."
+    }
+
+    return $true
+}
+
+function Start-CareQueueService {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [Parameter(Mandatory)]
+        [string]$DisplayName
+    )
+
+    $service = Get-Service `
+        -Name $Name `
+        -ErrorAction SilentlyContinue
+
+    if (-not $service) {
+        throw "$DisplayName is no longer installed."
+    }
+
+    if ($service.Status -eq "Running") {
+        return
+    }
+
+    Write-Host "Starting $DisplayName..."
+
+    Start-Service `
+        -Name $Name `
+        -ErrorAction Stop
+
+    $service.WaitForStatus(
+        [System.ServiceProcess.ServiceControllerStatus]::Running,
+        [TimeSpan]::FromSeconds(30)
+    )
+
+    $service.Refresh()
+
+    if ($service.Status -ne "Running") {
+        throw "$DisplayName did not start within the expected time."
+    }
+}
 
 if (-not (Test-Administrator)) {
     throw "This script must be run from PowerShell as Administrator."
@@ -246,6 +325,10 @@ $frontendEnvironmentFiles = @(
 )
 
 $temporarilyMovedEnvironmentFiles = @()
+
+$apiServiceWasStoppedForUpgrade = $false
+$caddyServiceWasStoppedForUpgrade = $false
+$serviceStatesRestored = $false
 
 try {
     New-Item `
@@ -547,6 +630,14 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     }
 
 
+    $caddyServiceWasStoppedForUpgrade = Stop-CareQueueService `
+        -Name "CareQueueCaddy" `
+        -DisplayName "CareQueue HTTPS service"
+
+    $apiServiceWasStoppedForUpgrade = Stop-CareQueueService `
+        -Name "CareQueueApi" `
+        -DisplayName "CareQueue API service"
+
     Write-Host "Installing staged application files..."
 
     New-Item `
@@ -795,6 +886,20 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         }
     }
 
+    if ($apiServiceWasStoppedForUpgrade) {
+        Start-CareQueueService `
+            -Name "CareQueueApi" `
+            -DisplayName "CareQueue API service"
+    }
+    
+    if ($caddyServiceWasStoppedForUpgrade) {
+        Start-CareQueueService `
+            -Name "CareQueueCaddy" `
+            -DisplayName "CareQueue HTTPS service"
+    }
+    
+    $serviceStatesRestored = $true
+
     Write-Host ""
     Write-Host "CareQueue production files installed successfully."
     Write-Host "Application directory: $InstallDirectory"
@@ -802,13 +907,53 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     Write-Host "Environment file: $environmentFile"
     Write-Host "Application origin: $normalizedApplicationOrigin"
     Write-Host ""
-    Write-Host "The API and Caddy services were not started automatically."
-    Write-Host (
-        "Review the generated configuration before installing " +
-        "or starting services."
-    )
+    if (
+        $apiServiceWasStoppedForUpgrade `
+            -or $caddyServiceWasStoppedForUpgrade
+    ) {
+        Write-Host (
+            "The original API and Caddy service running states " +
+            "were restored."
+        )
+    }
+    else {
+        Write-Host (
+            "No running CareQueue services required restoration."
+        )
+    }
 }
 finally {
+    if (-not $serviceStatesRestored) {
+        if ($apiServiceWasStoppedForUpgrade) {
+            try {
+                Start-CareQueueService `
+                    -Name "CareQueueApi" `
+                    -DisplayName "CareQueue API service"
+            }
+            catch {
+                Write-Warning (
+                    "The CareQueue API service could not be " +
+                    "restored after the installation failure: " +
+                    $_.Exception.Message
+                )
+            }
+        }
+
+        if ($caddyServiceWasStoppedForUpgrade) {
+            try {
+                Start-CareQueueService `
+                    -Name "CareQueueCaddy" `
+                    -DisplayName "CareQueue HTTPS service"
+            }
+            catch {
+                Write-Warning (
+                    "The CareQueue HTTPS service could not be " +
+                    "restored after the installation failure: " +
+                    $_.Exception.Message
+                )
+            }
+        }
+    }
     if ($null -ne $previousApiBaseUrl) {
         $env:VITE_AUTHSTATUS_API_BASE_URL = $previousApiBaseUrl
     }
