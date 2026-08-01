@@ -4,11 +4,7 @@ param(
     [ValidatePattern("^https://")]
     [string]$ApplicationOrigin,
 
-    [string]$SourceDirectory = (
-        Resolve-Path (
-            Join-Path $PSScriptRoot "..\.."
-        )
-    ).Path,
+    [string]$SourceDirectory,
 
     [string]$InstallDirectory = "C:\Program Files\CareQueue",
 
@@ -16,12 +12,25 @@ param(
 
     [string]$PythonExecutable = "python",
 
+    [string]$FrontendBuildDirectory,
+
     [switch]$Force,
 
     [switch]$SkipPermissionHardening
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $SourceDirectory) {
+    $SourceDirectory = (
+        Resolve-Path `
+            -LiteralPath (
+            Join-Path `
+                $PSScriptRoot `
+                "..\.."
+        )
+    ).Path
+}
 
 function Test-Administrator {
     $currentIdentity = (
@@ -254,12 +263,56 @@ if (-not $pythonCommand) {
     throw "Python executable was not found: $PythonExecutable"
 }
 
-$npmCommand = Get-Command `
-    "npm" `
-    -ErrorAction SilentlyContinue
+$resolvedFrontendBuildDirectory = $null
 
-if (-not $npmCommand) {
-    throw "npm was not found on PATH."
+if ($FrontendBuildDirectory) {
+    $resolvedFrontendBuildDirectory = (
+        Resolve-Path `
+            -LiteralPath $FrontendBuildDirectory `
+            -ErrorAction Stop
+    ).Path
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $resolvedFrontendBuildDirectory `
+                -PathType Container
+        )
+    ) {
+        throw (
+            "The prebuilt frontend directory was not found: " +
+            $resolvedFrontendBuildDirectory
+        )
+    }
+
+    $prebuiltIndexPath = Join-Path `
+        $resolvedFrontendBuildDirectory `
+        "index.html"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $prebuiltIndexPath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The prebuilt frontend directory does not contain " +
+            "index.html: $resolvedFrontendBuildDirectory"
+        )
+    }
+}
+else {
+    $npmCommand = Get-Command `
+        "npm" `
+        -ErrorAction SilentlyContinue
+
+    if (-not $npmCommand) {
+        throw (
+            "npm was not found on PATH. Provide " +
+            "-FrontendBuildDirectory to install a prebuilt frontend."
+        )
+    }
 }
 
 if (
@@ -346,78 +399,90 @@ try {
         -Path $stagingDeploymentDirectory `
         -Force | Out-Null
 
-    Write-Host "Building the production frontend..."
-
-    Push-Location $sourceFrontendDirectory
-
-    try {
-        foreach ($environmentFileName in $frontendEnvironmentFiles) {
-            $environmentFilePath = Join-Path `
-                $sourceFrontendDirectory `
-                $environmentFileName
-
-            if (
-                Test-Path `
-                    -LiteralPath $environmentFilePath `
-                    -PathType Leaf
-            ) {
-                $temporaryEnvironmentFilePath = (
-                    $environmentFilePath + ".carequeue-production-backup"
-                )
-
-                Move-Item `
-                    -LiteralPath $environmentFilePath `
-                    -Destination $temporaryEnvironmentFilePath `
-                    -Force
-
-                $temporarilyMovedEnvironmentFiles += [PSCustomObject]@{
-                    OriginalPath  = $environmentFilePath
-                    TemporaryPath = $temporaryEnvironmentFilePath
+    if ($resolvedFrontendBuildDirectory) {
+        Write-Host "Using the supplied prebuilt production frontend..."
+        
+        $frontendBuildDirectory = $resolvedFrontendBuildDirectory
+    }
+    else {
+        Write-Host "Building the production frontend..."
+        
+        Push-Location $sourceFrontendDirectory
+        
+        try {
+            foreach ($environmentFileName in $frontendEnvironmentFiles) {
+                $environmentFilePath = Join-Path `
+                    $sourceFrontendDirectory `
+                    $environmentFileName
+        
+                if (
+                    Test-Path `
+                        -LiteralPath $environmentFilePath `
+                        -PathType Leaf
+                ) {
+                    $temporaryEnvironmentFilePath = (
+                        $environmentFilePath +
+                        ".carequeue-production-backup"
+                    )
+        
+                    Move-Item `
+                        -LiteralPath $environmentFilePath `
+                        -Destination $temporaryEnvironmentFilePath `
+                        -Force
+        
+                    $temporarilyMovedEnvironmentFiles += (
+                        [PSCustomObject]@{
+                            OriginalPath  = $environmentFilePath
+                            TemporaryPath = $temporaryEnvironmentFilePath
+                        }
+                    )
                 }
             }
+        
+            Remove-Item `
+                Env:VITE_AUTHSTATUS_API_BASE_URL `
+                -ErrorAction SilentlyContinue
+        
+            Remove-Item `
+                Env:VITE_API_BASE_URL `
+                -ErrorAction SilentlyContinue
+        
+            Invoke-ExternalCommand `
+                -Executable "npm" `
+                -Arguments @("ci") `
+                -FailureMessage (
+                "Frontend dependency installation failed."
+            )
+        
+            Invoke-ExternalCommand `
+                -Executable "npm" `
+                -Arguments @("run", "build") `
+                -FailureMessage "Frontend production build failed."
         }
-
-        Remove-Item `
-            Env:VITE_AUTHSTATUS_API_BASE_URL `
-            -ErrorAction SilentlyContinue
-
-        Remove-Item `
-            Env:VITE_API_BASE_URL `
-            -ErrorAction SilentlyContinue
-
-        Invoke-ExternalCommand `
-            -Executable "npm" `
-            -Arguments @("ci") `
-            -FailureMessage "Frontend dependency installation failed."
-
-        Invoke-ExternalCommand `
-            -Executable "npm" `
-            -Arguments @("run", "build") `
-            -FailureMessage "Frontend production build failed."
-    }
-    finally {
-        foreach (
-            $movedEnvironmentFile in
-            $temporarilyMovedEnvironmentFiles
-        ) {
-            if (
-                Test-Path `
-                    -LiteralPath $movedEnvironmentFile.TemporaryPath `
-                    -PathType Leaf
+        finally {
+            foreach (
+                $movedEnvironmentFile in
+                $temporarilyMovedEnvironmentFiles
             ) {
-                Move-Item `
-                    -LiteralPath $movedEnvironmentFile.TemporaryPath `
-                    -Destination $movedEnvironmentFile.OriginalPath `
-                    -Force
+                if (
+                    Test-Path `
+                        -LiteralPath $movedEnvironmentFile.TemporaryPath `
+                        -PathType Leaf
+                ) {
+                    Move-Item `
+                        -LiteralPath $movedEnvironmentFile.TemporaryPath `
+                        -Destination $movedEnvironmentFile.OriginalPath `
+                        -Force
+                }
             }
+        
+            Pop-Location
         }
-    
-        Pop-Location
+        
+        $frontendBuildDirectory = Join-Path `
+            $sourceFrontendDirectory `
+            "dist"
     }
-    $frontendBuildDirectory = Join-Path `
-        $sourceFrontendDirectory `
-        "dist"
-
     if (
         -not (
             Test-Path `
