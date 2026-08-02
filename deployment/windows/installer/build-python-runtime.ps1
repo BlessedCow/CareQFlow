@@ -252,9 +252,9 @@ Out-Null
 $pathConfiguration = @(
     $standardLibraryArchiveName
     "."
-    ".."
     "Lib"
     "Lib\site-packages"
+    "..\..\backend"
     "import site"
 )
 

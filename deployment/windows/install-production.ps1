@@ -15,7 +15,9 @@ param(
     [string]$FrontendBuildDirectory,
 
     [string]$BackendWheelDirectory,
-    
+
+    [string]$PrivatePythonRuntimeDirectory,
+
     [switch]$Force,
 
     [switch]$SkipPermissionHardening
@@ -257,12 +259,16 @@ foreach ($relativePath in $requiredSourcePaths) {
     }
 }
 
-$pythonCommand = Get-Command `
-    $PythonExecutable `
-    -ErrorAction SilentlyContinue
+$pythonCommand = $null
 
-if (-not $pythonCommand) {
-    throw "Python executable was not found: $PythonExecutable"
+if (-not $PrivatePythonRuntimeDirectory) {
+    $pythonCommand = Get-Command `
+        $PythonExecutable `
+        -ErrorAction SilentlyContinue
+
+    if (-not $pythonCommand) {
+        throw "Python executable was not found: $PythonExecutable"
+    }
 }
 
 $resolvedFrontendBuildDirectory = $null
@@ -353,6 +359,78 @@ if ($BackendWheelDirectory) {
         )
     }
 }
+$resolvedPrivatePythonRuntimeDirectory = $null
+
+if ($PrivatePythonRuntimeDirectory) {
+    $resolvedPrivatePythonRuntimeDirectory = (
+        Resolve-Path `
+            -LiteralPath $PrivatePythonRuntimeDirectory `
+            -ErrorAction Stop
+    ).Path
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $resolvedPrivatePythonRuntimeDirectory `
+                -PathType Container
+        )
+    ) {
+        throw (
+            "The private Python runtime directory was not found: " +
+            $resolvedPrivatePythonRuntimeDirectory
+        )
+    }
+
+    $privateRuntimePython = Join-Path `
+        $resolvedPrivatePythonRuntimeDirectory `
+        "python.exe"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $privateRuntimePython `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The private Python runtime does not contain python.exe: " +
+            $resolvedPrivatePythonRuntimeDirectory
+        )
+    }
+
+    $privateRuntimePathFiles = @(
+        Get-ChildItem `
+            -LiteralPath $resolvedPrivatePythonRuntimeDirectory `
+            -Filter "python*._pth" `
+            -File `
+            -ErrorAction Stop
+    )
+
+    if ($privateRuntimePathFiles.Count -ne 1) {
+        throw (
+            "The private Python runtime must contain exactly one " +
+            "python path configuration file."
+        )
+    }
+
+    $privateRuntimeSitePackages = Join-Path `
+        $resolvedPrivatePythonRuntimeDirectory `
+        "Lib\site-packages"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $privateRuntimeSitePackages `
+                -PathType Container
+        )
+    ) {
+        throw (
+            "The private Python runtime does not contain " +
+            "Lib\site-packages: " +
+            $resolvedPrivatePythonRuntimeDirectory
+        )
+    }
+}
 if (
     (Test-Path -LiteralPath $InstallDirectory) `
         -and -not $Force
@@ -397,6 +475,14 @@ $stagingDeploymentDirectory = Join-Path `
     $stagingInstallDirectory `
     "deployment"
 
+$stagingRuntimeDirectory = Join-Path `
+    $stagingInstallDirectory `
+    "runtime"
+
+$stagingPythonRuntimeDirectory = Join-Path `
+    $stagingRuntimeDirectory `
+    "python"
+
 $sourceFrontendDirectory = Join-Path `
     $resolvedSourceDirectory `
     "frontend"
@@ -439,20 +525,20 @@ try {
 
     if ($resolvedFrontendBuildDirectory) {
         Write-Host "Using the supplied prebuilt production frontend..."
-        
+
         $frontendBuildDirectory = $resolvedFrontendBuildDirectory
     }
     else {
         Write-Host "Building the production frontend..."
-        
+
         Push-Location $sourceFrontendDirectory
-        
+
         try {
             foreach ($environmentFileName in $frontendEnvironmentFiles) {
                 $environmentFilePath = Join-Path `
                     $sourceFrontendDirectory `
                     $environmentFileName
-        
+
                 if (
                     Test-Path `
                         -LiteralPath $environmentFilePath `
@@ -462,12 +548,12 @@ try {
                         $environmentFilePath +
                         ".carequeue-production-backup"
                     )
-        
+
                     Move-Item `
                         -LiteralPath $environmentFilePath `
                         -Destination $temporaryEnvironmentFilePath `
                         -Force
-        
+
                     $temporarilyMovedEnvironmentFiles += (
                         [PSCustomObject]@{
                             OriginalPath  = $environmentFilePath
@@ -476,22 +562,22 @@ try {
                     )
                 }
             }
-        
+
             Remove-Item `
                 Env:VITE_AUTHSTATUS_API_BASE_URL `
                 -ErrorAction SilentlyContinue
-        
+
             Remove-Item `
                 Env:VITE_API_BASE_URL `
                 -ErrorAction SilentlyContinue
-        
+
             Invoke-ExternalCommand `
                 -Executable "npm" `
                 -Arguments @("ci") `
                 -FailureMessage (
                 "Frontend dependency installation failed."
             )
-        
+
             Invoke-ExternalCommand `
                 -Executable "npm" `
                 -Arguments @("run", "build") `
@@ -513,10 +599,10 @@ try {
                         -Force
                 }
             }
-        
+
             Pop-Location
         }
-        
+
         $frontendBuildDirectory = Join-Path `
             $sourceFrontendDirectory `
             "dist"
@@ -581,6 +667,42 @@ try {
         -Destination $stagingDeploymentDirectory `
         -Recurse `
         -Force
+
+    if ($resolvedPrivatePythonRuntimeDirectory) {
+        Write-Host "Copying the private Python runtime..."
+
+        New-Item `
+            -ItemType Directory `
+            -Path $stagingPythonRuntimeDirectory `
+            -Force | Out-Null
+
+        Copy-Item `
+            -Path (
+            Join-Path `
+                $resolvedPrivatePythonRuntimeDirectory `
+                "*"
+        ) `
+            -Destination $stagingPythonRuntimeDirectory `
+            -Recurse `
+            -Force
+
+        $stagedPrivatePythonExecutable = Join-Path `
+            $stagingPythonRuntimeDirectory `
+            "python.exe"
+
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $stagedPrivatePythonExecutable `
+                    -PathType Leaf
+            )
+        ) {
+            throw (
+                "The staged private Python runtime does not contain " +
+                "python.exe."
+            )
+        }
+    }
 
     Write-Host "Preparing the production Caddy configuration..."
 
@@ -748,10 +870,6 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         -Path $InstallDirectory `
         -Force | Out-Null
 
-    $installedServiceDirectory = Join-Path `
-        $InstallDirectory `
-        "Service"
-
     $installedBackendDirectory = Join-Path `
         $InstallDirectory `
         "backend"
@@ -764,11 +882,23 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         $InstallDirectory `
         "deployment"
 
+    $installedRuntimeDirectory = Join-Path `
+        $InstallDirectory `
+        "runtime"
+
+    $installedPrivatePythonDirectory = Join-Path `
+        $installedRuntimeDirectory `
+        "python"
+
     $replaceableDirectories = @(
         $installedBackendDirectory,
         $installedFrontendDirectory,
         $installedDeploymentDirectory
     )
+
+    if ($resolvedPrivatePythonRuntimeDirectory) {
+        $replaceableDirectories += $installedRuntimeDirectory
+    }
 
     foreach ($replaceableDirectory in $replaceableDirectories) {
         if (Test-Path -LiteralPath $replaceableDirectory) {
@@ -804,97 +934,144 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         -Recurse `
         -Force
 
-    Write-Host "Creating the production Python environment..."
-
-    $installedVirtualEnvironment = Join-Path `
-        $installedBackendDirectory `
-        ".venv"
-
-    Invoke-ExternalCommand `
-        -Executable $PythonExecutable `
-        -Arguments @(
-        "-m",
-        "venv",
-        $installedVirtualEnvironment
-    ) `
-        -FailureMessage (
-        "Production virtual environment creation failed."
-    )
-
-    $installedPythonExecutable = Join-Path `
-        $installedVirtualEnvironment `
-        "Scripts\python.exe"
-
-    if (
-        -not (
-            Test-Path `
-                -LiteralPath $installedPythonExecutable `
-                -PathType Leaf
-        )
-    ) {
-        throw (
-            "The production Python executable was not created at: " +
-            $installedPythonExecutable
-        )
+    if ($resolvedPrivatePythonRuntimeDirectory) {
+        Copy-Item `
+            -LiteralPath $stagingRuntimeDirectory `
+            -Destination $InstallDirectory `
+            -Recurse `
+            -Force
     }
 
-    $installedRequirementsFile = Join-Path `
-        $installedBackendDirectory `
-        "requirements.txt"
+    if ($resolvedPrivatePythonRuntimeDirectory) {
+        Write-Host "Using the installed private Python runtime..."
 
-    Write-Host "Installing production backend dependencies..."
+        $installedPythonExecutable = Join-Path `
+            $installedPrivatePythonDirectory `
+            "python.exe"
 
-    if ($resolvedBackendWheelDirectory) {
-        Write-Host "Using packaged offline backend dependencies..."
-        
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $installedPythonExecutable `
+                    -PathType Leaf
+            )
+        ) {
+            throw (
+                "The installed private Python executable was not found at: " +
+                $installedPythonExecutable
+            )
+        }
+
         Invoke-ExternalCommand `
             -Executable $installedPythonExecutable `
             -Arguments @(
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-input",
-            "--no-index",
-            "--find-links",
-            $resolvedBackendWheelDirectory,
-            "--requirement",
-            $installedRequirementsFile
+            "-c",
+            (
+                "import cryptography; " +
+                "import fastapi; " +
+                "import pydantic; " +
+                "import uvicorn; " +
+                "print('CareQueue private Python runtime validated.')"
+            )
         ) `
             -FailureMessage (
-            "Offline production backend dependency installation failed."
+            "The installed private Python runtime could not import " +
+            "required packages."
         )
     }
     else {
-        Write-Host "Using the configured Python package index..."
-        
+        Write-Host "Creating the production Python environment..."
+
+        $installedVirtualEnvironment = Join-Path `
+            $installedBackendDirectory `
+            ".venv"
+
         Invoke-ExternalCommand `
-            -Executable $installedPythonExecutable `
+            -Executable $PythonExecutable `
             -Arguments @(
             "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-input",
-            "--upgrade",
-            "pip"
-        ) `
-            -FailureMessage "Production pip upgrade failed."
-        
-        Invoke-ExternalCommand `
-            -Executable $installedPythonExecutable `
-            -Arguments @(
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-input",
-            "--requirement",
-            $installedRequirementsFile
+            "venv",
+            $installedVirtualEnvironment
         ) `
             -FailureMessage (
-            "Production backend dependency installation failed."
+            "Production virtual environment creation failed."
         )
+
+        $installedPythonExecutable = Join-Path `
+            $installedVirtualEnvironment `
+            "Scripts\python.exe"
+
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $installedPythonExecutable `
+                    -PathType Leaf
+            )
+        ) {
+            throw (
+                "The production Python executable was not created at: " +
+                $installedPythonExecutable
+            )
+        }
+
+        $installedRequirementsFile = Join-Path `
+            $installedBackendDirectory `
+            "requirements.txt"
+
+        Write-Host "Installing production backend dependencies..."
+
+        if ($resolvedBackendWheelDirectory) {
+            Write-Host "Using packaged offline backend dependencies..."
+
+            Invoke-ExternalCommand `
+                -Executable $installedPythonExecutable `
+                -Arguments @(
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-input",
+                "--no-index",
+                "--find-links",
+                $resolvedBackendWheelDirectory,
+                "--requirement",
+                $installedRequirementsFile
+            ) `
+                -FailureMessage (
+                "Offline production backend dependency installation failed."
+            )
+        }
+        else {
+            Write-Host "Using the configured Python package index..."
+
+            Invoke-ExternalCommand `
+                -Executable $installedPythonExecutable `
+                -Arguments @(
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-input",
+                "--upgrade",
+                "pip"
+            ) `
+                -FailureMessage "Production pip upgrade failed."
+
+            Invoke-ExternalCommand `
+                -Executable $installedPythonExecutable `
+                -Arguments @(
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-input",
+                "--requirement",
+                $installedRequirementsFile
+            ) `
+                -FailureMessage (
+                "Production backend dependency installation failed."
+            )
+        }
     }
 
     Write-Host "Validating the installed backend..."
@@ -950,56 +1127,56 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
     if (-not $SkipPermissionHardening) {
         Write-Host "Restricting runtime directory permissions..."
-    
+
         $installerAccount = (
             [Security.Principal.WindowsIdentity]::GetCurrent()
         ).Name
-    
+
         & icacls.exe `
             $DataDirectory `
             /reset `
             /T `
             /C | Out-Null
-    
+
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to reset production runtime permissions."
         }
-    
+
         & icacls.exe `
             $DataDirectory `
             /inheritance:r | Out-Null
-    
+
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to disable inherited runtime permissions."
         }
-    
+
         $systemGrant = "SYSTEM:(OI)(CI)F"
         $administratorsGrant = "BUILTIN\Administrators:(OI)(CI)F"
         $installerGrant = "${installerAccount}:(OI)(CI)F"
-    
+
         & icacls.exe `
             $DataDirectory `
             /grant:r `
             $systemGrant `
             $administratorsGrant `
             $installerGrant | Out-Null
-    
+
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to apply production runtime permissions."
         }
-    
+
         $childPath = Join-Path $DataDirectory "*"
-    
+
         & icacls.exe `
             $childPath `
             /reset `
             /T `
             /C | Out-Null
-    
+
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to propagate production runtime permissions."
         }
-    
+
         try {
             Get-Content `
                 -LiteralPath $environmentFile `
@@ -1019,13 +1196,13 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
             -Name "CareQueueApi" `
             -DisplayName "CareQueue API service"
     }
-    
+
     if ($caddyServiceWasStoppedForUpgrade) {
         Start-CareQueueService `
             -Name "CareQueueCaddy" `
             -DisplayName "CareQueue HTTPS service"
     }
-    
+
     $serviceStatesRestored = $true
 
     Write-Host ""
