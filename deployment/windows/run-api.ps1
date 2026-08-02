@@ -12,16 +12,38 @@ param(
 $ErrorActionPreference = "Stop"
 
 $backendDirectory = Join-Path $InstallDirectory "backend"
-$pythonExecutable = Join-Path `
+
+$privatePythonExecutable = Join-Path `
+    $InstallDirectory `
+    "runtime\python\python.exe"
+
+$legacyPythonExecutable = Join-Path `
     $backendDirectory `
     ".venv\Scripts\python.exe"
 
-if (-not (Test-Path -LiteralPath $backendDirectory -PathType Container)) {
-    throw "CareQueue backend directory was not found at: $backendDirectory"
+if (
+    Test-Path `
+        -LiteralPath $privatePythonExecutable `
+        -PathType Leaf
+) {
+    $pythonExecutable = $privatePythonExecutable
+}
+elseif (
+    Test-Path `
+        -LiteralPath $legacyPythonExecutable `
+        -PathType Leaf
+) {
+    $pythonExecutable = $legacyPythonExecutable
+}
+else {
+    throw (
+        "CareQueue Python executable was not found. Checked: " +
+        "$privatePythonExecutable and $legacyPythonExecutable"
+    )
 }
 
-if (-not (Test-Path -LiteralPath $pythonExecutable -PathType Leaf)) {
-    throw "CareQueue Python executable was not found at: $pythonExecutable"
+if (-not (Test-Path -LiteralPath $backendDirectory -PathType Container)) {
+    throw "CareQueue backend directory was not found at: $backendDirectory"
 }
 
 if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
@@ -33,8 +55,8 @@ Get-Content -LiteralPath $EnvironmentFile | ForEach-Object {
 
     if (
         -not $line `
-        -or $line.StartsWith("#") `
-        -or -not $line.Contains("=")
+            -or $line.StartsWith("#") `
+            -or -not $line.Contains("=")
     ) {
         return
     }
