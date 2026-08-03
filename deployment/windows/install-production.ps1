@@ -18,6 +18,8 @@ param(
 
     [string]$PrivatePythonRuntimeDirectory,
 
+    [string]$VendorAssetDirectory,
+
     [switch]$Force,
 
     [switch]$SkipPermissionHardening
@@ -431,6 +433,96 @@ if ($PrivatePythonRuntimeDirectory) {
         )
     }
 }
+
+$resolvedVendorAssetDirectory = $null
+
+if ($VendorAssetDirectory) {
+    $resolvedVendorAssetDirectory = (
+        Resolve-Path `
+            -LiteralPath $VendorAssetDirectory `
+            -ErrorAction Stop
+    ).Path
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $resolvedVendorAssetDirectory `
+                -PathType Container
+        )
+    ) {
+        throw (
+            "The staged vendor asset directory was not found: " +
+            $resolvedVendorAssetDirectory
+        )
+    }
+
+    $vendorCaddyExecutable = Join-Path `
+        $resolvedVendorAssetDirectory `
+        "caddy\caddy.exe"
+
+    $vendorWinSWExecutable = Join-Path `
+        $resolvedVendorAssetDirectory `
+        "winsw\WinSW-x64.exe"
+
+    $vendorVersionMetadata = Join-Path `
+        $resolvedVendorAssetDirectory `
+        "versions.json"
+
+    $vendorHashManifest = Join-Path `
+        $resolvedVendorAssetDirectory `
+        "SHA256SUMS.txt"
+
+    $requiredVendorPaths = @(
+        $vendorCaddyExecutable,
+        $vendorWinSWExecutable,
+        $vendorVersionMetadata,
+        $vendorHashManifest
+    )
+
+    foreach ($requiredVendorPath in $requiredVendorPaths) {
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $requiredVendorPath `
+                    -PathType Leaf
+            )
+        ) {
+            throw (
+                "A required staged vendor asset was not found: " +
+                $requiredVendorPath
+            )
+        }
+    }
+
+    $vendorMetadata = Get-Content `
+        -LiteralPath $vendorVersionMetadata `
+        -Raw |
+    ConvertFrom-Json
+
+    if ($vendorMetadata.schema_version -ne 1) {
+        throw (
+            "Unsupported staged vendor metadata schema version: " +
+            $vendorMetadata.schema_version
+        )
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace(
+            [string]$vendorMetadata.caddy.version
+        )
+    ) {
+        throw "The staged vendor metadata does not contain a Caddy version."
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace(
+            [string]$vendorMetadata.winsw.version
+        )
+    ) {
+        throw "The staged vendor metadata does not contain a WinSW version."
+    }
+}
+
 if (
     (Test-Path -LiteralPath $InstallDirectory) `
         -and -not $Force
@@ -482,6 +574,18 @@ $stagingRuntimeDirectory = Join-Path `
 $stagingPythonRuntimeDirectory = Join-Path `
     $stagingRuntimeDirectory `
     "python"
+
+$stagingVendorDirectory = Join-Path `
+    $stagingInstallDirectory `
+    "vendor"
+
+$stagingCaddyDirectory = Join-Path `
+    $stagingVendorDirectory `
+    "caddy"
+
+$stagingServiceDirectory = Join-Path `
+    $stagingInstallDirectory `
+    "Service"
 
 $sourceFrontendDirectory = Join-Path `
     $resolvedSourceDirectory `
@@ -704,6 +808,88 @@ try {
         }
     }
 
+    if ($resolvedVendorAssetDirectory) {
+        Write-Host "Copying the staged vendor binaries..."
+
+        New-Item `
+            -ItemType Directory `
+            -Path $stagingCaddyDirectory `
+            -Force | Out-Null
+
+        New-Item `
+            -ItemType Directory `
+            -Path $stagingServiceDirectory `
+            -Force | Out-Null
+
+        Copy-Item `
+            -LiteralPath $vendorCaddyExecutable `
+            -Destination (
+            Join-Path $stagingCaddyDirectory "caddy.exe"
+        ) `
+            -Force
+
+        Copy-Item `
+            -LiteralPath $vendorWinSWExecutable `
+            -Destination (
+            Join-Path $stagingServiceDirectory "CareQueueApi.exe"
+        ) `
+            -Force
+
+        Copy-Item `
+            -LiteralPath $vendorWinSWExecutable `
+            -Destination (
+            Join-Path $stagingServiceDirectory "CareQueueCaddy.exe"
+        ) `
+            -Force
+
+        Copy-Item `
+            -LiteralPath $vendorVersionMetadata `
+            -Destination (
+            Join-Path $stagingVendorDirectory "versions.json"
+        ) `
+            -Force
+
+        Copy-Item `
+            -LiteralPath $vendorHashManifest `
+            -Destination (
+            Join-Path $stagingVendorDirectory "SHA256SUMS.txt"
+        ) `
+            -Force
+
+        $stagedCaddyExecutable = Join-Path `
+            $stagingCaddyDirectory `
+            "caddy.exe"
+
+        $stagedApiServiceExecutable = Join-Path `
+            $stagingServiceDirectory `
+            "CareQueueApi.exe"
+
+        $stagedCaddyServiceExecutable = Join-Path `
+            $stagingServiceDirectory `
+            "CareQueueCaddy.exe"
+
+        $stagedVendorExecutables = @(
+            $stagedCaddyExecutable,
+            $stagedApiServiceExecutable,
+            $stagedCaddyServiceExecutable
+        )
+
+        foreach ($stagedVendorExecutable in $stagedVendorExecutables) {
+            if (
+                -not (
+                    Test-Path `
+                        -LiteralPath $stagedVendorExecutable `
+                        -PathType Leaf
+                )
+            ) {
+                throw (
+                    "A staged vendor executable was not created: " +
+                    $stagedVendorExecutable
+                )
+            }
+        }
+    }
+
     Write-Host "Preparing the production Caddy configuration..."
 
     $stagedCaddyfile = Join-Path `
@@ -890,6 +1076,18 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         $installedRuntimeDirectory `
         "python"
 
+    $installedVendorDirectory = Join-Path `
+        $InstallDirectory `
+        "vendor"
+
+    $installedCaddyDirectory = Join-Path `
+        $installedVendorDirectory `
+        "caddy"
+
+    $installedServiceDirectory = Join-Path `
+        $InstallDirectory `
+        "Service"
+
     $replaceableDirectories = @(
         $installedBackendDirectory,
         $installedFrontendDirectory,
@@ -898,6 +1096,10 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
     if ($resolvedPrivatePythonRuntimeDirectory) {
         $replaceableDirectories += $installedRuntimeDirectory
+    }
+
+    if ($resolvedVendorAssetDirectory) {
+        $replaceableDirectories += $installedVendorDirectory
     }
 
     foreach ($replaceableDirectory in $replaceableDirectories) {
@@ -940,6 +1142,125 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
             -Destination $InstallDirectory `
             -Recurse `
             -Force
+    }
+
+    if ($resolvedVendorAssetDirectory) {
+        Copy-Item `
+            -LiteralPath $stagingVendorDirectory `
+            -Destination $InstallDirectory `
+            -Recurse `
+            -Force
+
+        New-Item `
+            -ItemType Directory `
+            -Path $installedServiceDirectory `
+            -Force | Out-Null
+
+        Copy-Item `
+            -LiteralPath (
+                Join-Path `
+                    $stagingServiceDirectory `
+                    "CareQueueApi.exe"
+            ) `
+            -Destination (
+                Join-Path `
+                    $installedServiceDirectory `
+                    "CareQueueApi.exe"
+            ) `
+            -Force
+
+        Copy-Item `
+            -LiteralPath (
+                Join-Path `
+                    $stagingServiceDirectory `
+                    "CareQueueCaddy.exe"
+            ) `
+            -Destination (
+                Join-Path `
+                    $installedServiceDirectory `
+                    "CareQueueCaddy.exe"
+            ) `
+            -Force
+    }
+
+    if ($resolvedVendorAssetDirectory) {
+        Write-Host "Validating the installed vendor binaries..."
+
+        $installedCaddyExecutable = Join-Path `
+            $installedCaddyDirectory `
+            "caddy.exe"
+
+        $installedApiServiceExecutable = Join-Path `
+            $installedServiceDirectory `
+            "CareQueueApi.exe"
+
+        $installedCaddyServiceExecutable = Join-Path `
+            $installedServiceDirectory `
+            "CareQueueCaddy.exe"
+
+        $installedVendorExecutables = @(
+            $installedCaddyExecutable,
+            $installedApiServiceExecutable,
+            $installedCaddyServiceExecutable
+        )
+
+        foreach ($installedVendorExecutable in $installedVendorExecutables) {
+            if (
+                -not (
+                    Test-Path `
+                        -LiteralPath $installedVendorExecutable `
+                        -PathType Leaf
+                )
+            ) {
+                throw (
+                    "An installed vendor executable was not found: " +
+                    $installedVendorExecutable
+                )
+            }
+        }
+
+        $installedCaddyVersion = (
+            & $installedCaddyExecutable version
+        ).Trim()
+
+        if ($LASTEXITCODE -ne 0) {
+            throw (
+                "The installed Caddy executable failed version validation."
+            )
+        }
+
+        $expectedInstalledCaddyVersion = (
+            "v" + [string]$vendorMetadata.caddy.version + " "
+        )
+
+        if (
+            -not $installedCaddyVersion.StartsWith(
+                $expectedInstalledCaddyVersion,
+                [System.StringComparison]::Ordinal
+            )
+        ) {
+            throw (
+                "The installed Caddy version does not match the staged " +
+                "vendor metadata. Output: $installedCaddyVersion"
+            )
+        }
+
+        $installedWinSWVersion = (
+            Get-Item `
+                -LiteralPath $installedApiServiceExecutable
+        ).VersionInfo.FileVersion
+
+        if (
+            -not $installedWinSWVersion.StartsWith(
+                ([string]$vendorMetadata.winsw.version + "."),
+                [System.StringComparison]::Ordinal
+            )
+        ) {
+            throw (
+                "The installed WinSW version does not match the staged " +
+                "vendor metadata. File version: $installedWinSWVersion"
+            )
+        }
     }
 
     if ($resolvedPrivatePythonRuntimeDirectory) {
