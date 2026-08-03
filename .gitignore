@@ -79,3 +79,6 @@ Thumbs.db
 /TODO.txt
 local_vobs/
 backend/wheelhouse/
+
+# Local Windows installer source assets
+local_installer_assets/

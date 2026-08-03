@@ -1,0 +1,21 @@
+{
+    "schema_version": 1,
+    "assets": {
+      "caddy": {
+        "version": "2.11.1",
+        "archive_name": "caddy_2.11.1_windows_amd64.zip",
+        "download_url": "https://github.com/caddyserver/caddy/releases/download/v2.11.1/caddy_2.11.1_windows_amd64.zip",
+        "sha256": "de55cc5c227fb03d5d69fca6adf0d71e90fdcfab84c1a314598f25f3bba83fd2",
+        "executable_name": "caddy.exe",
+        "architecture": "amd64"
+      },
+      "winsw": {
+        "version": "2.12.0",
+        "file_name": "WinSW-x64.exe",
+        "download_url": "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe",
+        "sha256": "05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da",
+        "installed_name": "CareQueueApi.exe",
+        "architecture": "x64"
+      }
+    }
+  }
