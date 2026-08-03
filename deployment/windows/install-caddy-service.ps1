@@ -7,7 +7,7 @@ param(
     [string]$DataDirectory = "C:\ProgramData\CareQueue",
 
     [string]$CaddyExecutable = (
-        "C:\Program Files (x86)\Caddy\caddy.exe"
+        "C:\Program Files\CareQueue\vendor\caddy\caddy.exe"
     ),
 
     [switch]$StartService
@@ -40,10 +40,6 @@ $sourceConfiguration = Join-Path `
 $caddyfile = Join-Path `
     $InstallDirectory `
     "deployment\windows\Caddyfile"
-
-$sourceWinSwExecutable = Join-Path `
-    $ServiceDirectory `
-    "CareQueueApi.exe"
 
 $serviceExecutable = Join-Path `
     $ServiceDirectory `
@@ -101,13 +97,13 @@ if (
 if (
     -not (
         Test-Path `
-            -LiteralPath $sourceWinSwExecutable `
+            -LiteralPath $serviceExecutable `
             -PathType Leaf
     )
 ) {
     throw (
-        "The WinSW source executable was not found at: " +
-        $sourceWinSwExecutable
+        "The CareQueue Caddy WinSW executable was not found at: " +
+        $serviceExecutable
     )
 }
 
@@ -193,11 +189,6 @@ Write-Host "Validating the installed Caddy configuration..."
 if ($LASTEXITCODE -ne 0) {
     throw "The installed Caddy configuration is invalid."
 }
-
-Copy-Item `
-    -LiteralPath $sourceWinSwExecutable `
-    -Destination $serviceExecutable `
-    -Force
 
 Copy-Item `
     -LiteralPath $sourceConfiguration `

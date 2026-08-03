@@ -3,7 +3,7 @@
   <name>CareQueue HTTPS</name>
   <description>Serves the CareQueue frontend and proxies API requests over private HTTPS.</description>
 
-  <executable>C:\Program Files (x86)\Caddy\caddy.exe</executable>
+  <executable>C:\Program Files\CareQueue\vendor\caddy\caddy.exe</executable>
   <arguments>run --config "C:\Program Files\CareQueue\deployment\windows\Caddyfile" --adapter caddyfile</arguments>
 
   <workingdirectory>C:\Program Files\CareQueue</workingdirectory>
