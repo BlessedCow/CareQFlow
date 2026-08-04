@@ -1,6 +1,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
+    [ValidateSet(
+        "Install",
+        "Upgrade",
+        "Repair",
+        "Uninstall"
+    )]
+    [string]$Mode,
+
     [ValidatePattern("^https://")]
     [string]$ApplicationOrigin,
 
@@ -24,6 +32,7 @@ Set-StrictMode -Version Latest
 
 $exitCodeSuccess = 0
 $exitCodeInvalidPayload = 10
+$exitCodeInvalidInstallState = 15
 $exitCodeAdministratorRequired = 20
 $exitCodeLoggingFailure = 25
 $exitCodeInstallationFailure = 30
@@ -42,6 +51,49 @@ function Test-Administrator {
     return $currentPrincipal.IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator
     )
+}
+
+function Test-CareQueueInstallation {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory
+    )
+
+    $requiredInstalledPaths = @(
+        (
+            Join-Path `
+                $InstallDirectory `
+                "backend\authstatus_api"
+        ),
+        (
+            Join-Path `
+                $InstallDirectory `
+                "frontend\dist\index.html"
+        ),
+        (
+            Join-Path `
+                $InstallDirectory `
+                "runtime\python\python.exe"
+        ),
+        (
+            Join-Path `
+                $InstallDirectory `
+                "vendor\caddy\caddy.exe"
+        )
+    )
+
+    foreach ($requiredInstalledPath in $requiredInstalledPaths) {
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $requiredInstalledPath
+            )
+        ) {
+            return $false
+        }
+    }
+
+    return $true
 }
 
 function Write-InstallerResult {
@@ -269,258 +321,471 @@ if (-not (Test-Administrator)) {
     exit $exitCodeAdministratorRequired
 }
 
-try {
-    if (-not $PayloadDirectory) {
-        $PayloadDirectory = (
-            Resolve-Path `
-                -LiteralPath (
-                Join-Path `
-                    $PSScriptRoot `
-                    "..\..\.."
-            )
-        ).Path
-    }
-    else {
-        $PayloadDirectory = (
-            Resolve-Path `
-                -LiteralPath $PayloadDirectory `
-                -ErrorAction Stop
-        ).Path
-    }
-
-    $payloadMetadataPath = Join-Path `
-        $PayloadDirectory `
-        "payload.json"
-
-    $payloadManifestPath = Join-Path `
-        $PayloadDirectory `
-        "SHA256SUMS.txt"
-
-    $productionInstallerPath = Join-Path `
-        $PayloadDirectory `
-        "deployment\windows\install-production.ps1"
-
-    $frontendBuildDirectory = Join-Path `
-        $PayloadDirectory `
-        "frontend\dist"
-
-    $privatePythonRuntimeDirectory = Join-Path `
-        $PayloadDirectory `
-        "runtime\python"
-
-    $vendorAssetDirectory = Join-Path `
-        $PayloadDirectory `
-        "vendor"
-
-    $backendWheelDirectory = Join-Path `
-        $PayloadDirectory `
-        "dependencies\wheelhouse"
-
-    $requiredPayloadPaths = @(
-        $payloadMetadataPath,
-        $payloadManifestPath,
-        $productionInstallerPath,
-        (Join-Path $frontendBuildDirectory "index.html"),
-        (
-            Join-Path `
-                $privatePythonRuntimeDirectory `
-                "python.exe"
-        ),
-        (
-            Join-Path `
-                $vendorAssetDirectory `
-                "caddy\caddy.exe"
-        ),
-        (
-            Join-Path `
-                $vendorAssetDirectory `
-                "winsw\WinSW-x64.exe"
-        ),
-        (
-            Join-Path `
-                $backendWheelDirectory `
-                "SHA256SUMS.txt"
-        )
+if (
+    $Mode -ne "Uninstall" `
+        -and [string]::IsNullOrWhiteSpace($ApplicationOrigin)
+) {
+    Write-InstallerResult `
+        -Status "failed" `
+        -ExitCode $exitCodeInvalidInstallState `
+        -Message (
+        "ApplicationOrigin is required for Install, Upgrade, " +
+        "and Repair operations."
     )
 
-    foreach ($requiredPayloadPath in $requiredPayloadPaths) {
-        if (
-            -not (
-                Test-Path `
-                    -LiteralPath $requiredPayloadPath
-            )
-        ) {
-            throw (
-                "A required CareQueue payload path was not found: " +
-                $requiredPayloadPath
+    exit $exitCodeInvalidInstallState
+}
+
+$careQueueIsInstalled = Test-CareQueueInstallation `
+    -InstallDirectory $InstallDirectory
+
+$modeValidationMessage = $null
+
+switch ($Mode) {
+    "Install" {
+        if ($careQueueIsInstalled) {
+            $modeValidationMessage = (
+                "CareQueue is already installed. Use -Mode Upgrade " +
+                "or -Mode Repair."
             )
         }
     }
 
-    Assert-PayloadIntegrity `
-    -PayloadDirectory $PayloadDirectory `
-    -ManifestPath $payloadManifestPath
-
-    $payloadMetadata = Get-Content `
-        -LiteralPath $payloadMetadataPath `
-        -Raw `
-        -ErrorAction Stop |
-    ConvertFrom-Json
-
-    if ($payloadMetadata.schema_version -ne 1) {
-        throw (
-            "Unsupported CareQueue payload schema version: " +
-            $payloadMetadata.schema_version
-        )
+    "Upgrade" {
+        if (-not $careQueueIsInstalled) {
+            $modeValidationMessage = (
+                "CareQueue is not installed. Use -Mode Install."
+            )
+        }
     }
 
-    if (
-        [string]$payloadMetadata.application.name `
-            -ne "CareQueue"
-    ) {
-        throw (
-            "The supplied payload is not a CareQueue installer payload."
-        )
+    "Repair" {
+        if (-not $careQueueIsInstalled) {
+            $modeValidationMessage = (
+                "CareQueue is not installed. Use -Mode Install."
+            )
+        }
+    }
+
+    "Uninstall" {
+        if (-not $careQueueIsInstalled) {
+            $modeValidationMessage = (
+                "CareQueue is not installed, so there is nothing " +
+                "to uninstall."
+            )
+        }
     }
 }
-catch {
-    Write-InstallerResult `
-        -Status "failed" `
-        -ExitCode $exitCodeInvalidPayload `
-        -Message $_.Exception.Message
 
-    exit $exitCodeInvalidPayload
-}
+    if ($modeValidationMessage) {
+        Write-InstallerResult `
+            -Status "failed" `
+            -ExitCode $exitCodeInvalidInstallState `
+            -Message $modeValidationMessage
 
-try {
-    New-Item `
-        -ItemType Directory `
-        -Path $LogDirectory `
-        -Force |
-    Out-Null
+        exit $exitCodeInvalidInstallState
+    }
 
-    $resolvedLogDirectory = (
-        Resolve-Path `
-            -LiteralPath $LogDirectory `
-            -ErrorAction Stop
-    ).Path
+    if ($Mode -eq "Uninstall") {
+        try {
+            New-Item `
+                -ItemType Directory `
+                -Path $LogDirectory `
+                -Force |
+            Out-Null
 
-    $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+            $resolvedLogDirectory = (
+                Resolve-Path `
+                    -LiteralPath $LogDirectory `
+                    -ErrorAction Stop
+            ).Path
 
-    $logPath = Join-Path `
-        $resolvedLogDirectory `
-        "CareQueue-Install-$timestamp.log"
-}
-catch {
-    Write-InstallerResult `
-        -Status "failed" `
-        -ExitCode $exitCodeLoggingFailure `
-        -Message (
-        "Unable to prepare the CareQueue installer log: " +
-        $_.Exception.Message
+            $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+
+            $logPath = Join-Path `
+                $resolvedLogDirectory `
+                "CareQueue-Uninstall-$timestamp.log"
+        }
+        catch {
+            Write-InstallerResult `
+                -Status "failed" `
+                -ExitCode $exitCodeLoggingFailure `
+                -Message (
+                "Unable to prepare the CareQueue uninstaller log: " +
+                $_.Exception.Message
+            )
+
+            exit $exitCodeLoggingFailure
+        }
+
+        $uninstallScriptPath = Join-Path `
+            $InstallDirectory `
+            "deployment\windows\uninstall-production.ps1"
+
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $uninstallScriptPath `
+                    -PathType Leaf
+            )
+        ) {
+            Write-InstallerResult `
+                -Status "failed" `
+                -ExitCode $exitCodeInstallationFailure `
+                -Message (
+                "The installed CareQueue uninstall engine was not " +
+                "found: $uninstallScriptPath"
+            ) `
+                -LogPath $logPath
+
+            exit $exitCodeInstallationFailure
+        }
+
+        $uninstallArguments = @(
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            $uninstallScriptPath,
+            "-InstallDirectory",
+            $InstallDirectory,
+            "-DataDirectory",
+            $DataDirectory,
+            "-DeploymentDirectory",
+            (
+                Join-Path `
+                    $InstallDirectory `
+                    "deployment\windows"
+            )
+        )
+
+        @(
+            "CareQueue Windows Installer"
+            "Mode: Uninstall"
+            "Started UTC: $([DateTime]::UtcNow.ToString('o'))"
+            "Install directory: $InstallDirectory"
+            "Data directory: $DataDirectory"
+            ""
+        ) |
+        Set-Content `
+            -LiteralPath $logPath `
+            -Encoding utf8
+
+        try {
+            & powershell.exe @uninstallArguments 2>&1 |
+            Tee-Object `
+                -FilePath $logPath `
+                -Append
+
+            $uninstallExitCode = $LASTEXITCODE
+
+            if ($uninstallExitCode -ne 0) {
+                throw (
+                    "The CareQueue uninstall engine failed with exit " +
+                    "code $uninstallExitCode."
+                )
+            }
+        }
+        catch {
+            $failureMessage = $_.Exception.Message
+
+            @(
+                ""
+                "Uninstall operation failed."
+                "Completed UTC: $([DateTime]::UtcNow.ToString('o'))"
+                "Message: $failureMessage"
+            ) |
+            Add-Content `
+                -LiteralPath $logPath `
+                -Encoding utf8
+
+            Write-InstallerResult `
+                -Status "failed" `
+                -ExitCode $exitCodeInstallationFailure `
+                -Message $failureMessage `
+                -LogPath $logPath
+
+            exit $exitCodeInstallationFailure
+        }
+
+        @(
+            ""
+            "Uninstall operation completed successfully."
+            "Completed UTC: $([DateTime]::UtcNow.ToString('o'))"
+        ) |
+        Add-Content `
+            -LiteralPath $logPath `
+            -Encoding utf8
+
+        Write-InstallerResult `
+            -Status "succeeded" `
+            -ExitCode $exitCodeSuccess `
+            -Message (
+            "CareQueue Uninstall operation completed successfully."
+        ) `
+            -LogPath $logPath
+
+        exit $exitCodeSuccess
+    }
+
+    try {
+        if (-not $PayloadDirectory) {
+            $PayloadDirectory = (
+                Resolve-Path `
+                    -LiteralPath (
+                    Join-Path `
+                        $PSScriptRoot `
+                        "..\..\.."
+                )
+            ).Path
+        }
+        else {
+            $PayloadDirectory = (
+                Resolve-Path `
+                    -LiteralPath $PayloadDirectory `
+                    -ErrorAction Stop
+            ).Path
+        }
+
+        $payloadMetadataPath = Join-Path `
+            $PayloadDirectory `
+            "payload.json"
+
+        $payloadManifestPath = Join-Path `
+            $PayloadDirectory `
+            "SHA256SUMS.txt"
+
+        $productionInstallerPath = Join-Path `
+            $PayloadDirectory `
+            "deployment\windows\install-production.ps1"
+
+        $frontendBuildDirectory = Join-Path `
+            $PayloadDirectory `
+            "frontend\dist"
+
+        $privatePythonRuntimeDirectory = Join-Path `
+            $PayloadDirectory `
+            "runtime\python"
+
+        $vendorAssetDirectory = Join-Path `
+            $PayloadDirectory `
+            "vendor"
+
+        $backendWheelDirectory = Join-Path `
+            $PayloadDirectory `
+            "dependencies\wheelhouse"
+
+        $requiredPayloadPaths = @(
+            $payloadMetadataPath,
+            $payloadManifestPath,
+            $productionInstallerPath,
+            (Join-Path $frontendBuildDirectory "index.html"),
+            (
+                Join-Path `
+                    $privatePythonRuntimeDirectory `
+                    "python.exe"
+            ),
+            (
+                Join-Path `
+                    $vendorAssetDirectory `
+                    "caddy\caddy.exe"
+            ),
+            (
+                Join-Path `
+                    $vendorAssetDirectory `
+                    "winsw\WinSW-x64.exe"
+            ),
+            (
+                Join-Path `
+                    $backendWheelDirectory `
+                    "SHA256SUMS.txt"
+            )
+        )
+
+        foreach ($requiredPayloadPath in $requiredPayloadPaths) {
+            if (
+                -not (
+                    Test-Path `
+                        -LiteralPath $requiredPayloadPath
+                )
+            ) {
+                throw (
+                    "A required CareQueue payload path was not found: " +
+                    $requiredPayloadPath
+                )
+            }
+        }
+
+        Assert-PayloadIntegrity `
+            -PayloadDirectory $PayloadDirectory `
+            -ManifestPath $payloadManifestPath
+
+        $payloadMetadata = Get-Content `
+            -LiteralPath $payloadMetadataPath `
+            -Raw `
+            -ErrorAction Stop |
+        ConvertFrom-Json
+
+        if ($payloadMetadata.schema_version -ne 1) {
+            throw (
+                "Unsupported CareQueue payload schema version: " +
+                $payloadMetadata.schema_version
+            )
+        }
+
+        if (
+            [string]$payloadMetadata.application.name `
+                -ne "CareQueue"
+        ) {
+            throw (
+                "The supplied payload is not a CareQueue installer payload."
+            )
+        }
+    }
+    catch {
+        Write-InstallerResult `
+            -Status "failed" `
+            -ExitCode $exitCodeInvalidPayload `
+            -Message $_.Exception.Message
+
+        exit $exitCodeInvalidPayload
+    }
+
+    try {
+        New-Item `
+            -ItemType Directory `
+            -Path $LogDirectory `
+            -Force |
+        Out-Null
+
+        $resolvedLogDirectory = (
+            Resolve-Path `
+                -LiteralPath $LogDirectory `
+                -ErrorAction Stop
+        ).Path
+
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+
+        $logPath = Join-Path `
+            $resolvedLogDirectory `
+            "CareQueue-Install-$timestamp.log"
+    }
+    catch {
+        Write-InstallerResult `
+            -Status "failed" `
+            -ExitCode $exitCodeLoggingFailure `
+            -Message (
+            "Unable to prepare the CareQueue installer log: " +
+            $_.Exception.Message
+        )
+
+        exit $exitCodeLoggingFailure
+    }
+
+    $installerArguments = @(
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $productionInstallerPath,
+        "-ApplicationOrigin",
+        $ApplicationOrigin,
+        "-SourceDirectory",
+        $PayloadDirectory,
+        "-InstallDirectory",
+        $InstallDirectory,
+        "-DataDirectory",
+        $DataDirectory,
+        "-FrontendBuildDirectory",
+        $frontendBuildDirectory,
+        "-PrivatePythonRuntimeDirectory",
+        $privatePythonRuntimeDirectory,
+        "-VendorAssetDirectory",
+        $vendorAssetDirectory,
+        "-BackendWheelDirectory",
+        $backendWheelDirectory
     )
 
-    exit $exitCodeLoggingFailure
-}
-
-$installerArguments = @(
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    $productionInstallerPath,
-    "-ApplicationOrigin",
-    $ApplicationOrigin,
-    "-SourceDirectory",
-    $PayloadDirectory,
-    "-InstallDirectory",
-    $InstallDirectory,
-    "-DataDirectory",
-    $DataDirectory,
-    "-FrontendBuildDirectory",
-    $frontendBuildDirectory,
-    "-PrivatePythonRuntimeDirectory",
-    $privatePythonRuntimeDirectory,
-    "-VendorAssetDirectory",
-    $vendorAssetDirectory,
-    "-BackendWheelDirectory",
-    $backendWheelDirectory
-)
-
-if ($Force) {
-    $installerArguments += "-Force"
-}
-
-if ($SkipPermissionHardening) {
-    $installerArguments += "-SkipPermissionHardening"
-}
-
-$logHeader = @(
-    "CareQueue Windows Installer"
-    "Started UTC: $([DateTime]::UtcNow.ToString('o'))"
-    "Payload: $PayloadDirectory"
-    "Install directory: $InstallDirectory"
-    "Data directory: $DataDirectory"
-    "Application origin: $ApplicationOrigin"
-    ""
-)
-
-$logHeader |
-Set-Content `
-    -LiteralPath $logPath `
-    -Encoding utf8
-
-try {
-    & powershell.exe @installerArguments 2>&1 |
-    Tee-Object `
-        -FilePath $logPath `
-        -Append
-
-    $productionInstallerExitCode = $LASTEXITCODE
-
-    if ($productionInstallerExitCode -ne 0) {
-        throw (
-            "The CareQueue production installer failed with exit code " +
-            "$productionInstallerExitCode."
-        )
+    if (
+        $Force `
+            -or $Mode -eq "Upgrade" `
+            -or $Mode -eq "Repair"
+    ) {
+        $installerArguments += "-Force"
     }
-}
-catch {
-    $failureMessage = $_.Exception.Message
+
+    if ($SkipPermissionHardening) {
+        $installerArguments += "-SkipPermissionHardening"
+    }
+
+    $logHeader = @(
+        "CareQueue Windows Installer"
+        "Mode: $Mode"
+        "Started UTC: $([DateTime]::UtcNow.ToString('o'))"
+        "Payload: $PayloadDirectory"
+        "Install directory: $InstallDirectory"
+        "Data directory: $DataDirectory"
+        "Application origin: $ApplicationOrigin"
+        ""
+    )
+
+    $logHeader |
+    Set-Content `
+        -LiteralPath $logPath `
+        -Encoding utf8
+
+    try {
+        & powershell.exe @installerArguments 2>&1 |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
+
+        $productionInstallerExitCode = $LASTEXITCODE
+
+        if ($productionInstallerExitCode -ne 0) {
+            throw (
+                "The CareQueue production installer failed with exit code " +
+                "$productionInstallerExitCode."
+            )
+        }
+    }
+    catch {
+        $failureMessage = $_.Exception.Message
+
+        @(
+            ""
+            "$Mode operation failed."
+            "Completed UTC: $([DateTime]::UtcNow.ToString('o'))"
+            "Message: $failureMessage"
+        ) |
+        Add-Content `
+            -LiteralPath $logPath `
+            -Encoding utf8
+
+        Write-InstallerResult `
+            -Status "failed" `
+            -ExitCode $exitCodeInstallationFailure `
+            -Message $failureMessage `
+            -LogPath $logPath
+
+        exit $exitCodeInstallationFailure
+    }
 
     @(
         ""
-        "Installation failed."
+        "$Mode operation completed successfully."
         "Completed UTC: $([DateTime]::UtcNow.ToString('o'))"
-        "Message: $failureMessage"
     ) |
     Add-Content `
         -LiteralPath $logPath `
         -Encoding utf8
 
     Write-InstallerResult `
-        -Status "failed" `
-        -ExitCode $exitCodeInstallationFailure `
-        -Message $failureMessage `
+        -Status "succeeded" `
+        -ExitCode $exitCodeSuccess `
+        -Message "CareQueue $Mode operation completed successfully." `
         -LogPath $logPath
 
-    exit $exitCodeInstallationFailure
-}
-
-@(
-    ""
-    "Installation completed successfully."
-    "Completed UTC: $([DateTime]::UtcNow.ToString('o'))"
-) |
-Add-Content `
-    -LiteralPath $logPath `
-    -Encoding utf8
-
-Write-InstallerResult `
-    -Status "succeeded" `
-    -ExitCode $exitCodeSuccess `
-    -Message "CareQueue installation completed successfully." `
-    -LogPath $logPath
-
-exit $exitCodeSuccess
+    exit $exitCodeSuccess
