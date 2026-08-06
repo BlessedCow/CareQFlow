@@ -1,5 +1,7 @@
 -r requirements.txt
 
 faker
+pytest
 pytest-xdist
+ruff
 bandit

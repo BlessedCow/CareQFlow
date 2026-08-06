@@ -242,8 +242,6 @@ $requiredSourcePaths = @(
     "backend\authstatus_api",
     "backend\scripts",
     "backend\requirements.txt",
-    "frontend\package.json",
-    "frontend\package-lock.json",
     "deployment\windows\run-api.ps1",
     "deployment\windows\CareQueueApi.xml",
     "deployment\windows\Caddyfile",

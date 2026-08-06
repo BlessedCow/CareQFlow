@@ -6,7 +6,5 @@ cryptography
 python-dotenv
 pypdf
 httpx2
-pytest
-ruff
 argon2-cffi
 sqlcipher3
