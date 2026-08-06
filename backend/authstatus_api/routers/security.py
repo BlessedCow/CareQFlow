@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,6 +30,9 @@ from authstatus_api.security.schemas import (
     AuditEventResponse,
     ChangePasswordRequest,
     CurrentUserResponse,
+    InitialAdminSetupRequest,
+    InitialAdminSetupResponse,
+    InitialAdminSetupStatusResponse,
     LoginRequest,
     LoginResponse,
     LogoutResponse,
@@ -57,6 +62,7 @@ from authstatus_api.security.users import (
     list_users,
     update_user,
     update_user_password,
+    user_exists,
 )
 from authstatus_api.settings import get_settings
 
@@ -83,6 +89,65 @@ def _user_response(user: dict) -> UserResponse:
         last_login_at=user["last_login_at"],
         password_changed_at=user["password_changed_at"],
         must_change_password=user["must_change_password"],
+    )
+
+
+@router.get(
+    "/setup-initial-admin/status",
+    response_model=InitialAdminSetupStatusResponse,
+)
+def get_initial_admin_setup_status() -> InitialAdminSetupStatusResponse:
+    return InitialAdminSetupStatusResponse(
+        setup_available=not user_exists(),
+    )
+
+
+@router.post(
+    "/setup-initial-admin",
+    response_model=InitialAdminSetupResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def setup_initial_admin(
+    payload: InitialAdminSetupRequest,
+    request: Request,
+) -> InitialAdminSetupResponse:
+    if user_exists():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Initial admin setup is no longer available.",
+        )
+
+    if len(payload.password) < 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 12 characters.",
+        )
+
+    try:
+        user = create_user(
+            payload.username,
+            payload.password,
+            role="Admin",
+            must_change_password=False,
+        )
+    except sqlite3.IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Initial admin setup is no longer available.",
+        ) from None
+
+    record_audit_event(
+        action="security.initial_admin_setup",
+        resource_type="user",
+        resource_id=user["id"],
+        user=user,
+        metadata={"role": "Admin"},
+        request=request,
+    )
+
+    return InitialAdminSetupResponse(
+        user=_user_response(user),
+        setup_complete=True,
     )
 
 

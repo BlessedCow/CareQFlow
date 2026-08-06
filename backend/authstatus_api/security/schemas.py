@@ -28,6 +28,13 @@ class UserUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class InitialAdminSetupRequest(BaseModel):
+    username: str
+    password: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
@@ -62,8 +69,35 @@ class AdminUserCreateResponse(BaseModel):
     temporary_password: str
 
 
+class InitialAdminSetupResponse(BaseModel):
+    user: UserResponse
+    setup_complete: bool
+
+
+class InitialAdminSetupStatusResponse(BaseModel):
+    setup_available: bool
+
+
 class UserListResponse(BaseModel):
     users: list[UserResponse]
+
+
+class SessionResponse(BaseModel):
+    expires_at: str
+
+
+class LoginResponse(BaseModel):
+    user: UserResponse
+    session: SessionResponse
+
+
+class CurrentUserResponse(BaseModel):
+    user: UserResponse
+    session: SessionResponse
+
+
+class LogoutResponse(BaseModel):
+    logged_out: bool
 
 
 class AuditEventResponse(BaseModel):
@@ -84,21 +118,3 @@ class AuditEventListResponse(BaseModel):
     page: int
     page_size: int
     total: int
-
-
-class LoginResponse(BaseModel):
-    user: UserResponse
-    session: SessionResponse
-
-
-class CurrentUserResponse(BaseModel):
-    user: UserResponse
-    session: SessionResponse
-
-
-class LogoutResponse(BaseModel):
-    logged_out: bool
-
-
-class SessionResponse(BaseModel):
-    expires_at: str

@@ -95,6 +95,21 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
     return user_row_to_dict(row)
 
 
+def user_exists() -> bool:
+    init_db()
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM users
+            LIMIT 1
+            """,
+        ).fetchone()
+
+    return row is not None
+
+
 def list_users() -> list[dict[str, Any]]:
     init_db()
 

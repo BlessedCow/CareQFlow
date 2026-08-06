@@ -52,6 +52,12 @@ Source: "..\..\..\build\windows\payload\*"; \
     DestDir: "{tmp}\CareQueuePayload"; \
     Flags: ignoreversion recursesubdirs createallsubdirs deleteafterinstall
 
+[Run]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""C:\Program Files\CareQueue\deployment\windows\CareQueue-AdminSetup.ps1"""; \
+    Description: "Launch First-Time Admin Account Setup"; \
+    Flags: postinstall skipifsilent nowait
+
 [Code]
 const
   CareQueueApplicationOrigin = 'https://carequeue.local';

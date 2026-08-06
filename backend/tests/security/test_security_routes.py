@@ -399,6 +399,22 @@ def test_ur_user_cannot_list_users(client):
     assert response.status_code == 403
 
 
+def test_setup_initial_admin_status_is_available_when_no_users_exist(client):
+    response = client.get("/api/security/setup-initial-admin/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"setup_available": True}
+
+
+def test_setup_initial_admin_status_is_unavailable_after_user_exists(client):
+    create_user("existing@example.com", "correct horse battery staple", role="Admin")
+
+    response = client.get("/api/security/setup-initial-admin/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"setup_available": False}
+
+
 def test_admin_can_create_user_with_generated_temporary_password(client):
     create_user("admin@example.com", "correct horse battery staple", role="Admin")
 
@@ -1465,3 +1481,60 @@ def test_me_returns_renewed_session_expiration(client):
 
     assert me_response.status_code == 200
     assert me_response.json()["session"]["expires_at"] == renewed_expiration
+
+
+def test_setup_initial_admin_creates_admin_when_no_users_exist(client):
+    response = client.post(
+        "/api/security/setup-initial-admin",
+        json={
+            "username": "FirstAdmin@Example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+    assert data["setup_complete"] is True
+    assert data["user"]["username"] == "firstadmin@example.com"
+    assert data["user"]["role"] == "Admin"
+    assert data["user"]["is_active"] is True
+    assert data["user"]["must_change_password"] is False
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "firstadmin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+
+def test_setup_initial_admin_is_disabled_after_user_exists(client):
+    create_user("existing@example.com", "correct horse battery staple", role="Admin")
+
+    response = client.post(
+        "/api/security/setup-initial-admin",
+        json={
+            "username": "new-admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Initial admin setup is no longer available."}
+
+
+def test_setup_initial_admin_rejects_short_password(client):
+    response = client.post(
+        "/api/security/setup-initial-admin",
+        json={
+            "username": "admin@example.com",
+            "password": "too-short",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Password must be at least 12 characters."}
