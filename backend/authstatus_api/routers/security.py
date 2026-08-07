@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from ipaddress import ip_address
 
 from fastapi import (
     APIRouter,
@@ -80,6 +81,26 @@ def _client_ip(request: Request) -> str:
     return request.client.host
 
 
+def _is_loopback_client(request: Request) -> bool:
+    if request.client is None:
+        return False
+
+    try:
+        return ip_address(request.client.host).is_loopback
+    except ValueError:
+        return False
+
+
+def _require_loopback_initial_setup(request: Request) -> None:
+    if _is_loopback_client(request):
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Initial admin setup must be completed from the local machine.",
+    )
+
+
 def _user_response(user: dict) -> UserResponse:
     return UserResponse(
         id=user["id"],
@@ -96,7 +117,11 @@ def _user_response(user: dict) -> UserResponse:
     "/setup-initial-admin/status",
     response_model=InitialAdminSetupStatusResponse,
 )
-def get_initial_admin_setup_status() -> InitialAdminSetupStatusResponse:
+def get_initial_admin_setup_status(
+    request: Request,
+) -> InitialAdminSetupStatusResponse:
+    _require_loopback_initial_setup(request)
+
     return InitialAdminSetupStatusResponse(
         setup_available=not user_exists(),
     )
@@ -111,6 +136,8 @@ def setup_initial_admin(
     payload: InitialAdminSetupRequest,
     request: Request,
 ) -> InitialAdminSetupResponse:
+    _require_loopback_initial_setup(request)
+
     if user_exists():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

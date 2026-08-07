@@ -23,7 +23,10 @@ def configure_test_settings(tmp_path, monkeypatch):
 
 @pytest.fixture
 def client():
-    with TestClient(create_app()) as test_client:
+    with TestClient(
+        create_app(),
+        client=("127.0.0.1", 50000),
+    ) as test_client:
         yield test_client
 
 
@@ -413,6 +416,38 @@ def test_setup_initial_admin_status_is_unavailable_after_user_exists(client):
 
     assert response.status_code == 200
     assert response.json() == {"setup_available": False}
+
+
+def test_setup_initial_admin_status_rejects_non_loopback_client():
+    with TestClient(
+        create_app(),
+        client=("203.0.113.10", 50000),
+    ) as remote_client:
+        response = remote_client.get("/api/security/setup-initial-admin/status")
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Initial admin setup must be completed from the local machine."
+    }
+
+
+def test_setup_initial_admin_rejects_non_loopback_client():
+    with TestClient(
+        create_app(),
+        client=("203.0.113.10", 50000),
+    ) as remote_client:
+        response = remote_client.post(
+            "/api/security/setup-initial-admin",
+            json={
+                "username": "admin@example.com",
+                "password": "correct horse battery staple",
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Initial admin setup must be completed from the local machine."
+    }
 
 
 def test_admin_can_create_user_with_generated_temporary_password(client):
