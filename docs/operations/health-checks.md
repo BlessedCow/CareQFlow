@@ -1,22 +1,12 @@
 # Health Checks
 
-CareQueue exposes liveness and readiness endpoints for operational validation.
+CareQueue exposes health endpoints for operational validation.
 
-Use them for:
-
-- Manual administrator checks
-- Windows service validation
-- Reverse-proxy validation
-- Deployment smoke tests
-- Upgrade verification
-- Recovery verification
-- Monitoring integrations
-
-Health checks do not replace login testing or representative workflow testing.
+Use health checks to confirm that the API process is responding and that the configured database is reachable. Health checks are intentionally narrow. They do not replace login testing, browser testing, backup testing, or representative workflow testing.
 
 ## Endpoints
 
-CareQueue exposes:
+CareQueue exposes these health endpoints:
 
 ```text
 /api/health
@@ -24,12 +14,7 @@ CareQueue exposes:
 /api/health/ready
 ```
 
-The primary operational endpoints are:
-
-```text
-/api/health/live
-/api/health/ready
-```
+Use the explicit liveness and readiness endpoints for operational checks because their meanings are clearer.
 
 ## Liveness
 
@@ -55,7 +40,7 @@ A successful response includes:
 }
 ```
 
-The version may change.
+The version value may change between releases.
 
 Liveness does not prove:
 
@@ -84,11 +69,12 @@ Use readiness for:
 
 - Post-installation validation
 - Post-upgrade validation
+- Post-repair validation
 - Post-recovery validation
 - Monitoring application availability
 - Confirming database access
 
-A successful readiness response still does not prove that every application workflow is functioning.
+A successful readiness response still does not prove that every protected workflow is functioning.
 
 ## General Health Endpoint
 
@@ -98,7 +84,7 @@ Endpoint:
 GET /api/health
 ```
 
-Use the explicit liveness and readiness endpoints for operational checks because their meanings are clearer.
+The general health endpoint is useful for quick compatibility checks. Prefer `/api/health/live` and `/api/health/ready` for operational runbooks.
 
 ## Authentication and Safety
 
@@ -116,7 +102,7 @@ Their responses must not expose:
 - Backup filenames
 - Host credentials
 
-## Windows Production
+## Windows Production Request Paths
 
 A private Windows deployment normally uses:
 
@@ -124,15 +110,17 @@ A private Windows deployment normally uses:
 https://carequeue.local
 ```
 
-The API listens on:
+The API listens on loopback:
 
 ```text
 127.0.0.1:8000
 ```
 
-Caddy terminates HTTPS and proxies `/api`.
+Caddy terminates HTTPS and proxies `/api` to the API service.
 
-## Check Services
+Use direct loopback checks to isolate API issues. Use HTTPS checks to validate the full user-facing request path.
+
+## Check Windows Services
 
 Run PowerShell as Administrator:
 
@@ -140,33 +128,38 @@ Run PowerShell as Administrator:
 Get-Service -Name "CareQueueApi", "CareQueueCaddy"
 ```
 
+Both services should normally report `Running` after a completed installation, upgrade, or repair.
+
 A service can report `Running` while the application is not ready, so always continue with endpoint checks.
 
 ## Direct API Liveness
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "http://127.0.0.1:8000/api/health/live"
+    -Uri "http://127.0.0.1:8000/api/health/live" `
+    -TimeoutSec 10
 ```
 
 This bypasses Caddy.
 
-Use it to separate API failures from HTTPS, certificate, or proxy failures.
+Use it to separate API failures from HTTPS, certificate, hostname, or reverse-proxy failures.
 
 ## Direct API Readiness
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "http://127.0.0.1:8000/api/health/ready"
+    -Uri "http://127.0.0.1:8000/api/health/ready" `
+    -TimeoutSec 10
 ```
 
-When liveness succeeds but readiness fails, investigate the database and production configuration.
+When liveness succeeds but readiness fails, investigate the database, SQLCipher configuration, file permissions, and production environment settings.
 
 ## HTTPS Liveness
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/live"
+    -Uri "https://carequeue.local/api/health/live" `
+    -TimeoutSec 10
 ```
 
 This validates:
@@ -182,7 +175,8 @@ This validates:
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/ready"
+    -Uri "https://carequeue.local/api/health/ready" `
+    -TimeoutSec 10
 ```
 
 This is the preferred Windows production smoke test because it validates the full request path and database readiness.
@@ -208,6 +202,34 @@ Production API requests should use:
 https://carequeue.local/api/...
 ```
 
+## First-Time Admin Setup Check
+
+After a fresh packaged Windows installation, the installer can launch the first-time Admin setup window.
+
+The setup window checks:
+
+```text
+http://127.0.0.1:8000/api/security/setup-initial-admin/status
+```
+
+Expected response while no users exist:
+
+```json
+{
+  "setup_available": true
+}
+```
+
+Expected response after the first user exists:
+
+```json
+{
+  "setup_available": false
+}
+```
+
+This endpoint is only a setup availability check. It does not prove that login works. After setup completes, sign in through the browser and validate protected pages.
+
 ## Local Development
 
 Backend:
@@ -226,14 +248,16 @@ Development liveness:
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "http://127.0.0.1:8000/api/health/live"
+    -Uri "http://127.0.0.1:8000/api/health/live" `
+    -TimeoutSec 10
 ```
 
 Development readiness:
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "http://127.0.0.1:8000/api/health/ready"
+    -Uri "http://127.0.0.1:8000/api/health/ready" `
+    -TimeoutSec 10
 ```
 
 ## Linux
@@ -323,6 +347,12 @@ Likely causes:
 - Browser-side JavaScript error
 - Static asset failure
 - Caddy static-root problem
+
+### Setup status says setup is complete
+
+If the first-time Admin setup window says setup is already complete, at least one user exists in the active database.
+
+Confirm that the installed instance is using the expected runtime database. Do not delete runtime data or generate new secrets unless the intent is to reset the environment and the data has been backed up.
 
 ## Connection Refused
 
@@ -462,17 +492,32 @@ sudo ss \
 
 After first installation:
 
-1. Confirm both services are running.
+1. Confirm both Windows services are running.
 2. Check direct liveness.
 3. Check direct readiness.
 4. Check HTTPS liveness.
 5. Check HTTPS readiness.
-6. Open the frontend.
-7. Create the first production user.
+6. Complete first-time Admin setup if no users exist.
+7. Open the frontend.
 8. Sign in.
 9. Verify the dashboard loads.
 10. Sign out.
 11. Run a manual encrypted backup.
+
+## Post-Repair Smoke Test
+
+After repair:
+
+1. Confirm both Windows services are running.
+2. Check HTTPS liveness.
+3. Check HTTPS readiness.
+4. Open the frontend.
+5. Sign in.
+6. Verify the dashboard loads.
+7. Verify representative protected pages load.
+8. Sign out.
+
+Repair should restore application files and services without replacing runtime data or secrets.
 
 ## Post-Upgrade Smoke Test
 
@@ -491,6 +536,19 @@ After an upgrade:
 11. Run a post-upgrade encrypted backup.
 
 Do not accept the upgrade based only on service status.
+
+## Post-Uninstall Check
+
+After uninstall through the packaged installer:
+
+1. Confirm `CareQueueApi` is removed or no longer returned by `Get-Service`.
+2. Confirm `CareQueueCaddy` is removed or no longer returned by `Get-Service`.
+3. Confirm `C:\Program Files\CareQueue` is removed.
+4. Confirm `C:\ProgramData\CareQueue` is preserved.
+5. Confirm the production environment file is preserved when it existed.
+6. Confirm the SQLCipher database is preserved when it existed.
+
+Uninstall removes application files and services. It preserves runtime data for recovery, auditability, and reinstall workflows.
 
 ## Post-Recovery Smoke Test
 
@@ -562,6 +620,10 @@ $checks = @(
     @{
         Name = "HTTPS readiness"
         Uri = "https://carequeue.local/api/health/ready"
+    },
+    @{
+        Name = "Initial Admin setup status"
+        Uri = "http://127.0.0.1:8000/api/security/setup-initial-admin/status"
     }
 )
 
@@ -574,7 +636,11 @@ foreach ($check in $checks) {
         [PSCustomObject]@{
             Check = $check.Name
             Result = "PASS"
-            Status = $response.status
+            Status = if ($null -ne $response.status) {
+                $response.status
+            } else {
+                "ok"
+            }
         }
     }
     catch {
@@ -587,7 +653,7 @@ foreach ($check in $checks) {
 }
 ```
 
-This checks only health endpoints. It does not authenticate or validate protected workflows.
+This block checks health endpoints and setup availability only. It does not authenticate or validate protected workflows.
 
 ## Safe Health Logging
 
@@ -636,9 +702,10 @@ Use this order:
 5. Certificate trust
 6. HTTPS liveness
 7. HTTPS readiness
-8. Frontend loading
-9. Login
-10. Representative workflow
+8. Setup availability if this is a first install
+9. Frontend loading
+10. Login
+11. Representative workflow
 ```
 
 This isolates the failure from the backend outward.

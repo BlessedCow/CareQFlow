@@ -2,11 +2,9 @@
 
 CareQueue includes a local PDF-assisted intake workflow for supported verification-of-benefits documents.
 
-The workflow reduces repetitive entry without treating the PDF as authoritative.
+The workflow reduces repetitive entry, but it does not treat the PDF as authoritative. CareQueue extracts candidate values, identifies the source of each candidate, assigns confidence, and requires user review before values are copied into the authorization form.
 
-CareQueue extracts candidate values, identifies their source, assigns confidence, and requires review before values are applied to the authorization form.
-
-The current supported template family is:
+Current supported template family:
 
 ```text
 standard_vob_v1
@@ -14,37 +12,37 @@ standard_vob_v1
 
 Other layouts may upload successfully but produce no mapped values.
 
-## What PDF Intake Does
+## Scope
 
-The current workflow can:
+PDF intake is a preview-and-review workflow.
+
+It can:
 
 - Accept a PDF from the add-authorization form
 - Read fillable PDF fields
 - Read embedded page text
-- Match a supported template
+- Match supported templates
 - Extract supported candidate values
-- Report the extraction source
-- Assign confidence
+- Report each candidate source
+- Assign candidate confidence
 - Mark uncertain values for review
-- Let the user edit values
+- Let the user edit extracted values before applying them
 - Let the user choose medical or behavioral-health identifiers
-- Warn when facility or insurance is not registered
-- Record a limited audit event
+- Warn when extracted facility or insurance values are not registered options
+- Record a limited audit event for successful previews
 
-## What PDF Intake Does Not Do
-
-The workflow does not:
+It does not:
 
 - Create an authorization automatically
 - Guarantee extracted values are correct
 - Store the uploaded PDF with the authorization
 - Store extracted page text
-- Perform general OCR
+- Perform OCR
 - Support encrypted PDFs
 - Support every document layout
 - Add unknown facilities or insurers automatically
-- Choose the correct identifier pair without review
-- Replace payer or source-document verification
+- Choose the correct identifier pair without user review
+- Replace payer, portal, or source-document verification
 
 ## Access
 
@@ -99,17 +97,17 @@ The current preview workflow processes the PDF in memory.
 
 It does not write the uploaded document to the CareQueue database or a permanent upload directory.
 
-Operators must still consider browser behavior, proxy limits, crash dumps, endpoint security, and infrastructure logging.
+Operators must still account for browser behavior, proxy limits, crash dumps, endpoint security, and infrastructure logging.
 
 Do not add request-body logging around the PDF endpoint.
 
 ## Validation
 
-CareQueue checks:
+CareQueue checks that:
 
-1. Request is not empty.
-2. File is within the size limit.
-3. Bytes begin with `%PDF-`.
+1. The request is not empty.
+2. The file is within the size limit.
+3. The bytes begin with `%PDF-`.
 4. The PDF can be parsed.
 5. The document is not encrypted.
 
@@ -142,7 +140,7 @@ Confidence: high
 Needs review: false
 ```
 
-High confidence still requires user review.
+High confidence still requires the user to verify the value before applying it.
 
 ### Embedded text
 
@@ -203,9 +201,7 @@ MEDICAL ID#:
 PHONE NUMBER FOR AUTHORIZATION:
 ```
 
-All required match signals must be present.
-
-A similar document with different labels may not match.
+All required match signals must be present. A similar document with different labels may not match.
 
 ## Candidate Fields
 
@@ -225,7 +221,7 @@ behavioral_health_member_id
 behavioral_health_group_number
 ```
 
-The current review panel applies:
+The review panel applies these reviewed values to the authorization form when available:
 
 ```text
 clientName
@@ -238,7 +234,7 @@ insurance
 phoneNumber
 ```
 
-`insurance_phone` is returned but not currently applied by the review panel.
+`insurance_phone` may be returned for review, but the review panel applies `authorization_phone` to the authorization phone field.
 
 ## Candidate Structure
 
@@ -276,13 +272,33 @@ NOT APPLICABLE
 
 Whitespace-only values are also ignored.
 
-Missing values appear as:
+Missing values appear in the review panel as:
 
 ```text
 Not extracted. Review required.
 ```
 
-## `SAME` Identifier Rule
+## Identifier Handling
+
+The preview can surface separate medical and behavioral-health identifiers.
+
+The user chooses one of:
+
+```text
+Behavioral health identifiers
+Medical identifiers
+Do not apply a member ID or group number
+```
+
+Initial selection order:
+
+1. Behavioral-health pair when either behavioral-health candidate exists
+2. Medical pair when either medical candidate exists
+3. No pair when neither pair exists
+
+Only the selected pair is copied into the authorization form.
+
+### `SAME` rule
 
 When a document uses:
 
@@ -305,7 +321,7 @@ Result:
 Behavioral-health member ID: MED-123
 ```
 
-The user must still choose which pair to apply.
+The user must still choose which identifier pair to apply.
 
 ## Review Panel
 
@@ -324,6 +340,22 @@ The review panel allows editing of:
 
 The panel instructs the user to verify every value before applying it.
 
+## Review-Required Confirmation
+
+When any candidate has:
+
+```text
+needs_review: true
+```
+
+the panel requires the user to confirm:
+
+```text
+I reviewed the fields marked as needing review and confirmed or corrected their values.
+```
+
+Until checked, `Apply to authorization` remains disabled.
+
 ## Date Handling
 
 The review panel accepts:
@@ -338,62 +370,11 @@ For admit-date ranges, it applies the first recognized date as the initial admit
 
 The user must confirm that this is the actual original admit date.
 
-## Identifier Pair Selection
-
-The user chooses:
-
-```text
-Behavioral health identifiers
-Medical identifiers
-Do not apply a member ID or group number
-```
-
-Initial selection:
-
-1. Behavioral-health pair when either BH candidate exists
-2. Otherwise medical pair when either medical candidate exists
-3. Otherwise no pair
-
-Only the selected pair is copied into the authorization form.
-
-## Review-Required Confirmation
-
-When any candidate has:
-
-```text
-needs_review: true
-```
-
-the panel requires the user to confirm:
-
-```text
-I reviewed the fields marked as needing review and confirmed or
-corrected their values.
-```
-
-Until checked, `Apply to authorization` remains disabled.
-
-## Applying Values
-
-`Apply to authorization` copies reviewed values into the ordinary add-authorization form.
-
-It does not submit the authorization.
-
-Only nonempty reviewed values are applied.
-
-The ordinary form remains editable and runs final validation on submission.
-
 ## Registered Facility and Insurance Matching
 
 CareQueue attempts to match extracted facility and insurance values against registered options.
 
-When no match exists, the value is not added automatically.
-
-The user must:
-
-- Select an existing value
-- Correct the extracted value
-- Ask an Admin to add the approved option
+When no match exists, the value is not added automatically. The user must select an existing value, correct the extracted value, or ask an Admin to add the approved option.
 
 See [Registered Options](../administration/registered-options.md).
 
@@ -412,6 +393,16 @@ During review, `Cancel PDF intake` discards the preview.
 Canceling does not remove values already entered manually in the authorization form.
 
 After applying values, the preview state and file input are cleared.
+
+## Applying Values
+
+`Apply to authorization` copies reviewed values into the ordinary add-authorization form.
+
+It does not submit the authorization.
+
+Only nonempty reviewed values are applied.
+
+The ordinary form remains editable and runs final validation on submission.
 
 ## Audit Event
 
@@ -456,9 +447,7 @@ python scripts\inspect_pdf_intake.py `
 
 The tool prints document-derived information to the terminal.
 
-Use synthetic or approved stripped PDFs.
-
-Do not place real output in public issues, repository files, screenshots, or recorded terminals.
+Use synthetic or approved stripped PDFs. Do not place real output in public issues, repository files, screenshots, or recorded terminals.
 
 ## Adding a Template
 
@@ -603,7 +592,7 @@ Use an approved unencrypted source only when policy permits.
 
 Local OCR may be considered for image-only documents.
 
-Before adding it, evaluate:
+Before adding OCR, evaluate:
 
 - Telemetry
 - Network requests

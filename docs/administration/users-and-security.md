@@ -219,13 +219,27 @@ Until that is centralized, the deploying organization should define and communic
 
 CareQueue does not provide public registration.
 
-The first Admin is normally created with:
+The first Admin account is the bootstrap account used to enter the normal Admin user-management workflow. After any user exists, the first-time setup path is no longer available.
 
-```text
-backend/scripts/create_user.py
-```
+### Packaged Windows installation
 
-### Development
+For the packaged Windows installer, use the first-time Admin setup window that can launch after installation completes.
+
+The setup window:
+
+1. Checks that the local CareQueue API is ready.
+2. Confirms that no users exist.
+3. Sends the username and password to the local setup endpoint over loopback.
+4. Creates the first account with the `Admin` role.
+5. Disables the setup path for future use.
+
+The setup window does not pass the password through command-line arguments.
+
+If setup is already complete, the window disables the form and directs the user to open CareQueue.
+
+### Development and maintenance fallback
+
+The command-line user creation script remains available for development, troubleshooting, and maintenance workflows.
 
 From `backend` with the development virtual environment active:
 
@@ -235,15 +249,13 @@ python scripts\create_user.py `
     --role "Admin"
 ```
 
-### Windows production
+The script prompts for a password without printing it to the terminal.
 
-From the installed backend:
+For an installed Windows environment, load the production environment first, then run the script from the installed backend.
 
 ```powershell
 Set-Location "C:\Program Files\CareQueue\backend"
 ```
-
-Load the production environment into the current PowerShell process:
 
 ```powershell
 $environmentFile = (
@@ -270,8 +282,6 @@ ForEach-Object {
 }
 ```
 
-Create the Admin:
-
 ```powershell
 & ".\.venv\Scripts\python.exe" `
     ".\scripts\create_user.py" `
@@ -283,7 +293,7 @@ A user created against the development database does not automatically exist in 
 
 The command-line script creates the account with the password entered by the administrator and does not currently require a password change on first login.
 
-Use the web Admin flow for ordinary onboarding.
+Use the web Admin flow for ordinary onboarding after the first Admin exists.
 
 ## Password Storage
 
@@ -606,6 +616,7 @@ Relevant actions include:
 security.login
 security.login_failed
 security.logout
+security.initial_admin_setup
 security.password_change
 user.create
 user.update
@@ -714,7 +725,7 @@ Sign in again after resolving the underlying issue.
 
 ```text
 docs/administration/audit-log.md
-docs/operations/health-and-troubleshooting.md
+docs/operations/health-checks.md
 docs/deployment/windows.md
 SECURITY.md
 ```

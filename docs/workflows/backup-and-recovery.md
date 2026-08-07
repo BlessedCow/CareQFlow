@@ -1,12 +1,18 @@
 # Backup and Recovery
 
-CareQueue creates encrypted database backups and uses a staged recovery process designed to protect the active database.
+CareQueue creates encrypted database backups and uses staged recovery so the active database is not replaced until the selected backup has been decrypted, validated, staged, and reviewed.
 
 The central rule is:
 
 > Never replace the active database until the selected backup has been decrypted, validated, staged, and reviewed.
 
 Backup creation, restore staging, recovery staging, and recovery activation are separate operations.
+
+## Scope
+
+This guide covers encrypted database backups, restore validation, staged recovery, recovery activation, and post-recovery checks.
+
+It does not cover the full Windows installer workflow. For installer modes, payload building, and clean-machine installation testing, see [Windows Deployment](../deployment/windows.md).
 
 ## Protection Layers
 
@@ -20,13 +26,13 @@ AUTHSTATUS_BACKUP_ENCRYPTION_KEY=
 
 Purpose:
 
-- `AUTHSTATUS_ENCRYPTION_KEY` protects selected sensitive field values
-- `AUTHSTATUS_SQLCIPHER_KEY` opens the encrypted database file
-- `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` encrypts and decrypts `.db.enc` backups
+- `AUTHSTATUS_ENCRYPTION_KEY` protects selected sensitive field values.
+- `AUTHSTATUS_SQLCIPHER_KEY` opens the encrypted database file.
+- `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` encrypts and decrypts `.db.enc` backup files.
 
-Generate and store them independently.
+Generate and store these keys independently.
 
-A backup may decrypt successfully and still be unusable when the SQLCipher or field-level encryption key is wrong.
+A backup may decrypt successfully and still be unusable if the SQLCipher key or field-level encryption key is wrong.
 
 ## Key Custody
 
@@ -49,6 +55,12 @@ Document ownership, approved retrieval, rotation, and recovery testing.
 ### Windows production
 
 ```text
+Application files:
+C:\Program Files\CareQueue
+
+Runtime data:
+C:\ProgramData\CareQueue
+
 Database:
 C:\ProgramData\CareQueue\Data
 
@@ -64,6 +76,8 @@ C:\ProgramData\CareQueue\Recovery
 Environment:
 C:\ProgramData\CareQueue\Config\carequeue.env
 ```
+
+The packaged Windows installer removes application files during uninstall but preserves runtime data under `C:\ProgramData\CareQueue`, including the production environment file, database, backups, restore files, recovery files, and installer logs.
 
 ### Development
 
@@ -106,7 +120,7 @@ Retention is applied after successful creation.
 
 ## Create a Windows Production Backup
 
-Use the installed runner:
+Use the installed backup runner:
 
 ```powershell
 & "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1"
@@ -164,10 +178,10 @@ Select-Object -First 10 `
 
 Confirm:
 
-- A recent file exists
-- File size is greater than zero
-- Timestamp matches the expected run
-- Correct directory is being inspected
+- A recent file exists.
+- File size is greater than zero.
+- Timestamp matches the expected run.
+- The correct directory is being inspected.
 
 A file listing does not prove recoverability.
 
@@ -200,7 +214,7 @@ Current workflow supports:
 - Staging a backup
 - Canceling staged recovery
 
-Backup and recovery events are recorded in the Audit Log.
+Backup and recovery events are recorded in the audit log.
 
 ## Retention
 
@@ -220,9 +234,9 @@ Minimum retained backups: 5
 
 Rules:
 
-- Old backups may become eligible for deletion
-- The minimum count remains protected
-- A backup tied to pending recovery remains protected
+- Old backups may become eligible for deletion.
+- The minimum count remains protected.
+- A backup tied to pending recovery remains protected.
 
 A pruning failure does not necessarily mean the newly created backup is invalid.
 
@@ -305,7 +319,7 @@ systemd-analyze verify \
   deployment/linux/systemd/carequeue-backup.timer
 ```
 
-Install and test the service before enabling the timer.
+Install and test the service before enabling the timer:
 
 ```bash
 sudo systemctl start carequeue-backup.service
@@ -381,11 +395,11 @@ It does not delete the original encrypted backup.
 
 Cancel when:
 
-- Wrong backup was selected
-- A newer restore point is needed
-- Review raised concerns
-- Recovery was postponed
-- A drill is complete
+- The wrong backup was selected.
+- A newer restore point is needed.
+- Review raised concerns.
+- Recovery was postponed.
+- A drill is complete.
 
 ## Activation Requirements
 
@@ -393,13 +407,13 @@ Recovery activation is offline and interactive.
 
 Before activation:
 
-- API service is stopped
-- API port is free
-- Database is not locked
-- Staged and active databases are on the same filesystem
-- No SQLite sidecar files remain
-- A verified encrypted safety backup is created
-- Exact confirmation phrase is entered
+- API service is stopped.
+- API port is free.
+- Database is not locked.
+- Staged and active databases are on the same filesystem.
+- No SQLite sidecar files remain.
+- A verified encrypted safety backup is created.
+- Exact confirmation phrase is entered.
 
 Confirmation phrase:
 
@@ -490,12 +504,12 @@ Keep CareQueue stopped until the final state is understood.
 
 Before restarting:
 
-- Confirm active database exists
-- Confirm rollback database exists
-- Confirm safety backup exists
-- Confirm pending manifest is gone
-- Confirm no unexpected sidecars exist
-- Review activation output
+- Confirm active database exists.
+- Confirm rollback database exists.
+- Confirm safety backup exists.
+- Confirm pending manifest is gone.
+- Confirm no unexpected sidecars exist.
+- Review activation output.
 
 Start the API:
 
@@ -542,12 +556,12 @@ Recovery activation also creates a fresh encrypted safety backup before cutover.
 
 Keep both until:
 
-- Services start successfully
-- Readiness passes
-- Login succeeds
-- Critical records are verified
-- Recovery is accepted
-- Retention requirements permit removal
+- Services start successfully.
+- Readiness passes.
+- Login succeeds.
+- Critical records are verified.
+- Recovery is accepted.
+- Retention requirements permit removal.
 
 ## Sidecar Files
 
@@ -709,21 +723,21 @@ Do not include PHI, credentials, or keys.
 
 Before declaring success:
 
-- Selected backup was verified
-- Required keys were available
-- Services were stopped
-- Preflight passed
-- Safety backup was created
-- Exact confirmation phrase was entered
-- Final database validation passed
-- Rollback database was preserved
-- Direct readiness passed
-- HTTPS readiness passed
-- Login succeeded
-- Representative records were reviewed
-- Audit continuity was reviewed
-- Recovery owner accepted the result
-- Recovery record was completed
+- Selected backup was verified.
+- Required keys were available.
+- Services were stopped.
+- Preflight passed.
+- Safety backup was created.
+- Exact confirmation phrase was entered.
+- Final database validation passed.
+- Rollback database was preserved.
+- Direct readiness passed.
+- HTTPS readiness passed.
+- Login succeeded.
+- Representative records were reviewed.
+- Audit continuity was reviewed.
+- Recovery owner accepted the result.
+- Recovery record was completed.
 
 ## Related Documentation
 

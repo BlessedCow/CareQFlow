@@ -6,7 +6,7 @@ This guide covers the authorization record itself, the queue, filters, dashboard
 
 For PDF-assisted data entry, see [PDF Intake](pdf-intake.md).
 
-For registered facilities, insurers, and portals, see [Registered Options](../administration/registered-options.md).
+For registered facilities, insurers, portals, and option naming rules, see [Registered Options](../administration/registered-options.md).
 
 ## Roles
 
@@ -22,7 +22,7 @@ Admin and UR users can create and manage authorization records.
 
 Read Only users can view records but cannot create, edit, or delete them.
 
-Backend permission checks are authoritative.
+Backend permission checks are authoritative. Frontend controls should make the workflow clear, but the API remains the enforcement point.
 
 ## Authorization Record
 
@@ -383,6 +383,7 @@ After applying PDF values:
 - Confirm identifiers
 - Confirm facility and insurance
 - Confirm authorization phone
+- Correct fields marked as needing review
 - Submit only after correction
 
 See [PDF Intake](pdf-intake.md) for supported templates, confidence, review requirements, and file limits.

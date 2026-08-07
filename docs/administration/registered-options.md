@@ -20,7 +20,7 @@ All authenticated users can read registered options.
 
 Only Admins can create or delete them.
 
-Backend authorization is authoritative.
+Backend authorization is authoritative. Frontend visibility is only a convenience layer.
 
 ## Settings Page
 
@@ -56,6 +56,8 @@ Used by:
 - Dashboard and queue filters
 - Calendar and workflow views
 
+Use the approved operational facility name.
+
 ### Insurances
 
 Category:
@@ -72,6 +74,8 @@ Used by:
 - Dashboard and queue filters
 
 Parts of the authorization model may also refer to the selected insurance as a payer.
+
+Use the payer name that users need to recognize during authorization work.
 
 ### Web portals
 
@@ -206,6 +210,8 @@ Duplicate creation returns:
 409 Conflict
 ```
 
+Unexpected request fields are rejected.
+
 ## API
 
 Base path:
@@ -266,8 +272,6 @@ Successful status:
 ```text
 201 Created
 ```
-
-Unexpected request fields are rejected.
 
 ### Delete an option
 
@@ -335,7 +339,7 @@ A successful deletion records:
 registered_option.delete
 ```
 
-## Deleting an Option Does Not Rewrite Records
+## Existing Records Are Not Rewritten
 
 Deleting a registered option removes it from the reusable selection list.
 
@@ -377,7 +381,7 @@ When a match exists, CareQueue applies the registered value.
 
 When no match exists, the review workflow warns that the value is not registered.
 
-The PDF does not automatically create a new registered option.
+The PDF workflow does not automatically create new registered options.
 
 The user must:
 
@@ -598,4 +602,5 @@ docs/workflows/authorization-workflow.md
 docs/workflows/pdf-intake.md
 docs/administration/audit-log.md
 docs/administration/users-and-security.md
+docs/operations/health-checks.md
 ```

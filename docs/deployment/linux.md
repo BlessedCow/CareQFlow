@@ -1,8 +1,14 @@
 # Linux Deployment
 
-CareQueue includes an initial Linux deployment foundation, but the Linux path is not yet as complete as the Windows deployment.
+CareQueue includes a Linux deployment foundation, but the Linux path is not yet equivalent to the packaged Windows installer flow.
 
-The repository currently provides:
+Use this guide as an operator reference for the Linux files that currently exist in the repository and the manual work still required to run CareQueue safely on Linux.
+
+CareQueue is intended for private or controlled deployment. This guide is not a complete public internet deployment plan, managed hosting plan, or compliance program.
+
+## Current Status
+
+The repository currently includes:
 
 ```text
 deployment/linux/
@@ -12,32 +18,17 @@ deployment/linux/
     └── carequeue-backup.timer
 ```
 
-These files cover:
+Implemented Linux foundation:
 
-- Serving the built frontend through Caddy
-- Proxying `/api` requests to FastAPI on `127.0.0.1:8000`
-- Running encrypted backups through a hardened systemd service
-- Scheduling daily backups through a systemd timer
-
-The repository does not yet include a complete Linux production installer or a systemd unit for the CareQueue API. Those pieces must be created and tested before the Linux deployment can be considered equivalent to the Windows deployment.
-
-This guide documents the intended layout, the files that already exist, and the remaining manual work.
-
-CareQueue is intended for private or controlled deployment. The configuration in this guide is not a complete public internet or compliance program.
-
-## Current Linux Status
-
-Implemented in the repository:
-
-- Production Caddyfile
-- Same-origin `/api` reverse proxy
+- Caddy configuration for serving the built frontend
+- Same-origin `/api` reverse proxy to FastAPI on loopback
 - Static frontend serving with SPA fallback
-- Security response headers
+- Basic security response headers
 - Encrypted backup systemd service
-- Daily backup systemd timer
-- Basic systemd sandboxing for the backup process
+- Daily encrypted backup timer
+- Basic systemd hardening for backup execution
 
-Not yet included as a complete repository workflow:
+Not yet implemented as a complete Linux release workflow:
 
 - Linux production installer
 - CareQueue API systemd service
@@ -45,18 +36,19 @@ Not yet included as a complete repository workflow:
 - Service-account creation script
 - Environment-file installation script
 - API service hardening policy
-- Automated application upgrades
-- Automated rollback workflow
+- Automated upgrades
+- Automated rollback
 - Caddy installation automation
-- Certificate trust workflow for private local certificates
-- Full Linux production smoke-test tooling
+- Private certificate trust workflow
+- Full Linux smoke-test tooling
 - Distribution-specific validation
+- Uninstall procedure
 
-Treat this document as an operator guide for the current foundation, not as proof that Linux deployment is fully complete.
+For now, the packaged Windows installer remains the primary validated private deployment path. Linux deployment requires more operator judgment until the missing pieces above are implemented and tested.
 
 ## Intended Architecture
 
-The intended request flow is:
+The intended Linux request flow is:
 
 ```text
 Browser
@@ -86,13 +78,13 @@ Caddy should be the only process exposed to users.
 
 ## Recommended Filesystem Layout
 
-The existing Linux files assume this application layout:
+Recommended application location:
 
 ```text
 /opt/carequeue
 ```
 
-Recommended contents:
+Recommended application contents:
 
 ```text
 /opt/carequeue/
@@ -108,7 +100,7 @@ Recommended contents:
 └── docs/
 ```
 
-Recommended runtime layout:
+Recommended runtime location:
 
 ```text
 /var/lib/carequeue/
@@ -132,7 +124,7 @@ Recommended log location:
 
 Caddy may use its distribution default storage and logging locations unless the deployment chooses explicit paths.
 
-## Recommended Service Account
+## Service Account
 
 Use a dedicated system account:
 
@@ -143,7 +135,7 @@ carequeue
 The account should:
 
 - Have no interactive login shell
-- Own the CareQueue runtime directories
+- Own CareQueue runtime directories
 - Read the production environment file
 - Read and write the active database
 - Write backups
@@ -171,9 +163,9 @@ command -v nologin
 
 Do not reuse an ordinary administrator account as the long-running application identity.
 
-## Create Runtime Directories
+## Runtime Directories
 
-Create the recommended directories:
+Create the runtime root:
 
 ```bash
 sudo install \
@@ -184,14 +176,7 @@ sudo install \
   /var/lib/carequeue
 ```
 
-```bash
-sudo install \
-  -d \
-  -o carequeue \
-  -g carequeue \
-  -m 0750 \
-  /var/lib/carequeue/data
-```
+Create runtime subdirectories:
 
 ```bash
 sudo install \
@@ -199,24 +184,9 @@ sudo install \
   -o carequeue \
   -g carequeue \
   -m 0750 \
-  /var/lib/carequeue/backups
-```
-
-```bash
-sudo install \
-  -d \
-  -o carequeue \
-  -g carequeue \
-  -m 0750 \
-  /var/lib/carequeue/restores
-```
-
-```bash
-sudo install \
-  -d \
-  -o carequeue \
-  -g carequeue \
-  -m 0750 \
+  /var/lib/carequeue/data \
+  /var/lib/carequeue/backups \
+  /var/lib/carequeue/restores \
   /var/lib/carequeue/recovery
 ```
 
@@ -242,7 +212,7 @@ sudo install \
   /opt/carequeue
 ```
 
-## Install Application Files
+## Application Files
 
 Copy a reviewed CareQueue source tree into:
 
@@ -270,7 +240,7 @@ Do not copy:
 - `node_modules`
 - Development virtual environments
 
-After copying, review:
+After copying, review the staged file tree:
 
 ```bash
 sudo find /opt/carequeue \
@@ -308,7 +278,7 @@ sudo -u carequeue \
   -r /opt/carequeue/backend/requirements.txt
 ```
 
-Confirm the installed interpreter:
+Confirm the interpreter:
 
 ```bash
 sudo -u carequeue \
@@ -326,7 +296,7 @@ sudo -u carequeue \
 
 This import check requires valid production environment variables.
 
-## Build the Frontend
+## Frontend Build
 
 Build from the frontend source:
 
@@ -352,7 +322,7 @@ The Linux Caddyfile expects that exact path.
 
 Production builds should use same-origin API requests.
 
-Do not build the frontend with:
+Do not build the production frontend with:
 
 ```env
 VITE_AUTHSTATUS_API_BASE_URL=http://localhost:8000
@@ -407,12 +377,6 @@ Set CORS to the exact HTTPS application origin:
 AUTHSTATUS_CORS_ORIGINS=["https://carequeue.example.com"]
 ```
 
-For an approved private internal hostname:
-
-```env
-AUTHSTATUS_CORS_ORIGINS=["https://carequeue.internal.example"]
-```
-
 Do not use development origins in production.
 
 ## Environment File Permissions
@@ -440,11 +404,9 @@ sudo stat \
 
 Do not print the file contents into logs, tickets, screenshots, or documentation.
 
-## Generate Production Keys
+## Production Keys
 
 Generate independent keys through an approved local process.
-
-The exact commands may vary by the project utilities available in the current source tree.
 
 Requirements:
 
@@ -456,7 +418,7 @@ Requirements:
 
 Do not reuse development keys in production.
 
-## Database Mode
+## Database Encryption
 
 A production deployment containing sensitive data should use:
 
@@ -466,13 +428,11 @@ AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
 
 The installed Python environment must include a working SQLCipher-compatible package.
 
-Validate SQLCipher behavior before using real data.
-
-A successful application import is not proof that the resulting database file is encrypted.
+Validate SQLCipher behavior before using real data. A successful application import is not proof that the resulting database file is encrypted.
 
 Use the project verification tooling and confirm plaintext SQLite cannot read the database.
 
-## Current Caddyfile
+## Caddy Configuration
 
 The repository file is:
 
@@ -486,9 +446,9 @@ It currently expects:
 carequeue.example.com
 ```
 
-Replace that placeholder with the approved production hostname.
+Replace that placeholder with the approved deployment hostname.
 
-The current file:
+The current Caddyfile:
 
 - Enables `zstd` and `gzip`
 - Adds security response headers
@@ -497,11 +457,7 @@ The current file:
 - Serves the frontend from `/opt/carequeue/frontend/dist`
 - Uses `/index.html` as the SPA fallback
 
-## Install the Linux Caddyfile
-
-Copy the file to the Caddy configuration location used by the distribution.
-
-A common location is:
+Install it to the Caddy configuration location used by the distribution. A common location is:
 
 ```text
 /etc/caddy/Caddyfile
@@ -521,13 +477,7 @@ Edit the hostname:
 sudo editor /etc/caddy/Caddyfile
 ```
 
-Do not leave:
-
-```text
-carequeue.example.com
-```
-
-in a real deployment.
+Do not leave `carequeue.example.com` in a real deployment.
 
 ## Validate Caddy
 
@@ -559,7 +509,7 @@ Do not restart Caddy until validation succeeds.
 
 The exact service name depends on the distribution package.
 
-Common commands:
+Common start command:
 
 ```bash
 sudo systemctl enable --now caddy
@@ -585,21 +535,11 @@ sudo journalctl \
   --since today
 ```
 
-## Public Certificate Mode
+## Certificate Mode
 
-For a public DNS hostname, Caddy can normally request and renew a publicly trusted certificate when:
+For a public DNS hostname, Caddy can normally request and renew a publicly trusted certificate when DNS, routing, and firewall requirements are met.
 
-- DNS points to the server
-- Required ports are reachable
-- The hostname is valid
-- Firewall rules allow Caddy
-- No other service owns the required ports
-
-The current repository Caddyfile assumes normal automatic HTTPS behavior.
-
-A public deployment requires additional review and is outside the fully validated CareQueue deployment path.
-
-## Private Certificate Mode
+A public deployment requires additional review and is outside the currently validated CareQueue deployment path.
 
 For a private hostname that cannot receive a public certificate, use an approved internal certificate strategy.
 
@@ -609,7 +549,7 @@ Options may include:
 - An organization-managed internal CA
 - A certificate issued by an approved private PKI
 
-Do not simply disable certificate validation in browsers or clients.
+Do not disable certificate validation in browsers or clients.
 
 When using a private CA:
 
@@ -684,9 +624,9 @@ This terminal process is not a durable production service.
 
 Use it only to validate the application before a proper service unit is installed.
 
-## Test the API Directly
+## Health Checks
 
-From the server:
+Direct liveness:
 
 ```bash
 curl \
@@ -696,7 +636,7 @@ curl \
   http://127.0.0.1:8000/api/health/live
 ```
 
-Check readiness:
+Direct readiness:
 
 ```bash
 curl \
@@ -706,11 +646,7 @@ curl \
   http://127.0.0.1:8000/api/health/ready
 ```
 
-The API should not be reachable from unapproved remote systems.
-
-## Test Through HTTPS
-
-After Caddy and the API are running:
+HTTPS liveness:
 
 ```bash
 curl \
@@ -720,9 +656,7 @@ curl \
   https://carequeue.example.com/api/health/live
 ```
 
-Replace the hostname with the actual deployment origin.
-
-Check readiness:
+HTTPS readiness:
 
 ```bash
 curl \
@@ -732,15 +666,23 @@ curl \
   https://carequeue.example.com/api/health/ready
 ```
 
+Use the actual hostname for HTTPS checks.
+
+## Browser Smoke Test
+
 Open the frontend in a browser and confirm:
 
-- The certificate is trusted
-- The login page loads
-- API calls use the HTTPS origin
-- No browser request goes directly to `127.0.0.1:8000`
-- No browser request uses the development frontend server
+- The certificate is trusted.
+- The login page loads.
+- API calls use the HTTPS origin.
+- No browser request goes directly to `127.0.0.1:8000`.
+- No browser request uses the development frontend server.
 
-## Create the First User
+## Create the First Admin
+
+Linux does not currently include a packaged first-time setup GUI.
+
+For the current Linux path, create the first Admin with the backend script after the production environment is loaded.
 
 Load the production environment in a controlled administrator shell:
 
@@ -771,6 +713,8 @@ Admin
 UR
 Read Only
 ```
+
+For the account model, role boundaries, and one-time initial setup behavior, see [Users and Security](../administration/users-and-security.md).
 
 ## Encrypted Backup Service
 
@@ -832,25 +776,9 @@ The service still needs read access to:
 
 Validate the unit against the actual database path and distribution.
 
-## Backup Service Limitation
+If the backup implementation requires another writable path, update `ReadWritePaths` narrowly. Do not remove `ProtectSystem=strict` merely to make the service work.
 
-The current service allows writes only to:
-
-```text
-/var/lib/carequeue/backups
-```
-
-This is appropriate when:
-
-- Temporary backup work uses permitted temporary storage
-- The active database is read-only to the backup process
-- No other restore or recovery directory is needed
-
-If the backup implementation requires another writable path, update `ReadWritePaths` narrowly.
-
-Do not remove `ProtectSystem=strict` merely to make the service work.
-
-## Install the Backup Units
+## Install Backup Units
 
 Copy the service:
 
@@ -874,9 +802,7 @@ Reload systemd:
 sudo systemctl daemon-reload
 ```
 
-## Validate the Backup Units
-
-Run:
+Validate the units:
 
 ```bash
 systemd-analyze verify \
@@ -906,9 +832,7 @@ A successful one-shot service may show:
 inactive (dead)
 ```
 
-after completion.
-
-That is normal when the result is successful.
+after completion. That is normal when the result is successful.
 
 Review logs:
 
@@ -965,9 +889,7 @@ This means:
 - systemd may delay it by up to 15 minutes.
 - A missed run may execute after the system returns.
 
-## Disable the Backup Timer
-
-Run:
+Disable the timer when needed:
 
 ```bash
 sudo systemctl disable --now carequeue-backup.timer
@@ -981,11 +903,11 @@ A successful systemd result is not enough.
 
 Confirm:
 
-- A recent `.db.enc` file exists
-- The file is nonempty
-- The backup creation output reported verification
-- Retention completed or reported a reviewed warning
-- A staged restore test has been performed on schedule
+- A recent `.db.enc` file exists.
+- The file is nonempty.
+- The backup creation output reported verification.
+- Retention completed or reported a reviewed warning.
+- A staged restore test has been performed on schedule.
 
 See [Backup and Recovery](../workflows/backup-and-recovery.md).
 
@@ -1041,9 +963,7 @@ Do not expose SSH, database files, backup storage, or the Uvicorn port more broa
 
 ## Logs
 
-### Caddy
-
-Review:
+Review Caddy logs:
 
 ```bash
 sudo journalctl \
@@ -1051,15 +971,9 @@ sudo journalctl \
   --since today
 ```
 
-### API
+The API log location depends on the service unit or process manager used. A future CareQueue API systemd unit should write to the journal or to a restricted CareQueue log directory.
 
-The API log location depends on the service unit or process manager used.
-
-A future CareQueue API systemd unit should write to the journal or to a restricted CareQueue log directory.
-
-### Backups
-
-Review:
+Review backup logs:
 
 ```bash
 sudo journalctl \
@@ -1077,7 +991,7 @@ Do not share production logs publicly without reviewing them for:
 - Database errors
 - Sensitive values
 
-## Upgrade Procedure
+## Manual Upgrade Outline
 
 Linux upgrade automation is not yet included.
 
@@ -1104,7 +1018,9 @@ A manual upgrade should follow this order:
 
 Do not overwrite the only known-good installed release without keeping a rollback copy.
 
-## Recommended Release Layout
+For the general upgrade safety model, see [Upgrades](../operations/upgrades.md).
+
+## Future Release Layout
 
 A future safer Linux layout may use versioned releases:
 
@@ -1147,55 +1063,17 @@ Database rollback must use the staged recovery process.
 
 Do not manually overwrite the active database.
 
-## Health Checks
-
-Direct liveness:
-
-```bash
-curl \
-  --fail \
-  http://127.0.0.1:8000/api/health/live
-```
-
-Direct readiness:
-
-```bash
-curl \
-  --fail \
-  http://127.0.0.1:8000/api/health/ready
-```
-
-HTTPS liveness:
-
-```bash
-curl \
-  --fail \
-  https://carequeue.example.com/api/health/live
-```
-
-HTTPS readiness:
-
-```bash
-curl \
-  --fail \
-  https://carequeue.example.com/api/health/ready
-```
-
-Use the actual hostname.
-
 ## Troubleshooting
 
 ### Caddy reports an invalid configuration
 
-Run:
+Format and validate the file:
 
 ```bash
 sudo caddy fmt \
   --overwrite \
   /etc/caddy/Caddyfile
 ```
-
-Then:
 
 ```bash
 sudo caddy validate \
@@ -1233,13 +1111,11 @@ Confirm the Caddyfile includes:
 try_files {path} /index.html
 ```
 
-Confirm:
+Confirm the frontend build exists:
 
 ```text
 /opt/carequeue/frontend/dist/index.html
 ```
-
-exists.
 
 ### Browser requests `localhost:8000`
 
@@ -1249,7 +1125,7 @@ Remove the production-relevant override, rebuild the frontend, and redeploy `dis
 
 ### API imports fail
 
-Load the environment and test:
+Load the environment and test the import:
 
 ```bash
 set -a
@@ -1267,7 +1143,7 @@ Review configuration validation errors without printing secrets.
 
 ### Backup service cannot write
 
-Review:
+Review service status and logs:
 
 ```bash
 sudo systemctl status carequeue-backup.service
@@ -1279,7 +1155,7 @@ sudo journalctl \
   --since today
 ```
 
-Check:
+Check the backup directory:
 
 ```bash
 sudo ls -ld \
@@ -1352,7 +1228,7 @@ The following Linux work remains a project priority:
 - Add complete Linux recovery activation instructions
 - Test reboot and failure behavior
 
-Until those pieces are implemented and tested, Linux deployment requires more operator judgment than Windows deployment.
+Until those pieces are implemented and tested, Linux deployment should be treated as a foundation rather than a finished deployment path.
 
 ## Screenshots
 
@@ -1369,7 +1245,7 @@ Useful screenshots may include:
 
 Use synthetic data only.
 
-Before committing:
+Before committing screenshots:
 
 - Remove personal usernames and hostnames where practical.
 - Do not show environment-file contents.

@@ -2,7 +2,7 @@
 
 This page is a symptom-based index for common CareQueue problems.
 
-Detailed procedures live in the documents that own each workflow. This page should help identify the correct guide without repeating the same commands in several places.
+Detailed procedures live in the documents that own each workflow. Use this page to identify the correct guide without repeating the same commands in several places.
 
 ## Start Here
 
@@ -17,12 +17,14 @@ Linux deployment
 Then identify the failure area:
 
 ```text
+Installer or Windows services
 Application startup
 HTTPS or certificate
+First-time Admin setup
 Login or session
 Database
 Backup or recovery
-Upgrade
+Upgrade, repair, or uninstall
 PDF intake
 Registered options
 Audit log
@@ -32,6 +34,86 @@ Local development
 Development and production use separate databases, environment files, keys, users, cookies, origins, and runtime directories.
 
 Do not replace a production database with a development database to resolve a login or workflow issue.
+
+## Installer Does Not Show Upgrade, Repair, or Uninstall
+
+Symptoms:
+
+- The Windows installer shows only the normal Install flow
+- The operation selection page is missing
+- Upgrade, Repair, and Uninstall choices do not appear
+
+Use:
+
+```text
+docs/deployment/windows.md
+docs/operations/upgrades.md
+```
+
+The operation selection page appears only when CareQueue is already installed and the installer can detect the installed application files.
+
+A clean machine or a machine after uninstall should show only the normal Install flow. After a successful install, running the installer again should show Upgrade, Repair, and Uninstall options.
+
+Do not treat the missing operation page as a bug until you confirm whether the installed application directory still exists.
+
+## Installer Fails During Install, Upgrade, Repair, or Uninstall
+
+Symptoms:
+
+- Installer reports that the operation failed
+- Install succeeds locally but fails on another machine
+- Service validation fails near the end of setup
+- API or Caddy does not start after installation
+- The newest installer log reports a failed mode
+
+Use:
+
+```text
+docs/deployment/windows.md
+docs/operations/upgrades.md
+docs/operations/health-checks.md
+```
+
+Check the newest installer log first:
+
+```text
+C:\ProgramData\CareQueue\Logs\Installer
+```
+
+The installer mode matters. Confirm whether the log says:
+
+```text
+Mode: Install
+Mode: Upgrade
+Mode: Repair
+Mode: Uninstall
+```
+
+Do not repeatedly rerun the installer without identifying which step failed.
+
+## First-Time Admin Setup Problems
+
+Symptoms:
+
+- The first-time Admin setup window does not open
+- The setup window says setup is already complete
+- Admin creation fails
+- Password is rejected
+- The setup status endpoint says setup is unavailable
+- The created Admin cannot sign in
+
+Use:
+
+```text
+docs/administration/users-and-security.md
+docs/deployment/windows.md
+```
+
+The first-time Admin setup flow is available only while no users exist in the active production database. After any user exists, the setup endpoint is disabled and the setup window should report that setup is already complete.
+
+The packaged setup window posts credentials to the local API over loopback and does not pass the password through command-line arguments.
+
+If setup is reported as complete unexpectedly, confirm that the installer is using the intended production database under the Windows data directory.
 
 ## Application Will Not Start
 
@@ -52,7 +134,7 @@ docs/operations/health-checks.md
 docs/deployment/windows.md
 ```
 
-The health-check guide provides the correct troubleshooting order:
+The health-check guide owns the troubleshooting order:
 
 ```text
 1. Service status
@@ -85,13 +167,7 @@ docs/operations/health-checks.md
 docs/deployment/windows.md
 ```
 
-The health-check guide owns the diagnostic commands for:
-
-- Hostname resolution
-- Certificate trust
-- Port 443
-- Direct API versus HTTPS isolation
-- Caddy proxy failures
+The health-check guide owns the diagnostic commands for hostname resolution, certificate trust, port checks, direct API checks, and HTTPS checks.
 
 ## Login, Password, or Session Problems
 
@@ -113,21 +189,9 @@ Use:
 docs/administration/users-and-security.md
 ```
 
-The users and security guide owns:
-
-- Account creation
-- Roles
-- Temporary passwords
-- Password resets
-- Session expiration
-- Session renewal
-- CSRF behavior
-- Deactivation
-- Offboarding
-
 A `401` from `/api/security/me` before login is expected.
 
-A successful password change revokes all active sessions and requires login again.
+A successful password change revokes active sessions and requires login again.
 
 ## Production Frontend Calls `localhost:8000`
 
@@ -140,8 +204,8 @@ Production browser requests use http://localhost:8000/api/...
 Use:
 
 ```text
-docs/operations/upgrades.md
 docs/development/local-development.md
+docs/operations/upgrades.md
 ```
 
 The production frontend should use same-origin requests:
@@ -150,13 +214,7 @@ The production frontend should use same-origin requests:
 https://carequeue.local/api/...
 ```
 
-Development API overrides should remain in:
-
-```text
-frontend/.env.development.local
-```
-
-Rebuild and reinstall production after correcting the frontend environment.
+Development API overrides should remain in frontend development environment files and should not be baked into production builds.
 
 ## Database Problems
 
@@ -205,17 +263,7 @@ Use:
 docs/workflows/backup-and-recovery.md
 ```
 
-That guide owns:
-
-- Scheduled-task checks
-- Manual backup creation
-- Backup verification
-- Retention
-- Restore staging
-- Recovery activation
-- Rollback handling
-
-A file appearing in the backup directory does not prove recoverability.
+A file appearing in the backup directory does not prove recoverability. Use the backup guide for verification and restore procedures.
 
 ## Recovery Problems
 
@@ -235,46 +283,34 @@ Use:
 docs/workflows/backup-and-recovery.md
 ```
 
-Stop normal troubleshooting and preserve the current state when:
+Stop normal troubleshooting and preserve the current state when the active database is uncertain, cutover failed, rollback may have failed, or a safety backup cannot be verified.
 
-- The active database is uncertain
-- Cutover failed
-- Automatic rollback may have failed
-- A safety backup cannot be verified
-
-Do not move database files manually until the recovery state is understood.
-
-## Upgrade Problems
+## Upgrade, Repair, or Uninstall Problems
 
 Symptoms:
 
-- `_rust.pyd` access denied
-- Frontend build fails
-- Dependency installation fails
-- Backend validation fails
-- Permission hardening fails
-- API restarts but Caddy does not
+- Upgrade does not preserve runtime data
+- Repair does not restore files or services
+- Uninstall removes application files but data expectations are unclear
 - Services are left in an uncertain state
+- Post-install validation fails
 - Rollback may be required
 
 Use:
 
 ```text
 docs/operations/upgrades.md
+docs/deployment/windows.md
 docs/operations/health-checks.md
 ```
 
-The upgrade guide owns:
+For packaged Windows installs, uninstall should remove application files and services while preserving runtime data under:
 
-- Pre-upgrade checks
-- Installer behavior
-- Service stop and start order
-- Preserved runtime data
-- Failure handling
-- Code rollback
-- Upgrade acceptance
+```text
+C:\ProgramData\CareQueue
+```
 
-Do not repeatedly rerun the installer without understanding where it failed.
+Confirm the actual behavior from the installer log instead of relying only on the final installer screen.
 
 ## PDF Intake Problems
 
@@ -295,9 +331,7 @@ Use:
 docs/workflows/pdf-intake.md
 ```
 
-PDF intake does not automatically create an authorization.
-
-The user must review and correct extracted values before applying them to the authorization form.
+PDF intake does not automatically create an authorization. The user must review and correct extracted values before applying them to the authorization form.
 
 Use synthetic or approved stripped PDFs for testing.
 
@@ -368,7 +402,7 @@ Standard backend checks:
 
 ```powershell
 pytest tests -n auto -q
-python -m ruff check . --fix
+ruff check . --fix
 ```
 
 Standard frontend checks:
@@ -401,6 +435,12 @@ Clear active filters before concluding that a record is missing.
 Confirm the current user role before troubleshooting missing create, edit, or delete controls.
 
 ## Where to Find Logs
+
+### Windows Installer
+
+```text
+C:\ProgramData\CareQueue\Logs\Installer
+```
 
 ### Windows API
 
@@ -465,10 +505,8 @@ Include:
 
 - CareQueue commit or release
 - Operating system
-- Python version
-- Node.js version when relevant
-- Browser and version when relevant
 - Development or production environment
+- Installer mode when relevant
 - Exact command run
 - Exact sanitized error
 - Expected behavior
@@ -491,19 +529,6 @@ Stop normal troubleshooting and preserve the current state when:
 - Audit records may have been altered
 - Unauthorized access is suspected
 - PHI or PII may have been exposed
-- Multiple services fail after an upgrade
-- The active database state is uncertain
-- Rollback and safety-backup state is unclear
+- Multiple services fail after an upgrade or repair
 
-Preserve:
-
-- Logs
-- Audit events
-- Service state
-- Active database
-- Rollback database
-- Safety backup
-- Recent encrypted backups
-- Change records
-
-Do not make repeated changes before documenting the state.
+In those cases, preserve logs, stop making state-changing fixes, and work from verified backups or a clean test reproduction.

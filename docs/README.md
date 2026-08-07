@@ -99,18 +99,21 @@ deployment/windows.md
 
 Use it for:
 
-- First-time production installation
+- Packaged Windows installer flow
+- Install, Upgrade, Repair, and Uninstall modes
+- First-time Admin setup GUI
 - Runtime and application paths
-- Caddy and WinSW prerequisites
 - Private hostname setup
 - API and Caddy services
 - HTTPS and certificate trust
-- First production user
 - Scheduled backups
 - Service management
+- Runtime data preservation
 - Removal and reinstallation
 
 This is the primary production deployment guide.
+
+The packaged Windows installer is intended to be the normal private Windows installation path. The lower-level PowerShell scripts remain useful for development, troubleshooting, and direct validation of installer modes.
 
 ### Linux
 
@@ -148,7 +151,8 @@ Use it for:
 - Pre-upgrade checks
 - Required tests
 - Backup confirmation
-- Forced production upgrades
+- Packaged installer upgrade mode
+- Direct PowerShell upgrade validation
 - Service stop and start order
 - Installed file replacement
 - Environment preservation
@@ -190,6 +194,7 @@ administration/users-and-security.md
 
 Use it for:
 
+- First-time Admin setup
 - User creation
 - Roles
 - Temporary passwords
@@ -345,7 +350,10 @@ Use it to locate the authoritative guide for:
 - Login and session problems
 - Database problems
 - Backup and recovery problems
+- Installer failures
 - Upgrade failures
+- Repair failures
+- Uninstall or reinstall issues
 - PDF intake issues
 - Registered-option issues
 - Audit issues
@@ -504,6 +512,8 @@ Update documentation when a change affects:
 - Backup behavior
 - Recovery behavior
 - PDF intake behavior
+- Installer behavior
+- Release packaging
 - Testing commands
 - Known limitations
 - Operator responsibilities

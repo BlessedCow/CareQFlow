@@ -2,21 +2,23 @@
 
 This guide covers setting up and running CareQueue locally for development and testing.
 
-The development stack uses:
+Development is separate from the packaged Windows installer. Use this guide when you are working on source code, running tests, or testing the app with backend and frontend development servers.
 
-- Python and FastAPI
-- React, TypeScript, Vite, and Tailwind
-- SQLite or SQLCipher
-- Separate backend and frontend development servers
-- Local application accounts
+For packaged Windows installation and installer operation modes, see [Windows Deployment](../deployment/windows.md).
 
-Development is separate from the private production deployment.
-
-For production installation, see [Windows Deployment](../deployment/windows.md).
-
-For operational validation, see [Health Checks](../operations/health-checks.md).
+For health validation, see [Health Checks](../operations/health-checks.md).
 
 For backup and restore procedures, see [Backup and Recovery](../workflows/backup-and-recovery.md).
+
+## Development Stack
+
+CareQueue development uses:
+
+- Python and FastAPI for the backend
+- React, TypeScript, Vite, and Tailwind for the frontend
+- SQLite or SQLCipher for local data storage
+- Separate backend and frontend development servers
+- Local application accounts stored in the active development database
 
 ## Development Architecture
 
@@ -35,6 +37,8 @@ FastAPI
   v
 SQLite or SQLCipher database
 ```
+
+Production packaging uses a different shape: Windows services, a bundled runtime, Caddy, and `https://carequeue.local`. Do not use the development server setup as proof that the packaged installer works.
 
 ## Prerequisites
 
@@ -124,7 +128,9 @@ The executable should come from:
 backend\.venv\Scripts\python.exe
 ```
 
-### PowerShell activation policy
+Do not select a packaged runtime under `build\windows\components\python-runtime` or `build\windows\payload\runtime\python` as the project interpreter. Those paths are build artifacts for installer packaging, not development environments.
+
+### PowerShell Activation Policy
 
 When activation is blocked:
 
@@ -330,6 +336,8 @@ The command-line password must be at least 12 characters.
 
 After the first Admin exists, create ordinary users through the Admin interface.
 
+The packaged Windows installer also includes a first-time Admin setup GUI. That GUI is part of the installer flow, not the normal development-server workflow.
+
 ## Development Database Initialization
 
 The backend initializes required tables during startup.
@@ -402,7 +410,7 @@ pytest tests -n auto -q
 From `backend`:
 
 ```powershell
-python -m ruff check . --fix
+ruff check . --fix
 ```
 
 Ruff configuration is in:
@@ -462,7 +470,7 @@ Backend:
 
 ```powershell
 pytest tests -n auto -q
-python -m ruff check . --fix
+ruff check . --fix
 ```
 
 Frontend:
@@ -473,6 +481,31 @@ npm run build
 ```
 
 Then manually test the workflow affected by the change.
+
+## Installer Development Check
+
+Only use this when changing files under `deployment\windows`, installer packaging, service configuration, or production startup behavior.
+
+Build a fresh payload:
+
+```powershell
+.\deployment\windows\installer\build-payload.ps1 `
+    -EmbeddedPythonArchive "G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip"
+```
+
+Compile the installer:
+
+```powershell
+& "C:\Program Files\Inno Setup 7\ISCC.exe" ".\deployment\windows\installer\CareQueue.iss"
+```
+
+Run the installer:
+
+```powershell
+.\build\windows\installer\CareQueue-Setup-0.1.0.exe
+```
+
+This is still local validation. Clean-machine VM validation is required before treating an installer build as release-ready.
 
 ## Optional Security Checks
 
@@ -712,6 +745,18 @@ Review `package.json` and `package-lock.json` together.
 
 Review the changes, then rerun Ruff and tests.
 
+### Build artifact runtime is locked
+
+If a packaged runtime file under `build\windows` is locked, close any terminal or editor session using it.
+
+In VS Code, select the backend virtual environment interpreter:
+
+```text
+backend\.venv\Scripts\python.exe
+```
+
+Do not use the packaged runtime as the workspace interpreter.
+
 ## Files That Must Remain Local
 
 Do not commit:
@@ -724,8 +769,10 @@ backend/data/
 backend/backups/
 backend/restores/
 frontend/node_modules/
+build/
 local_backups/
 local_config/
+local_installer_assets/
 local_vobs/
 *.db
 *.sqlite
@@ -757,10 +804,12 @@ Confirm:
 - Ruff passed
 - Frontend tests passed when relevant
 - Frontend build passed when relevant
+- Installer validation passed when installer files changed
 
 ## Related Documentation
 
 ```text
+docs/deployment/windows.md
 docs/operations/health-checks.md
 docs/workflows/backup-and-recovery.md
 docs/workflows/pdf-intake.md

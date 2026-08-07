@@ -149,9 +149,15 @@ http://localhost:5173
 
 The development environment file points the frontend directly to the local FastAPI server. Production builds use same-origin `/api` requests through the reverse proxy.
 
-## Create the First User
+## Create the First Admin
 
-CareQueue does not include public account registration. Users are created from the backend script.
+CareQueue does not include public account registration.
+
+For a packaged Windows installation, the installer can launch the first-time Admin setup window after installation completes. The setup window creates the first Admin through the local CareQueue API without passing the password through command-line arguments.
+
+The first-time setup flow is available only while no users exist. After any user exists, the backend disables the initial Admin setup endpoint and the setup window will report that setup is already complete.
+
+For development or maintenance workflows, an Admin can also be created from the backend script.
 
 With the backend environment active and the root `.env` configured:
 
@@ -177,15 +183,22 @@ deployment/windows/
 
 The current Windows deployment can:
 
-- Build the production frontend
-- Install the backend into `C:\Program Files\CareQueue`
+- Build and package the production frontend
+- Bundle a private Python runtime for the backend
+- Bundle pinned Caddy and WinSW service binaries
+- Install application files into `C:\Program Files\CareQueue`
 - Store runtime data under `C:\ProgramData\CareQueue`
 - Generate and preserve independent production encryption keys
 - Run the FastAPI backend as a Windows service
 - Serve the frontend and proxy `/api` through Caddy
 - Provide private HTTPS through a local hostname such as `carequeue.local`
-- Preserve service state during upgrades
+- Offer installer modes for Install, Upgrade, Repair, and Uninstall
+- Preserve runtime data during uninstall
+- Launch the first-time Admin setup GUI after installation
+- Run post-installation validation for services and loopback health
 - Install scheduled encrypted backups
+
+The packaged Windows installer is intended to be the normal private Windows installation path. The lower-level PowerShell scripts remain useful for development, troubleshooting, and direct validation of installer modes.
 
 The production installer is intended for private or restricted-network use. It should not be treated as a public internet deployment template without additional review and hardening.
 

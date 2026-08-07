@@ -1,8 +1,8 @@
 # Roadmap
 
-CareQueue is under active development. The main authorization workflow is in place, and the current focus is shifting from core feature work toward deployment, operations, maintainability, and production validation.
+CareQueue is under active development. The main authorization workflow is in place, and the current focus is deployment validation, operations, maintainability, and release hardening.
 
-This roadmap is intended to show the direction of the project without turning into a list of every completed change.
+This roadmap is intended to show the direction of the project without becoming a complete changelog.
 
 ## Current State
 
@@ -26,41 +26,38 @@ CareQueue currently includes:
 - Audit logging
 - Production log sanitization
 - Backend and frontend automated tests
-- Windows production installation
+- Packaged Windows installation
 - Windows services for the API and HTTPS frontend
 - Private HTTPS through Caddy
-- Safe service handling during production upgrades
+- Installer modes for Install, Upgrade, Repair, and Uninstall
+- First-time Admin setup through a local setup GUI
 - Windows scheduled backup support
 - Initial Linux deployment files
 
-The current Windows deployment has been tested with:
-
-```text
-CareQueueApi
-CareQueueCaddy
-https://carequeue.local
-```
-
-The API runs on the loopback interface, and Caddy serves the frontend and proxies `/api` requests over private HTTPS.
+The current Windows deployment runs the API on the loopback interface and uses Caddy to serve the frontend and proxy `/api` requests over private HTTPS.
 
 ## Recently Completed
 
-### Private Windows deployment
+### Packaged Windows installer
 
-The Windows deployment now supports:
+The Windows installer now supports:
 
-- Building the production frontend
-- Installing application files under `C:\Program Files\CareQueue`
-- Storing runtime data under `C:\ProgramData\CareQueue`
-- Generating independent production encryption keys
-- Preserving production settings and keys during upgrades
-- Running FastAPI as a Windows service
-- Running Caddy as a Windows service
-- Private HTTPS through a local hostname
-- Installing the Caddy local root certificate
-- Stopping and restoring services during upgrades
-- Preventing local Vite environment files from affecting production builds
-- Clean service installation and removal scripts
+- Fresh installation on a local Windows development machine
+- Upgrade over an existing installation
+- Repair of an existing installation
+- Uninstall while preserving runtime data
+- Fresh installation after uninstall using preserved data
+- Post-installation service and health validation
+- First-time Admin setup from the installer finish page
+- Existing-admin detection that disables repeat initial setup
+
+The installer packages application files, backend runtime files, frontend build output, Caddy, WinSW service wrappers, and the private Python runtime needed by the backend.
+
+### First-time Admin setup
+
+CareQueue now includes a one-time initial Admin setup path for packaged Windows installations.
+
+The setup flow is available only while no users exist. After a user exists, the backend disables initial Admin setup and the setup GUI reports that setup is already complete.
 
 ### Backup and recovery
 
@@ -75,17 +72,6 @@ Recent backup work includes:
 - Safe restore staging
 - Controlled recovery activation
 
-### Frontend testing
-
-Frontend testing now covers important application behavior using Vitest and Testing Library.
-
-The production frontend build is also checked through:
-
-```powershell
-npm test
-npm run build
-```
-
 ### Security hardening
 
 Recent security work includes:
@@ -98,55 +84,72 @@ Recent security work includes:
 - Production log sanitization
 - Dependency and static analysis review
 - Private same-origin production API requests
-- Restricted production runtime permissions
+- Restricted production runtime directories
+- Service-aware production upgrades
 
 ## Next Priorities
 
-### 1. Finish deployment documentation
+### 1. Clean-machine VM testing matrix
 
-The current deployment scripts work, but operators still need concise documentation for:
+The next major validation step is to test the packaged Windows installer on clean virtual machines that do not contain the development environment.
 
-- First-time Windows installation
-- Creating the first production user
-- Installing the API and Caddy services
-- Trusting the local Caddy certificate
-- Installing scheduled backups
-- Performing upgrades
-- Removing services
-- Recovering from a failed upgrade
-- Verifying service health
-- Finding logs
-- Restoring from backup
+The first target should be a clean Windows 11 VM.
 
-This should live under:
+Validation should include:
 
-```text
-docs/deployment/
-docs/operations/
-```
+- Fresh install
+- First-time Admin setup
+- Browser access to `https://carequeue.local`
+- Login with the first Admin account
+- Basic authorization workflow smoke test
+- Reboot and service auto-start check
+- Repair from the installer mode page
+- Upgrade from the installer mode page
+- Uninstall from the installer mode page
+- Confirmation that runtime data is preserved after uninstall
+- Fresh install after uninstall using preserved data
 
-The goal is to make the deployment repeatable without requiring knowledge of the development history.
+A clean Windows 10 VM should be tested after the Windows 11 path is stable.
 
-### 2. Add production smoke tests
+### 2. Code signing and release packaging
 
-A small production validation script should check:
+After clean-machine validation passes, the release path should focus on packaging and trust.
+
+Remaining work includes:
+
+- Decide whether the first public build is unsigned or signed
+- Add code-signing guidance for the installer executable
+- Document release asset naming
+- Document GitHub pre-release versus stable release expectations
+- Include checksums for release artifacts
+- Confirm the source tag matches the attached installer artifact
+- Keep release notes concise and tied to validated behavior
+
+The first release candidate should remain marked as a pre-release until clean-machine validation and release packaging checks are complete.
+
+### 3. Production smoke-test tooling
+
+A small production validation script should check the installed application without exposing secrets.
+
+It should verify:
 
 - API service status
 - Caddy service status
-- HTTPS health endpoint
+- Direct loopback API health
+- HTTPS health through Caddy
 - Readiness endpoint
 - Frontend availability
 - Same-origin API behavior
 - Production database access
 - Backup directory access
-- Recent backup presence
+- Recent backup presence when scheduled backups are enabled
 - Certificate trust
 
-The script should report clear pass or fail results without exposing secrets.
+The script should report clear pass or fail results and point operators to the correct log locations.
 
-### 3. Improve upgrade and rollback handling
+### 4. Improve upgrade and rollback handling
 
-The current Windows installer safely stops and restores services during upgrades.
+The current installer can upgrade and repair the installed application, but rollback guidance should continue to improve.
 
 Remaining work includes:
 
@@ -154,12 +157,11 @@ Remaining work includes:
 - Clear rollback instructions
 - Versioned installation metadata
 - Better failure summaries
-- Optional upgrade logs
 - Database migration safeguards
 - Validation before replacing the active installation
-- Recovery when dependency installation fails
+- Recovery steps when a packaged dependency fails to install
 
-### 4. Formalize database migrations
+### 5. Formalize database migrations
 
 The project currently initializes and evolves the schema through application migration logic.
 
@@ -172,7 +174,7 @@ A more formal migration strategy should provide:
 - Safer downgrade or rollback planning
 - Migration tests using representative older schemas
 
-### 5. Expand browser-level testing
+### 6. Expand browser-level testing
 
 Frontend unit and component tests are in place.
 
@@ -191,7 +193,7 @@ The next testing layer should cover full browser workflows such as:
 
 Tests must use synthetic data.
 
-### 6. Continue accessibility work
+### 7. Continue accessibility work
 
 Accessibility review should include:
 
@@ -208,18 +210,7 @@ Accessibility review should include:
 
 Accessibility should be reviewed alongside each major frontend workflow rather than postponed until the end.
 
-## Near-Term Work
-
-### Windows operations
-
-- Complete operator documentation
-- Add production health-check tooling
-- Add safer upgrade logging
-- Test service removal and reinstallation
-- Test service behavior after restart and reboot
-- Review service-account permissions
-- Review Windows Firewall expectations
-- Document certificate renewal and replacement behavior
+## Later Work
 
 ### Linux deployment
 
@@ -240,202 +231,24 @@ Remaining Linux work includes:
 
 ### Backup operations
 
-- Add a clear backup status view
-- Improve failed-backup visibility
-- Add restore test guidance
-- Document off-host backup options
-- Add optional backup age warnings
-- Review backup retention behavior against operational needs
-- Test recovery from older backup versions
+Future backup improvements include:
+
+- Clear backup status view
+- Improved failed-backup visibility
+- Restore test guidance
+- Off-host backup options
+- Optional backup age warnings
+- Retention review against operational needs
+- Recovery testing from older backup versions
 
 ### PDF intake
 
-- Expand supported payer and facility templates
-- Improve field confidence scoring
-- Improve detection of conflicting values
-- Add more malformed-PDF tests
-- Improve review messages
-- Evaluate local OCR options without telemetry
-- Keep OCR optional and separately reviewed
-- Add synthetic fixtures for more document layouts
+Future PDF intake improvements include:
 
-### Authorization workflow
-
-- Continue refining payer and facility workflows
-- Improve bulk review and queue management
-- Add clearer stale-work indicators
-- Improve denial, appeal, and peer-to-peer workflows
-- Review how discharged and completed records are archived
-- Improve reporting without exposing sensitive values
-
-## Later Work
-
-### Public synthetic demo
-
-A public demo may be created later, but it must be completely separate from private CareQueue use.
-
-The demo should have:
-
-- Synthetic data only
-- Independent encryption keys
-- A separate database
-- Separate backups
-- Separate deployment files
-- No connection to a private instance
-- No copied production screenshots
-- No real payer, facility, member, or clinical information
-
-The public demo should be treated as its own deployment, not a mode switch inside a private installation.
-
-### Reporting and exports
-
-Potential reporting work includes:
-
-- Workload summaries
-- Due-date reports
-- Authorization outcome summaries
-- Facility and payer trend views
-- Export controls
-- Privacy-aware printable reports
-
-Exports should be reviewed carefully because they create new copies of sensitive data.
-
-### Notification support
-
-Potential notification work includes:
-
-- Local due-date reminders
-- Backup failure notices
-- Service health notices
-- Optional email or system notifications
-
-Notification systems must avoid placing PHI or credentials in message bodies, subject lines, URLs, or third-party services.
-
-### Multi-user deployment
-
-CareQueue currently supports multiple local application users, but broader shared deployment needs additional planning.
-
-Areas to review include:
-
-- Central identity integration
-- Stronger account lifecycle controls
-- Concurrent-use testing
-- Shared-network deployment
-- Remote access
-- Session visibility and revocation
-- Administrative access review
-- Organizational audit requirements
-
-### Packaging and releases
-
-Future release work may include:
-
-- Versioned release artifacts
-- Checksums
-- Signed packages
-- Upgrade notes
-- Release automation
-- Installation verification
-- Dependency lock review
-- Supported-version documentation
-
-## Ongoing Work
-
-Some areas do not have a single completion point.
-
-### Security
-
-Security work remains continuous:
-
-- Dependency updates
-- Static analysis
-- Authentication review
-- Session review
-- CSRF review
-- SQL review
-- Path and file handling review
-- Logging review
-- Backup and recovery testing
-- Deployment review
-- Secret handling
-- Access-control review
-
-### Testing
-
-Tests should be added alongside behavior changes.
-
-The project should continue using:
-
-```powershell
-pytest tests -n auto -q
-python -m ruff check . --fix
-```
-
-and:
-
-```powershell
-npm test
-npm run build
-```
-
-Additional manual validation remains necessary for:
-
-- Windows services
-- Caddy
-- Certificates
-- Scheduled tasks
-- Filesystem permissions
-- Production upgrades
-- Backup restoration
-
-### Documentation
-
-Documentation should be updated when behavior changes.
-
-Priority documents include:
-
-```text
-README.md
-ARCHITECTURE.md
-SECURITY.md
-ROADMAP.md
-docs/deployment/
-docs/operations/
-docs/workflows/
-```
-
-The root documents should remain readable. Detailed commands and operating procedures should move into `docs/`.
-
-## Out of Scope or Not Guaranteed
-
-CareQueue does not currently guarantee:
-
-- HIPAA compliance
-- Certification for clinical use
-- Public internet deployment readiness
-- Hosted multi-tenant operation
-- Integration with every payer portal
-- General OCR support for all scanned documents
-- Automatic correctness of extracted PDF values
-- Protection against a compromised host
-- Recovery without valid encryption keys
-- Complete legal or regulatory recordkeeping
-- Automatic incident response
-- Automatic off-site backup storage
-
-These areas require separate technical, legal, operational, or organizational review.
-
-## Guiding Principles
-
-Future work should continue to follow these rules:
-
-- Keep sensitive processing local where practical.
-- Use synthetic data in tests, screenshots, and demos.
-- Keep development and production configuration separate.
-- Treat the backend as the authorization boundary.
-- Preserve independent encryption keys for independent protection layers.
-- Stage restores before activation.
-- Review extracted data before accepting it.
-- Prefer clear operational behavior over hidden automation.
-- Keep public demo infrastructure separate from private production infrastructure.
-- Do not describe the application as HIPAA compliant without a complete organizational compliance program and appropriate review.
+- Additional payer and facility templates
+- Improved confidence scoring
+- Better detection of conflicting values
+- More malformed-PDF tests
+- Clearer review messages
+- Optional local OCR evaluation without telemetry
+- Synthetic fixtures for more document layouts

@@ -10,7 +10,7 @@ The project is actively evolving. Contributions should remain focused, reviewabl
 
 CareQueue is under active development.
 
-Application structure, deployment guidance, security controls, and workflow behavior may continue to change as the project matures.
+Application structure, deployment guidance, security controls, release packaging, and workflow behavior may continue to change as the project matures.
 
 Contributions are welcome, but new work should:
 
@@ -197,6 +197,8 @@ Do not commit:
 - Scheduler-generated logs
 - Temporary debug files
 
+Build outputs should normally remain uncommitted unless a release process specifically requires an artifact outside the repository source tree.
+
 ## Repository Organization
 
 CareQueue is organized by application domain.
@@ -259,8 +261,13 @@ Documentation:
 
 ```text
 docs/
+├── administration/
 ├── assets/
 │   └── screenshots/
+├── deployment/
+├── development/
+├── operations/
+├── troubleshooting/
 └── workflows/
 ```
 
@@ -279,11 +286,19 @@ git clone https://github.com/BlessedCow/CareQueue.git
 cd CareQueue
 ```
 
+Use the root README and the local development guide for current setup instructions.
+
+The developer environment and the packaged Windows installer are separate workflows:
+
+- Developer setup runs the backend and frontend directly from source.
+- The packaged Windows installer installs service-managed runtime files under the Windows installation directory and stores operational data under `C:\ProgramData\CareQueue`.
+- Installer build and validation details belong in the Windows deployment guide.
+
 ### Backend
 
 Create and activate a virtual environment, then install dependencies according to the root README.
 
-Run the backend from the `backend` directory.
+Run backend checks from the `backend` directory unless a specific command says otherwise.
 
 ### Frontend
 
@@ -386,6 +401,8 @@ Confirm that:
 - Logout clears frontend authorization data.
 - Expiration clears frontend authorization data.
 - Generic authentication errors do not reveal whether an account exists.
+
+The first-time Admin setup endpoint is only for bootstrap. It must remain unavailable after any user exists and must not replace normal authenticated Admin user management.
 
 ## PDF Intake Changes
 
@@ -496,6 +513,8 @@ Deployment contributions must:
 - Avoid deleting databases or backups automatically
 - Preserve safe defaults
 
+Windows installer changes should be tested through the packaged installer when the change affects user-facing installation, upgrade, repair, uninstall, service startup, post-install health checks, first-time Admin setup, or ProgramData preservation.
+
 ### Windows PowerShell
 
 PowerShell scripts should:
@@ -539,10 +558,10 @@ pytest tests -n auto -q
 Run Ruff:
 
 ```bash
-python -m ruff check . --fix
+ruff check . --fix
 ```
 
-Run Bandit:
+Run Bandit when security-sensitive backend code changes:
 
 ```bash
 bandit -r authstatus_api
@@ -572,6 +591,21 @@ pytest tests/database_encryption -n auto -q
 ```
 
 Then run the complete suite before opening the pull request.
+
+### Installer Validation
+
+Installer validation is required when deployment behavior changes.
+
+At minimum, confirm the relevant installer mode on Windows:
+
+- Install
+- Upgrade
+- Repair
+- Uninstall
+
+Also confirm health checks, service status, and data preservation when those areas are affected.
+
+Clean-machine VM testing is required before treating a Windows installer build as release-ready.
 
 ### Test Organization
 
@@ -626,7 +660,8 @@ Examples include:
 - Scheduled backup execution
 - Backup-file creation
 - Restore verification
-- Windows scheduled-task status
+- Windows service status
+- Windows installer mode behavior
 - Linux systemd service status
 
 Manual checks must use synthetic data.
@@ -653,6 +688,8 @@ Documentation commands must match the actual repository structure.
 Do not copy local usernames, machine-specific paths, or private working notes into public documentation.
 
 Generic example paths are acceptable when clearly identified as examples.
+
+Avoid duplicating long procedures across multiple documents. Prefer one owning document for each topic and link or reference that document from related pages.
 
 ## Pull Request Guidelines
 

@@ -1,6 +1,6 @@
 # Disclaimer
 
-CareQueue is an early-stage, local-first workflow prototype for tracking utilization review authorization activity, authorization status, review dates, payer communication details, and related dashboard metrics.
+CareQueue is an early-stage, local-first workflow prototype for tracking utilization review authorization activity, authorization status, review dates, payer communication details, PDF intake review data, and related dashboard metrics.
 
 This project is not medical advice, legal advice, billing advice, clinical guidance, compliance guidance, or a substitute for payer verification.
 
@@ -29,6 +29,14 @@ It does not provide:
 
 Authorization statuses, payer decisions, review requirements, and coverage details should be verified directly with the relevant payer or authorized source.
 
+## PDF Intake Limitations
+
+CareQueue may help extract information from supported PDF formats, but extracted values are not authoritative.
+
+PDF intake output must be reviewed before use. Fields marked as needing review should be corrected or confirmed by an authorized user before saving or relying on the record.
+
+CareQueue does not guarantee that a PDF was parsed completely, that a payer form is current, that a template applies to all variations of a document, or that extracted authorization details match the payer's final determination.
+
 ## PHI/PII Warning
 
 CareQueue may be used to enter or process information that resembles protected health information, personally identifiable information, payer information, authorization details, or care coordination notes.
@@ -53,14 +61,16 @@ Do not commit, publish, upload, or share real PHI/PII, including but not limited
 - Encryption keys
 - API keys
 - Screenshots containing private information
+- Uploaded intake PDFs
+- Extracted PDF text or JSON containing private information
 
 Use fake or clearly anonymized data for examples, tests, screenshots, issues, and documentation.
 
 ## Encryption and Security Limitations
 
-CareQueue includes security features such as field-level encryption, optional SQLCipher database encryption, encrypted backups, user authentication, role-based access controls, session handling, and audit logging.
+CareQueue includes security features such as field-level encryption, optional SQLCipher database encryption, encrypted backups, user authentication, role-based access controls, session handling, audit logging, and one-time initial Admin setup controls.
 
-These features help reduce certain local development risks, but they do not guarantee compliance with any legal, regulatory, organizational, contractual, payer-specific, or security framework requirement.
+These features help reduce certain local deployment and development risks, but they do not guarantee compliance with any legal, regulatory, organizational, contractual, payer-specific, or security framework requirement.
 
 Security features do not replace:
 
@@ -81,9 +91,15 @@ If an encryption key is lost, encrypted records or backups may become unreadable
 
 ## Local Use Only
 
-CareQueue is currently intended for private local development and testing.
+CareQueue is currently intended for private local development, private local testing, and controlled validation of the packaged Windows deployment.
 
 Any use with real healthcare, patient, client, payer, facility, employer, or operational data should occur only after appropriate authorization, compliance review, security controls, and organizational approval are in place.
+
+## Release Status
+
+Installer builds, release artifacts, and documentation snapshots should be treated according to their GitHub release label.
+
+Pre-release builds are validation builds. They may have passed local testing, but they should not be treated as stable production releases unless the release notes clearly state that clean-machine testing, release packaging checks, and any required signing or distribution review have been completed.
 
 ## No Warranty
 

@@ -187,6 +187,7 @@ The service escapes SQL wildcard characters before constructing the search patte
 ### Security and sessions
 
 ```text
+security.initial_admin_setup
 security.login
 security.login_failed
 security.logout
@@ -273,6 +274,24 @@ Example:
 This shows what part of a record changed without copying the old or new value.
 
 ## Event Details by Workflow
+
+### Initial Admin setup
+
+Initial Admin setup:
+
+```text
+security.initial_admin_setup
+```
+
+Current metadata includes:
+
+```text
+role
+```
+
+The event is recorded when the one-time initial Admin setup endpoint creates the first Admin user.
+
+It does not include the supplied password or password hash.
 
 ### Login
 
@@ -519,6 +538,12 @@ A practical review:
 9. Escalate unexplained or suspicious activity.
 
 ## Useful Filters
+
+Initial Admin setup:
+
+```text
+security.initial_admin_setup
+```
 
 Successful logins:
 

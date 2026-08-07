@@ -11,7 +11,7 @@ The application is organized around several separate concerns:
 - PDF-assisted intake
 - Encrypted storage, backups, and staged recovery
 - Audit and operational logging
-- Private Windows deployment through Caddy and Windows services
+- Private Windows deployment through a packaged installer, Caddy, and Windows services
 
 CareQueue is intended for private or controlled deployment. Its technical controls are only one part of operating a system that may handle sensitive healthcare information.
 
@@ -370,7 +370,7 @@ Authentication behavior is under:
 backend/authstatus_api/security/
 ```
 
-The session flow is:
+The normal session flow is:
 
 ```text
 User submits username and password
@@ -403,6 +403,14 @@ Session, user, role, expiration, and revocation are checked
 For state-changing requests, the frontend reads the CSRF cookie and sends its value in the configured CSRF header. The backend verifies that the cookie and header values match.
 
 Session tokens and CSRF tokens are rotated during renewal. Expired, revoked, or otherwise invalid sessions are rejected.
+
+### Initial Admin setup
+
+The packaged Windows installation can launch a local first-time Admin setup GUI after installation. The GUI submits the initial Admin username and password to the local API over loopback.
+
+The initial setup endpoint is available only while no users exist. Once any user exists, initial setup is disabled and further user administration must happen through the authenticated Admin workflow or the maintenance script.
+
+This keeps first-user creation out of command-line arguments while preserving a separate script-based path for development and maintenance.
 
 ### Roles
 
@@ -591,6 +599,7 @@ Important files include:
 
 ```text
 Caddyfile
+CareQueue-AdminSetup.ps1
 CareQueueApi.xml
 CareQueueCaddy.xml
 install-production.ps1
@@ -598,11 +607,15 @@ install-api-service.ps1
 install-caddy-service.ps1
 remove-api-service.ps1
 remove-caddy-service.ps1
-run-api.ps1
 install-backup-task.ps1
 remove-backup-task.ps1
-run-backup.ps1
+run-api.ps1
+installer/CareQueue.iss
+installer/build-payload.ps1
+installer/invoke-install.ps1
 ```
+
+The packaged Windows installer is the normal private Windows installation path. The lower-level PowerShell scripts remain available for development, troubleshooting, and direct validation of install modes.
 
 ### Installed layout
 
@@ -630,7 +643,7 @@ The runtime area contains locations for:
 - API logs
 - Caddy data and logs
 
-The installer generates independent production keys during the first installation and preserves the existing environment file during upgrades.
+The installer generates independent production keys during the first installation and preserves the existing environment file during upgrades, repairs, and uninstall/reinstall flows that retain ProgramData.
 
 ### Windows services
 
@@ -657,42 +670,15 @@ CareQueueCaddy
 
 WinSW is used as the Windows service wrapper.
 
-### Upgrade behavior
+### Installer operation modes
 
-During a forced production upgrade, the installer:
+When CareQueue is not installed, the packaged installer presents the normal install flow. When an existing installation is detected, it offers these operation modes:
 
-```text
-Detects running services
-  |
-  v
-Stops Caddy
-  |
-  v
-Stops the API
-  |
-  v
-Replaces application files
-  |
-  v
-Creates the production virtual environment
-  |
-  v
-Installs dependencies
-  |
-  v
-Validates the installed backend
-  |
-  v
-Restores runtime permissions
-  |
-  v
-Starts the API
-  |
-  v
-Starts Caddy
-```
+- Upgrade existing installation
+- Repair existing installation
+- Uninstall CareQueue
 
-Only services that were running before the upgrade are restarted. The installer also attempts to restore the original service state after a failure.
+Install, upgrade, and repair validate the service state and local API health after installation work completes. Uninstall removes Windows services and installed application files while preserving runtime data under ProgramData.
 
 ### Private HTTPS
 
@@ -740,7 +726,7 @@ The primary checks are:
 
 ```powershell
 pytest tests -n auto -q
-python -m ruff check . --fix
+ruff check . --fix
 ```
 
 and:
@@ -780,21 +766,23 @@ PDF extraction and recovery operations require review or staging rather than sil
 
 Development may use separate frontend and backend origins. Production uses same-origin HTTPS and stricter configuration validation.
 
-### Controlled upgrades
+### Controlled installation lifecycle
 
-Production upgrades preserve runtime data and keys, stop services in dependency order, validate the installed backend, and restore service state.
+Production install, upgrade, repair, and uninstall flows preserve runtime data and keys where appropriate, validate service health after installation work, and keep service orchestration inside the deployment layer.
 
 ## Current Limitations
 
 The current architecture has several known boundaries:
 
 - It is primarily developed and validated on Windows.
+- Clean-machine VM validation is still required before treating the Windows installer as stable.
 - Linux deployment support is not yet equivalent to Windows deployment.
 - The built-in private HTTPS configuration is not a public internet deployment template.
 - PDF intake depends on embedded PDF text and does not provide a general OCR pipeline.
 - Technical controls do not establish HIPAA compliance by themselves.
 - Operational monitoring, endpoint protection, access reviews, incident response, and secure key custody remain deployment responsibilities.
 - Migration and rollback workflows still need additional formalization.
+- Code signing and release packaging are still pending.
 - A public demo must use a separate instance with synthetic data and independent keys, storage, and backups.
 
 See [SECURITY.md](SECURITY.md) for security assumptions and reporting, and [ROADMAP.md](ROADMAP.md) for planned work.

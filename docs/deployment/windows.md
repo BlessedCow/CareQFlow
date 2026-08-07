@@ -1,17 +1,33 @@
 # Windows Deployment
 
-This guide covers a private Windows installation of CareQueue using:
+This guide covers a private Windows installation of CareQueue using the packaged Windows installer.
 
-- The production installer in `deployment/windows/install-production.ps1`
-- WinSW for the CareQueue API and Caddy Windows services
-- Caddy for private HTTPS
-- A local hostname such as `carequeue.local`
+The packaged installer is built from:
+
+```text
+deployment/windows/installer/CareQueue.iss
+```
+
+The installer uses the packaged payload created by:
+
+```text
+deployment/windows/installer/build-payload.ps1
+```
+
+A completed installation uses:
+
+- A bundled private Python runtime for the backend
+- Bundled Caddy and WinSW service binaries
+- The CareQueue API Windows service
+- The CareQueue Caddy Windows service
+- A local HTTPS hostname such as `carequeue.local`
 - SQLCipher-backed production storage
-- Encrypted scheduled backups
+- Runtime data under `C:\ProgramData\CareQueue`
+- Application files under `C:\Program Files\CareQueue`
 
-The built-in Windows deployment is intended for a private workstation or a restricted network. It is not a public internet deployment template.
+The built-in Windows deployment is intended for a private workstation or restricted private network. It is not a public internet deployment template.
 
-CareQueue’s security controls do not establish HIPAA compliance by themselves. Before using real protected health information, review [SECURITY.md](../../SECURITY.md), [DISCLAIMER.md](../../DISCLAIMER.md), and the organization’s legal, operational, and compliance requirements.
+CareQueue's security controls do not establish HIPAA compliance by themselves. Before using real protected health information, review [SECURITY.md](../../SECURITY.md), [DISCLAIMER.md](../../DISCLAIMER.md), and the organization's legal, operational, and compliance requirements.
 
 ## Deployment Overview
 
@@ -43,7 +59,7 @@ The browser should use the HTTPS application origin. The API remains bound to th
 
 ## Installed Locations
 
-The production installer separates application files from runtime data.
+The Windows installer separates application files from runtime data.
 
 ### Application files
 
@@ -51,19 +67,27 @@ The production installer separates application files from runtime data.
 C:\Program Files\CareQueue
 ```
 
-This includes:
+This includes installed application code and packaged runtime files such as:
 
 ```text
 backend/
 frontend/
 deployment/
+runtime/
 Service/
+vendor/
 ```
 
-The installed backend has its own virtual environment:
+The packaged backend uses the bundled runtime at:
 
 ```text
-C:\Program Files\CareQueue\backend\.venv
+C:\Program Files\CareQueue\runtime\python\python.exe
+```
+
+The packaged Caddy executable is installed at:
+
+```text
+C:\Program Files\CareQueue\vendor\caddy\caddy.exe
 ```
 
 ### Runtime data
@@ -72,17 +96,7 @@ C:\Program Files\CareQueue\backend\.venv
 C:\ProgramData\CareQueue
 ```
 
-The installer creates or uses directories for:
-
-```text
-Backups/
-Caddy/
-Config/
-Data/
-Logs/
-Recovery/
-Restores/
-```
+The installer creates or uses directories for runtime state, configuration, data, logs, backups, restores, recovery staging, and Caddy runtime files.
 
 The production environment file is:
 
@@ -94,7 +108,7 @@ Do not commit, copy into documentation, paste into an issue, or share the conten
 
 ## Windows Services
 
-A complete installation uses two Windows services:
+A complete packaged installation uses two Windows services:
 
 ```text
 CareQueueApi
@@ -126,21 +140,76 @@ The HTTPS service:
 - Stores its local certificate authority and runtime data under ProgramData
 - Writes service logs under ProgramData
 
-## Prerequisites
+## Installer Modes
 
-Complete these steps before running the production installer.
+The packaged installer supports four operation modes:
 
-### 1. Supported Windows environment
+```text
+Install
+Upgrade
+Repair
+Uninstall
+```
 
-Use an administrator account on a supported Windows system.
+When CareQueue is not installed, the installer presents the normal first-time Install flow.
 
-The installation and service scripts must be run from:
+When CareQueue is already installed, the installer presents operation choices:
+
+```text
+Upgrade existing installation
+Repair existing installation
+Uninstall CareQueue
+```
+
+### Install
+
+Install is used when CareQueue is not already installed.
+
+Install creates application files, runtime directories, services, production configuration, and production encryption keys when no existing runtime configuration is present.
+
+### Upgrade
+
+Upgrade is used when CareQueue is already installed.
+
+Upgrade replaces application files and packaged runtime files while preserving runtime data and production configuration under:
+
+```text
+C:\ProgramData\CareQueue
+```
+
+### Repair
+
+Repair is used when CareQueue is already installed.
+
+Repair restores application files, packaged runtime files, service files, and expected installation structure while preserving runtime data and production configuration.
+
+### Uninstall
+
+Uninstall removes CareQueue application files and Windows services.
+
+Uninstall deliberately preserves runtime data under:
+
+```text
+C:\ProgramData\CareQueue
+```
+
+This preserves configuration, database files, backups, Caddy runtime files, logs, restore staging, and recovery staging unless they are removed manually after review.
+
+## Build Prerequisites
+
+These prerequisites are needed to build the installer package from source.
+
+They are not intended to be required on an ordinary target machine running the packaged installer.
+
+### 1. Windows and administrator access
+
+Use a supported Windows system. Build and installer validation commands that install services or write under protected locations should be run from:
 
 ```text
 PowerShell as Administrator
 ```
 
-The current deployment scripts use Windows PowerShell-compatible syntax and Windows-specific commands such as:
+The deployment scripts use Windows-specific commands such as:
 
 - `icacls`
 - `Get-Service`
@@ -159,35 +228,49 @@ Example:
 G:\CareQueue
 ```
 
-The production installer builds from the current repository contents, so review the working tree before installation:
+Review the working tree before building a release package:
 
 ```powershell
 git status --short
 ```
 
-Do not build production from a working tree containing unknown changes, real data, or local secrets.
+Do not build a release package from a working tree containing unknown changes, real data, local secrets, private PDFs, or temporary restored databases.
 
-### 3. Python
+### 3. Build Python
 
-Install a supported Python version and know the full path to `python.exe`.
+The payload builder needs a build-time Python executable on PATH, or an explicit path supplied through `-BuildPythonExecutable`.
+
+Confirm Python works:
+
+```powershell
+python --version
+```
+
+### 4. Embedded Python archive
+
+The payload builder needs a Windows embedded Python ZIP archive.
 
 Example:
 
 ```text
-C:\Python314\python.exe
+G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip
 ```
 
-Confirm it works:
+This archive is used to create the private packaged runtime under:
 
-```powershell
-& "C:\Python314\python.exe" --version
+```text
+build\windows\components\python-runtime
 ```
 
-The production installer creates a separate virtual environment inside the installed application directory and installs the backend requirements there.
+and then in the installer payload under:
 
-### 4. Node.js and npm
+```text
+build\windows\payload\runtime\python
+```
 
-Install Node.js and npm.
+### 5. Node.js and npm
+
+Install Node.js and npm on the build machine.
 
 Confirm both are available:
 
@@ -196,83 +279,121 @@ node --version
 npm --version
 ```
 
-The production installer runs:
+The payload builder uses npm to install frontend dependencies and build the production frontend.
+
+### 6. Inno Setup
+
+Install Inno Setup on the build machine.
+
+The expected compiler path used in this guide is:
 
 ```text
-npm ci
-npm run build
+C:\Program Files\Inno Setup 7\ISCC.exe
 ```
 
-against the repository frontend.
+### 7. Network access for vendor assets
 
-### 5. Caddy
-
-Install the Caddy executable at:
+The payload build process can download pinned Caddy and WinSW assets using:
 
 ```text
-C:\Program Files (x86)\Caddy\caddy.exe
+deployment/windows/installer/vendor-assets.json
 ```
 
-Confirm the file exists:
+The downloaded assets are validated by SHA256 before use.
+
+If the assets are already cached and valid, the builder can reuse the cached files.
+
+## Build the Installer Payload
+
+From the repository root:
 
 ```powershell
-Test-Path `
-    "C:\Program Files (x86)\Caddy\caddy.exe" `
-    -PathType Leaf
+.\deployment\windows\installer\build-payload.ps1 `
+    -EmbeddedPythonArchive "G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip"
 ```
 
-Expected:
+The default output directory is:
 
 ```text
-True
+build\windows\payload
 ```
 
-Confirm Caddy starts:
+The payload contains the files that Inno Setup packages into the installer EXE.
+
+If a previous payload exists and should be replaced, run without `-KeepExisting`. The script removes and rebuilds the payload by default.
+
+To force vendor downloads again:
 
 ```powershell
-& "C:\Program Files (x86)\Caddy\caddy.exe" version
+.\deployment\windows\installer\build-payload.ps1 `
+    -EmbeddedPythonArchive "G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip" `
+    -ForceVendorDownload
 ```
 
-The current service definition uses this exact path. A different path requires updating both the service XML and the installation command parameters consistently.
+## Compile the Installer EXE
 
-### 6. WinSW
+After building the payload, compile the Inno Setup script:
 
-CareQueue uses WinSW as the Windows service wrapper.
+```powershell
+& "C:\Program Files\Inno Setup 7\ISCC.exe" ".\deployment\windows\installer\CareQueue.iss"
+```
 
-Before installing the API service, place a WinSW executable at:
+The default output is:
 
 ```text
-C:\Program Files\CareQueue\Service\CareQueueApi.exe
+build\windows\installer\CareQueue-Setup-0.1.0.exe
 ```
 
-The executable name matters. WinSW uses the matching XML file beside the executable:
+The exact filename follows the version configured in `CareQueue.iss`.
+
+## Run the Packaged Installer
+
+Run the compiled installer:
+
+```powershell
+.\build\windows\installer\CareQueue-Setup-0.1.0.exe
+```
+
+If PowerShell requires an explicit invocation path:
+
+```powershell
+& "G:\CareQueue\build\windows\installer\CareQueue-Setup-0.1.0.exe"
+```
+
+The installer requires administrator elevation because it installs services and writes to protected directories.
+
+## First-Time Admin Setup
+
+CareQueue does not provide public account registration.
+
+After a packaged Windows installation completes, the installer can launch the first-time Admin setup window:
 
 ```text
-CareQueueApi.exe
-CareQueueApi.xml
+CareQueue-AdminSetup.ps1
 ```
 
-The Caddy service installer copies the API WinSW executable to:
+The setup window calls the local CareQueue API over loopback:
 
 ```text
-CareQueueCaddy.exe
+http://127.0.0.1:8000/api/security/setup-initial-admin/status
+http://127.0.0.1:8000/api/security/setup-initial-admin
 ```
 
-and pairs it with:
+The setup window creates the first Admin without passing the password through command-line arguments.
 
-```text
-CareQueueCaddy.xml
-```
+The first-time setup endpoint is available only while no users exist. After any user exists, the backend disables the initial Admin setup endpoint and the setup window reports that setup is already complete.
 
-Use a trusted WinSW release and verify the downloaded file according to the release publisher’s instructions.
-
-Do not commit the WinSW executable into the repository unless the project later adopts a reviewed binary-distribution policy.
+The first Admin password must be at least 12 characters.
 
 ## Choose a Private Application Origin
 
-The production installer requires an absolute HTTPS origin.
+The packaged installer currently uses:
 
-For a single-machine private installation, this guide uses:
+```text
+https://carequeue.local
+```
+
+The production origin must be an HTTPS origin. For the current private single-machine installation, use:
 
 ```text
 https://carequeue.local
@@ -365,14 +486,7 @@ frontend\.env.development.local
 
 Do not leave a development override in a general `.env` file and assume it will be safe for production.
 
-The production installer temporarily moves these files out of the frontend directory during the build and restores them afterward:
-
-```text
-.env
-.env.local
-.env.production
-.env.production.local
-```
+The payload builder and production installer include safeguards for production frontend builds, but the source tree should still be reviewed before packaging.
 
 The production frontend should make same-origin requests such as:
 
@@ -386,626 +500,83 @@ It should not call:
 http://localhost:8000/api/security/me
 ```
 
-## First Production Installation
+## Validate an Installation
 
-Run the installer from the repository root in PowerShell as Administrator.
-
-Example:
+After installing, verify both services:
 
 ```powershell
-Set-Location "G:\CareQueue"
-
-.\deployment\windows\install-production.ps1 `
-    -ApplicationOrigin "https://carequeue.local" `
-    -PythonExecutable "C:\Python314\python.exe"
+Get-Service CareQueueApi, CareQueueCaddy |
+Select-Object Name, Status, StartType
 ```
 
-Do not use `-Force` for a clean first installation unless an incomplete application directory already exists and has been reviewed.
-
-### What the installer does
-
-The installer:
-
-1. Validates the HTTPS application origin.
-2. Verifies required source files.
-3. Creates a temporary staging area.
-4. Builds the production frontend.
-5. Copies backend and deployment files into staging.
-6. Replaces the Caddy hostname placeholder.
-7. Creates production runtime directories.
-8. Generates independent production encryption keys on the first installation.
-9. Writes the production environment file.
-10. Installs the staged application files.
-11. Creates the production backend virtual environment.
-12. Installs backend dependencies.
-13. Loads the production environment.
-14. Imports the installed backend to validate it.
-15. Applies restricted runtime permissions.
-16. Restores previously running services during an upgrade.
-
-The installer does not automatically install the API or Caddy services during the first installation.
-
-### Generated production settings
-
-The first installation generates independent values for:
-
-```text
-AUTHSTATUS_ENCRYPTION_KEY
-AUTHSTATUS_SQLCIPHER_KEY
-AUTHSTATUS_BACKUP_ENCRYPTION_KEY
-```
-
-It also configures production behavior including:
-
-```text
-AUTHSTATUS_APP_ENVIRONMENT=production
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
-AUTHSTATUS_SESSION_COOKIE_SECURE=true
-```
-
-The default runtime paths point to `C:\ProgramData\CareQueue`.
-
-The default backup policy created by the installer is:
-
-```text
-Retention: 90 days
-Minimum retained backups: 5
-```
-
-Review the organization’s requirements before changing those values.
-
-### Successful result
-
-A successful installation ends with output similar to:
-
-```text
-CareQueue production files installed successfully.
-Application directory: C:\Program Files\CareQueue
-Runtime data directory: C:\ProgramData\CareQueue
-Environment file: C:\ProgramData\CareQueue\Config\carequeue.env
-Application origin: https://carequeue.local
-```
-
-For a first installation with no running CareQueue services, the installer reports that no running services required restoration.
-
-## Validate the Installed Backend
-
-The installer performs an import check automatically.
-
-You may also verify that the expected files exist:
-
-```powershell
-Test-Path `
-    "C:\Program Files\CareQueue\backend\.venv\Scripts\python.exe"
-
-Test-Path `
-    "C:\ProgramData\CareQueue\Config\carequeue.env"
-
-Test-Path `
-    "C:\Program Files\CareQueue\deployment\windows\Caddyfile"
-```
-
-All three should return:
-
-```text
-True
-```
-
-Do not print the production environment file to a shared terminal transcript.
-
-## Install the API Service
-
-The API service installer expects:
-
-```text
-C:\Program Files\CareQueue\Service\CareQueueApi.exe
-```
-
-to already contain the WinSW executable.
-
-Install and start the service:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\install-api-service.ps1" `
-    -StartService
-```
-
-The script:
-
-- Requires administrator access
-- Validates the installed service XML
-- Copies `CareQueueApi.xml` beside the WinSW executable
-- Refuses to overwrite an existing Windows service
-- Installs `CareQueueApi`
-- Optionally starts it
-
-The immediate status may briefly show:
-
-```text
-StartPending
-```
-
-Wait and check again:
-
-```powershell
-Start-Sleep -Seconds 3
-
-Get-Service -Name "CareQueueApi"
-```
-
-Expected:
+Expected service status after a normal install:
 
 ```text
 Running
 ```
 
-Test the API directly on loopback:
+Check the loopback API health endpoint:
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "http://127.0.0.1:8000/api/health/live"
+    -Method Get `
+    -Uri "http://127.0.0.1:8000/api/health" `
+    -TimeoutSec 5
 ```
 
-Expected response:
-
-```text
-status  app             version
-------  ---             -------
-ok      AuthStatus API  0.1.0
-```
-
-The exact version may change over time.
-
-## Install the Caddy Service
-
-Install and start Caddy after the API service is installed:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\install-caddy-service.ps1" `
-    -StartService
-```
-
-The script:
-
-- Requires administrator access
-- Validates the installed Caddy service XML
-- Validates the installed Caddyfile
-- Confirms the API service exists
-- Creates Caddy data, configuration, and log directories
-- Copies WinSW to `CareQueueCaddy.exe`
-- Copies `CareQueueCaddy.xml` beside it
-- Installs `CareQueueCaddy`
-- Optionally starts it
-
-Wait and verify both services:
-
-```powershell
-Start-Sleep -Seconds 3
-
-Get-Service -Name "CareQueueApi", "CareQueueCaddy"
-```
-
-Expected:
-
-```text
-Running  CareQueueApi
-Running  CareQueueCaddy
-```
-
-## Why HTTP Redirects Are Disabled
-
-The Windows Caddyfile contains:
-
-```caddyfile
-{
-	auto_https disable_redirects
-	skip_install_trust
-}
-```
-
-`disable_redirects` prevents Caddy from creating the automatic HTTP listener used only to redirect port 80 traffic to HTTPS.
-
-CareQueue’s private deployment accesses the application directly over HTTPS, so an HTTP listener is unnecessary.
-
-`skip_install_trust` prevents the Windows service from trying to modify the machine certificate store while running in the service context. The root certificate is imported deliberately by an administrator instead.
-
-## Trust the Caddy Root Certificate
-
-Caddy creates a local certificate authority for the private hostname.
-
-The root certificate is stored at:
-
-```text
-C:\ProgramData\CareQueue\Caddy\Data\caddy\pki\authorities\local\root.crt
-```
-
-Confirm the certificate exists:
-
-```powershell
-$rootCertificate = (
-    "C:\ProgramData\CareQueue\Caddy\Data\caddy\" +
-    "pki\authorities\local\root.crt"
-)
-
-Test-Path `
-    -LiteralPath $rootCertificate `
-    -PathType Leaf
-```
-
-Expected:
-
-```text
-True
-```
-
-Import it into the Local Machine trusted root store:
-
-```powershell
-Import-Certificate `
-    -FilePath $rootCertificate `
-    -CertStoreLocation "Cert:\LocalMachine\Root"
-```
-
-The command displays the imported certificate thumbprint and subject.
-
-Only trust the root certificate generated by the intended CareQueue Caddy instance.
-
-For a managed network, certificate distribution should follow the organization’s approved certificate and endpoint-management process.
-
-## Verify Private HTTPS
-
-Test the HTTPS health endpoint:
+Check first-time setup status:
 
 ```powershell
 Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/live"
+    -Method Get `
+    -Uri "http://127.0.0.1:8000/api/security/setup-initial-admin/status" `
+    -TimeoutSec 5
 ```
 
-Expected:
-
-```text
-status  app             version
-------  ---             -------
-ok      AuthStatus API  0.1.0
-```
-
-Test readiness:
-
-```powershell
-Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/ready"
-```
-
-Readiness should report success only when the application can also query the configured database.
-
-Open the frontend:
+Open the application through the approved HTTPS origin:
 
 ```text
 https://carequeue.local
 ```
 
-The browser should display the CareQueue login page without a certificate warning.
+Confirm:
 
-## Create the First Production User
+- The login page loads over HTTPS.
+- First-time Admin setup works when no users exist.
+- Existing Admin setup is blocked after a user exists.
+- Login succeeds.
+- Dashboard loads.
+- Authorization queue loads.
+- Logout succeeds.
 
-CareQueue does not provide public registration.
+Service status alone does not prove the full application is healthy. Verify the HTTPS endpoint and login workflow.
 
-Create the first user from the installed backend using the production environment.
+## Installer Logs
 
-Open PowerShell as Administrator:
-
-```powershell
-Set-Location "C:\Program Files\CareQueue\backend"
-
-$environmentFile = (
-    "C:\ProgramData\CareQueue\Config\carequeue.env"
-)
-
-Get-Content -LiteralPath $environmentFile |
-ForEach-Object {
-    $line = $_.Trim()
-
-    if (
-        $line `
-        -and -not $line.StartsWith("#") `
-        -and $line.Contains("=")
-    ) {
-        $name, $value = $line.Split("=", 2)
-
-        [Environment]::SetEnvironmentVariable(
-            $name.Trim(),
-            $value.Trim(),
-            "Process"
-        )
-    }
-}
-
-& ".\.venv\Scripts\python.exe" `
-    ".\scripts\create_user.py" `
-    --username "carequeue.admin" `
-    --role "Admin"
-```
-
-The script prompts for a password and confirmation.
-
-Password requirements enforced by the script include:
+The packaged installer engine writes logs under:
 
 ```text
-Minimum length: 12 characters
+C:\ProgramData\CareQueue\Logs\Installer
 ```
 
-The password is not displayed while typing.
-
-Available roles are:
-
-```text
-Admin
-UR
-Read Only
-```
-
-Use a role-based or organizational username rather than a personal name when that fits the deployment’s account-management policy.
-
-After creation, sign in at:
-
-```text
-https://carequeue.local
-```
-
-## Expected 401 Responses
-
-Before login, the frontend checks whether a session already exists.
-
-A request such as:
-
-```text
-GET https://carequeue.local/api/security/me
-```
-
-may return:
-
-```text
-401 Unauthorized
-```
-
-when the browser is logged out. That is expected.
-
-Protected endpoints may also return 401 until authentication succeeds.
-
-After a successful login, session-aware requests should return normally.
-
-The important production check is the request origin. Requests should use:
-
-```text
-https://carequeue.local/api/...
-```
-
-They should not use:
-
-```text
-http://localhost:8000/api/...
-```
-
-A localhost API URL in the production browser normally means a development Vite environment override was included in the frontend build.
-
-## Install the Scheduled Backup Task
-
-CareQueue includes a daily encrypted backup task.
-
-Install the default task:
+View the newest installer log:
 
 ```powershell
-& "C:\Program Files\CareQueue\deployment\windows\install-backup-task.ps1"
-```
-
-Defaults:
-
-```text
-Task name: CareQueue Encrypted Backup
-Run time: 02:00
-Account: SYSTEM
-Backup directory: C:\ProgramData\CareQueue\Backups
-```
-
-Use a different daily time:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\install-backup-task.ps1" `
-    -RunAt "03:30"
-```
-
-`RunAt` uses 24-hour `HH:mm` format.
-
-Use a dedicated service account:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\install-backup-task.ps1" `
-    -ServiceAccount "DOMAIN\CareQueueBackup"
-```
-
-The script prompts for that account’s password.
-
-The account must have permission to:
-
-- Read installed application files
-- Execute the installed Python environment
-- Read the production environment file
-- Read the active database
-- Write to the backup directory
-
-Do not place encryption keys or passwords in scheduled-task arguments.
-
-### Verify the task
-
-```powershell
-Get-ScheduledTask `
-    -TaskName "CareQueue Encrypted Backup"
-```
-
-Start a manual test run:
-
-```powershell
-Start-ScheduledTask `
-    -TaskName "CareQueue Encrypted Backup"
-```
-
-Wait briefly, then review task information:
-
-```powershell
-Get-ScheduledTaskInfo `
-    -TaskName "CareQueue Encrypted Backup"
-```
-
-Confirm that a recent encrypted backup exists:
-
-```powershell
-Get-ChildItem `
-    "C:\ProgramData\CareQueue\Backups" `
-    -File |
+$latestLog = Get-ChildItem `
+    -Path "$env:ProgramData\CareQueue\Logs\Installer" `
+    -Filter "CareQueue-*.log" `
+    -ErrorAction SilentlyContinue |
 Sort-Object LastWriteTime -Descending |
-Select-Object -First 5 `
-    Name,
-    Length,
-    LastWriteTime
+Select-Object -First 1
+
+$latestLog.FullName
+
+Get-Content `
+    -LiteralPath $latestLog.FullName `
+    -Tail 240
 ```
 
-A successful task result is not enough by itself. Confirm that the backup exists, is nonempty, and can be restored through the approved staging workflow.
-
-See [Backup and Recovery](../workflows/backup-and-recovery.md) for backup verification and restoration procedures.
-
-## Manual Backup
-
-Run the installed backup runner:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1"
-```
-
-The runner:
-
-- Loads the production environment
-- Uses the installed Python virtual environment
-- Writes to the production backup directory
-- Invokes the encrypted backup script
-
-Review the output and confirm the resulting file exists.
-
-## Production Upgrade
-
-Use the production installer with `-Force` for an existing installation.
-
-From the updated repository root:
-
-```powershell
-.\deployment\windows\install-production.ps1 `
-    -ApplicationOrigin "https://carequeue.local" `
-    -PythonExecutable "C:\Python314\python.exe" `
-    -Force
-```
-
-### Upgrade behavior
-
-When the services are running, the installer:
-
-1. Builds and stages the updated application.
-2. Preserves the existing production environment file.
-3. Stops `CareQueueCaddy`.
-4. Stops `CareQueueApi`.
-5. Replaces installed application files.
-6. Recreates the installed backend virtual environment.
-7. Installs dependencies.
-8. Validates the installed backend.
-9. Reapplies runtime permissions.
-10. Starts `CareQueueApi`.
-11. Starts `CareQueueCaddy`.
-
-The service order matters:
-
-```text
-Stop:
-CareQueueCaddy
-CareQueueApi
-
-Start:
-CareQueueApi
-CareQueueCaddy
-```
-
-Only services that were running before the upgrade are restarted.
-
-If installation fails after the services were stopped, the installer attempts to restore their previous running state.
-
-### Before upgrading
-
-Before every production upgrade:
-
-- Confirm the source tree is trusted.
-- Run backend and frontend tests.
-- Confirm a recent encrypted backup exists.
-- Confirm the backup key is recoverable.
-- Review dependency and configuration changes.
-- Keep recovery instructions available.
-- Avoid making unrelated configuration changes during the upgrade.
-
-Recommended repository checks:
-
-```powershell
-cd backend
-.\.venv\Scripts\Activate.ps1
-pytest tests -n auto -q
-python -m ruff check . --fix
-```
-
-Then:
-
-```powershell
-cd ..\frontend
-npm test
-npm run build
-```
-
-### After upgrading
-
-Check the services:
-
-```powershell
-Get-Service -Name "CareQueueApi", "CareQueueCaddy"
-```
-
-Check liveness:
-
-```powershell
-Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/live"
-```
-
-Check readiness:
-
-```powershell
-Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/ready"
-```
-
-Then sign in and verify a basic workflow using approved test or synthetic data.
-
-## Verify Service Startup After Reboot
-
-Both services use automatic startup.
-
-After a planned restart:
-
-```powershell
-Get-Service -Name "CareQueueApi", "CareQueueCaddy"
-```
-
-Then:
-
-```powershell
-Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/live"
-```
-
-Do not assume service status alone proves the full application is healthy. Verify the HTTPS endpoint and login workflow.
+Review logs before sharing them. Do not post production logs publicly without checking for sensitive values, machine names, paths, usernames, operational details, or protected information.
 
 ## Service Logs
 
@@ -1021,7 +592,7 @@ WinSW wrapper log:
 C:\ProgramData\CareQueue\Logs\Api\CareQueueApi.wrapper.log
 ```
 
-Review the latest API wrapper entries:
+Review recent API wrapper entries:
 
 ```powershell
 Get-Content `
@@ -1052,8 +623,6 @@ ForEach-Object {
     Get-Content $_.FullName -Tail 100
 }
 ```
-
-Do not post full production logs publicly without reviewing them for sensitive values, machine names, paths, and operational details.
 
 ## Service Management
 
@@ -1091,109 +660,166 @@ Wait before checking health:
 Start-Sleep -Seconds 3
 ```
 
-## Remove the Caddy Service
+## Uninstall Behavior
 
-Run:
+The packaged Uninstall operation removes:
 
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\remove-caddy-service.ps1"
-```
+- `CareQueueCaddy` service
+- `CareQueueApi` service
+- Application files under `C:\Program Files\CareQueue`
 
-The removal script:
-
-- Stops the service when needed
-- Uninstalls `CareQueueCaddy`
-- Waits for the service to disappear
-- Removes the Caddy WinSW executable and installed XML
-
-It deliberately preserves:
+The packaged Uninstall operation preserves:
 
 ```text
-C:\ProgramData\CareQueue\Caddy
-C:\ProgramData\CareQueue\Logs\Caddy
+C:\ProgramData\CareQueue
 ```
 
-This preserves the local certificate authority and logs during a service reinstall.
-
-## Remove the API Service
-
-Remove Caddy first because it depends on the API.
-
-Then run:
+After uninstall, verify:
 
 ```powershell
-& "C:\Program Files\CareQueue\deployment\windows\remove-api-service.ps1"
+Get-Service CareQueueApi, CareQueueCaddy -ErrorAction SilentlyContinue
+
+Test-Path "C:\Program Files\CareQueue"
+Test-Path "C:\ProgramData\CareQueue"
+Test-Path "C:\ProgramData\CareQueue\Config\carequeue.env"
+Test-Path "C:\ProgramData\CareQueue\Data\auth_tracker.sqlcipher.db"
 ```
 
-The API removal script removes the Windows service. Review its output before deleting any application or runtime files.
-
-## Remove the Scheduled Backup Task
-
-Run:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\remove-backup-task.ps1"
-```
-
-This removes the scheduled task named:
+Expected after a normal uninstall with existing runtime data:
 
 ```text
-CareQueue Encrypted Backup
+No service output
+False
+True
+True
+True
 ```
 
-It does not delete existing backup files.
+Do not delete `C:\ProgramData\CareQueue` unless the data-retention and backup requirements have been reviewed.
 
-## Reinstall a Service
+## Fresh Install After Uninstall
 
-A service installer refuses to overwrite an existing Windows service.
+Because uninstall preserves ProgramData, a later Install can reuse the preserved production configuration and database.
 
-For Caddy:
+After reinstalling, verify:
+
+- Services are running.
+- The health endpoint responds.
+- Existing Admin setup is not offered if users already exist.
+- Existing login credentials still work.
+- Existing authorization data is still present.
+
+## Lower-Level PowerShell Scripts
+
+The packaged installer is the normal private Windows installation path.
+
+The lower-level PowerShell scripts remain useful for development, troubleshooting, and direct validation of installer modes.
+
+The lower-level installer engine is:
+
+```text
+deployment/windows/installer/invoke-install.ps1
+```
+
+Direct mode example:
 
 ```powershell
-& "C:\Program Files\CareQueue\deployment\windows\remove-caddy-service.ps1"
-
-& "C:\Program Files\CareQueue\deployment\windows\install-caddy-service.ps1" `
-    -StartService
+powershell.exe `
+    -NoProfile `
+    -NonInteractive `
+    -ExecutionPolicy Bypass `
+    -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
+    -Mode Repair `
+    -ApplicationOrigin "https://carequeue.local" `
+    -PayloadDirectory ".\build\windows\payload" `
+    -InstallDirectory "C:\Program Files\CareQueue" `
+    -DataDirectory "C:\ProgramData\CareQueue"
 ```
 
-For the API, remove Caddy first, then remove and reinstall the API:
+For direct Uninstall, `-ApplicationOrigin` is not required.
 
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\remove-caddy-service.ps1"
+The older production script remains available:
 
-& "C:\Program Files\CareQueue\deployment\windows\remove-api-service.ps1"
-
-& "C:\Program Files\CareQueue\deployment\windows\install-api-service.ps1" `
-    -StartService
-
-& "C:\Program Files\CareQueue\deployment\windows\install-caddy-service.ps1" `
-    -StartService
+```text
+deployment/windows/install-production.ps1
 ```
+
+Prefer the packaged installer for normal release validation because it exercises the same path an end user will run.
+
+## Backup Task
+
+CareQueue includes scripts for encrypted backup operation and scheduled backup task management:
+
+```text
+deployment/windows/run-backup.ps1
+deployment/windows/install-backup-task.ps1
+deployment/windows/remove-backup-task.ps1
+```
+
+Install the scheduled backup task only after confirming the production installation, runtime paths, retention policy, and recovery responsibilities.
+
+Existing backup files should be protected and recovery-tested according to the backup and recovery guide.
+
+## Clean-Machine Validation
+
+Before treating a Windows installer build as stable, validate it on a clean machine or clean VM that has not previously hosted CareQueue.
+
+At minimum, test:
+
+- Fresh install on a clean Windows 11 VM
+- First-time Admin setup with no existing users
+- Browser access to `https://carequeue.local`
+- Login
+- Reboot and service auto-start
+- Repair
+- Upgrade over an existing install
+- Uninstall with ProgramData preserved
+- Fresh install after uninstall using preserved data
+
+Ideally, repeat the same matrix on a clean supported Windows 10 VM.
+
+Local developer-machine success is useful, but it does not replace clean-machine testing.
 
 ## Troubleshooting
 
-### Installer cannot remove `_rust.pyd`
+### Installer shows only Install
 
-Example:
+This is expected when CareQueue is not currently installed.
+
+The Upgrade, Repair, and Uninstall options appear only when the installer detects an existing installation under:
 
 ```text
-Access to the path '_rust.pyd' is denied.
+C:\Program Files\CareQueue
 ```
 
-Cause:
+The detection checks for required installed files such as:
 
-The running API service has loaded a compiled Python dependency from the installed virtual environment.
-
-Current installer behavior should stop the running services automatically during a forced upgrade.
-
-If working with an older installer, stop Caddy and the API before rerunning:
-
-```powershell
-Stop-Service -Name "CareQueueCaddy"
-Stop-Service -Name "CareQueueApi"
+```text
+backend\authstatus_api
+frontend\dist\index.html
+runtime\python\python.exe
+vendor\caddy\caddy.exe
 ```
 
-Then run the installer with `-Force`.
+### Installer says CareQueue is already installed
+
+Use the operation page to choose:
+
+```text
+Upgrade existing installation
+Repair existing installation
+Uninstall CareQueue
+```
+
+Install mode is only for a machine where CareQueue is not already installed.
+
+### First-time Admin setup says setup is already complete
+
+This means at least one user already exists in the production database.
+
+Use the existing Admin account to sign in and manage users.
+
+If the Admin password is lost, use the approved password reset or recovery procedure. Do not delete production data to reopen first-time setup unless the deployment is disposable and has no retained data requirements.
 
 ### Production frontend calls `localhost:8000`
 
@@ -1225,7 +851,7 @@ Get-ChildItem `
     -Filter ".env*"
 ```
 
-Inspect only the API URL lines:
+Inspect only API URL lines:
 
 ```powershell
 Get-ChildItem `
@@ -1248,9 +874,7 @@ Keep development configuration in:
 frontend\.env.development.local
 ```
 
-Then rebuild and reinstall.
-
-The current installer temporarily removes production-relevant Vite environment files during the build as an additional safeguard.
+Then rebuild the payload and installer.
 
 ### `/api/security/me` returns 401 before login
 
@@ -1287,16 +911,15 @@ C:\ProgramData\CareQueue\Logs\Caddy
 Common causes include:
 
 - Port 443 is already in use.
-- The Caddy executable path is wrong.
 - The installed Caddyfile is invalid.
 - Caddy cannot access its runtime directory.
 - Another service is holding a required port.
 - The service XML does not match the installed path.
 
-Validate the installed Caddyfile:
+Validate the installed Caddyfile with the packaged Caddy executable:
 
 ```powershell
-& "C:\Program Files (x86)\Caddy\caddy.exe" `
+& "C:\Program Files\CareQueue\vendor\caddy\caddy.exe" `
     validate `
     --config "C:\Program Files\CareQueue\deployment\windows\Caddyfile" `
     --adapter caddyfile
@@ -1410,7 +1033,7 @@ C:\ProgramData\CareQueue\Data
 
 It is separate from a development database under the repository.
 
-Creating the first production user writes that user to the production database.
+Creating the first production Admin writes that user to the production database.
 
 Development data is not copied automatically.
 
@@ -1429,7 +1052,7 @@ Before using CareQueue with sensitive information, confirm:
 - SQLCipher mode is enabled.
 - Production encryption keys are backed up securely.
 - Backup keys are stored separately from backups.
-- Scheduled encrypted backups are running.
+- Encrypted backup procedures are configured and tested.
 - Restoration has been tested.
 - Service logs are protected and reviewed.
 - Windows and dependencies are patched.
@@ -1446,6 +1069,7 @@ The main Windows deployment files are:
 ```text
 deployment/windows/
 ├── Caddyfile
+├── CareQueue-AdminSetup.ps1
 ├── CareQueueApi.xml
 ├── CareQueueCaddy.xml
 ├── install-production.ps1
@@ -1456,7 +1080,16 @@ deployment/windows/
 ├── run-api.ps1
 ├── install-backup-task.ps1
 ├── remove-backup-task.ps1
-└── run-backup.ps1
+├── run-backup.ps1
+├── uninstall-production.ps1
+└── installer/
+    ├── CareQueue.iss
+    ├── build-payload.ps1
+    ├── build-python-runtime.ps1
+    ├── build-vendor-assets.ps1
+    ├── build-wheelhouse.ps1
+    ├── invoke-install.ps1
+    └── vendor-assets.json
 ```
 
-The exact source files in the current repository remain authoritative. Review them before modifying paths, service accounts, ports, or certificate behavior.
+The exact source files in the current repository remain authoritative. Review them before modifying paths, service accounts, ports, certificate behavior, installer modes, or release packaging.
