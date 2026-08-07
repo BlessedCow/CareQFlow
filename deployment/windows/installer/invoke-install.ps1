@@ -201,23 +201,44 @@ function Assert-PostInstallationHealth {
     )
 
     foreach ($requiredServiceName in $requiredServices) {
-        $service = Get-Service `
-            -Name $requiredServiceName `
-            -ErrorAction SilentlyContinue
+        $lastServiceStatus = $null
+        $serviceRunning = $false
 
-        if (-not $service) {
-            throw (
-                "Post-installation validation failed because the " +
-                "Windows service was not found: $requiredServiceName"
-            )
+        for (
+            $attempt = 1
+            $attempt -le $MaximumAttempts
+            $attempt++
+        ) {
+            $service = Get-Service `
+                -Name $requiredServiceName `
+                -ErrorAction SilentlyContinue
+
+            if (-not $service) {
+                throw (
+                    "Post-installation validation failed because the " +
+                    "Windows service was not found: $requiredServiceName"
+                )
+            }
+
+            $lastServiceStatus = $service.Status
+
+            if ($service.Status -eq "Running") {
+                $serviceRunning = $true
+                break
+            }
+
+            if ($attempt -lt $MaximumAttempts) {
+                Start-Sleep `
+                    -Seconds $RetryDelaySeconds
+            }
         }
 
-        if ($service.Status -ne "Running") {
+        if (-not $serviceRunning) {
             throw (
                 "Post-installation validation failed because the " +
                 "Windows service is not running: " +
                 "$requiredServiceName. Current status: " +
-                "$($service.Status)."
+                "$lastServiceStatus."
             )
         }
     }
