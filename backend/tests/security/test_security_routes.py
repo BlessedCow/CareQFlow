@@ -156,6 +156,68 @@ def test_failed_login_writes_audit_event(client):
     assert row["username"] == "user@example.com"
 
 
+def test_login_temporarily_locks_account_after_repeated_failures(client):
+    create_user("user@example.com", "correct horse battery staple", role="UR")
+
+    for _ in range(5):
+        response = client.post(
+            "/api/security/login",
+            json={
+                "username": "user@example.com",
+                "password": "wrong password",
+            },
+        )
+
+        assert response.status_code == 401
+
+    response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 423
+    assert response.json() == {
+        "detail": "Account is temporarily locked. Try again later.",
+    }
+
+
+def test_locked_login_writes_audit_event(client):
+    create_user("user@example.com", "correct horse battery staple", role="UR")
+
+    for _ in range(5):
+        client.post(
+            "/api/security/login",
+            json={
+                "username": "user@example.com",
+                "password": "wrong password",
+            },
+        )
+
+    response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 423
+
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT action, username, metadata
+            FROM audit_events
+            WHERE action = 'security.login_locked'
+            """).fetchone()
+
+    assert row is not None
+    assert row["action"] == "security.login_locked"
+    assert row["username"] == "user@example.com"
+
+
 def test_login_rejects_unknown_user(client):
     response = client.post(
         "/api/security/login",

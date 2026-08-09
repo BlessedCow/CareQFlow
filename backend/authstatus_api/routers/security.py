@@ -60,6 +60,7 @@ from authstatus_api.security.temporary_passwords import (
     generate_temporary_password,
 )
 from authstatus_api.security.users import (
+    UserLockedError,
     authenticate_user,
     create_user,
     get_user_by_id,
@@ -421,7 +422,21 @@ def login(
     request: Request,
     response: Response,
 ) -> LoginResponse:
-    user = authenticate_user(payload.username, payload.password)
+    try:
+        user = authenticate_user(payload.username, payload.password)
+    except UserLockedError:
+        record_audit_event(
+            action="security.login_locked",
+            resource_type="security",
+            metadata={"username": payload.username.strip().lower()},
+            request=request,
+            username=payload.username.strip().lower(),
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Account is temporarily locked. Try again later.",
+        ) from None
 
     if user is None:
         record_audit_event(

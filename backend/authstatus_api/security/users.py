@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import timedelta
 from typing import Any
 
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
-from authstatus_api.security.mappings import format_datetime, user_row_to_dict
+from authstatus_api.security.mappings import (
+    format_datetime,
+    parse_datetime,
+    user_row_to_dict,
+)
 from authstatus_api.security.password_hashing import hash_password, verify_password
 from authstatus_api.security.password_policy import validate_password_policy
 from authstatus_api.security.sessions import (
@@ -13,6 +18,13 @@ from authstatus_api.security.sessions import (
     touch_session,
     utc_now,
 )
+
+FAILED_LOGIN_LOCK_THRESHOLD = 5
+FAILED_LOGIN_LOCK_MINUTES = 15
+
+
+class UserLockedError(Exception):
+    """Raised when a user is temporarily locked after repeated failed logins."""
 
 
 def create_user(
@@ -235,6 +247,81 @@ def update_user_password(
     return get_user_by_id(user_id)
 
 
+def _is_user_locked(user: dict[str, Any]) -> bool:
+    locked_until = user.get("locked_until")
+
+    if not locked_until:
+        return False
+
+    return parse_datetime(locked_until) > utc_now()
+
+
+def clear_failed_login_state(user_id: int) -> None:
+    init_db()
+
+    now = format_datetime(utc_now())
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE users
+            SET
+                failed_login_count = 0,
+                locked_until = NULL,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (now, user_id),
+        )
+
+
+def record_failed_login(user_id: int) -> dict[str, Any] | None:
+    init_db()
+
+    now_datetime = utc_now()
+    now = format_datetime(now_datetime)
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT failed_login_count
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        failed_login_count = int(row["failed_login_count"]) + 1
+
+        locked_until = None
+        if failed_login_count >= FAILED_LOGIN_LOCK_THRESHOLD:
+            locked_until = format_datetime(
+                now_datetime + timedelta(minutes=FAILED_LOGIN_LOCK_MINUTES)
+            )
+
+        conn.execute(
+            """
+            UPDATE users
+            SET
+                failed_login_count = ?,
+                locked_until = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                failed_login_count,
+                locked_until,
+                now,
+                user_id,
+            ),
+        )
+
+    return get_user_by_id(user_id)
+
+
 def record_successful_login(user_id: int) -> None:
     init_db()
 
@@ -246,6 +333,7 @@ def record_successful_login(user_id: int) -> None:
             UPDATE users
             SET
                 failed_login_count = 0,
+                locked_until = NULL,
                 last_login_at = ?,
                 updated_at = ?
             WHERE id = ?
@@ -263,7 +351,18 @@ def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
     if not user["is_active"]:
         return None
 
+    if _is_user_locked(user):
+        raise UserLockedError
+
+    if user.get("locked_until"):
+        clear_failed_login_state(user["id"])
+        user = get_user_by_id(user["id"])
+
+        if user is None:
+            return None
+
     if not verify_password(user["password_hash"], password):
+        record_failed_login(user["id"])
         return None
 
     record_successful_login(user["id"])

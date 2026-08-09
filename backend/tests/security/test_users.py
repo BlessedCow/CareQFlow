@@ -10,6 +10,9 @@ from authstatus_api.security.password_policy import (
     PasswordPolicyError,
 )
 from authstatus_api.security.users import (
+    FAILED_LOGIN_LOCK_THRESHOLD,
+    UserLockedError,
+    authenticate_user,
     create_user,
     get_user_by_id,
     get_user_by_username,
@@ -177,6 +180,65 @@ def test_update_user_password_returns_none_for_missing_user():
         )
         is None
     )
+
+
+def test_authenticate_user_records_failed_login_count():
+    user = create_user(
+        "lockout@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    assert authenticate_user("lockout@example.com", "wrong password") is None
+
+    found = get_user_by_id(user["id"])
+
+    assert found is not None
+    assert found["failed_login_count"] == 1
+    assert found["locked_until"] is None
+
+
+def test_authenticate_user_locks_after_repeated_failed_logins():
+    user = create_user(
+        "locked@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    for _ in range(FAILED_LOGIN_LOCK_THRESHOLD):
+        assert authenticate_user("locked@example.com", "wrong password") is None
+
+    found = get_user_by_id(user["id"])
+
+    assert found is not None
+    assert found["failed_login_count"] == FAILED_LOGIN_LOCK_THRESHOLD
+    assert found["locked_until"] is not None
+
+    with pytest.raises(UserLockedError):
+        authenticate_user("locked@example.com", "correct horse battery staple")
+
+
+def test_successful_login_clears_failed_login_state():
+    user = create_user(
+        "reset-lockout@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    assert authenticate_user("reset-lockout@example.com", "wrong password") is None
+
+    logged_in = authenticate_user(
+        "reset-lockout@example.com",
+        "correct horse battery staple",
+    )
+
+    assert logged_in is not None
+
+    found = get_user_by_id(user["id"])
+
+    assert found is not None
+    assert found["failed_login_count"] == 0
+    assert found["locked_until"] is None
 
 
 def test_create_user_rejects_password_below_policy_minimum():
