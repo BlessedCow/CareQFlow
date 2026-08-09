@@ -19,6 +19,10 @@ os.environ.setdefault(
     str(PROJECT_ROOT / "backend" / "data" / "auth_tracker.db"),
 )
 
+from authstatus_api.security.password_policy import (  # noqa: E402
+    PasswordPolicyError,
+    validate_password_policy,
+)
 from authstatus_api.security.users import create_user  # noqa: E402
 
 
@@ -44,8 +48,10 @@ def main() -> int:
         print("Passwords do not match.", file=sys.stderr)
         return 1
 
-    if len(password) < 12:
-        print("Password must be at least 12 characters.", file=sys.stderr)
+    try:
+        validate_password_policy(password)
+    except PasswordPolicyError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
 
     try:

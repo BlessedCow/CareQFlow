@@ -5,6 +5,10 @@ import sqlite3
 import pytest
 
 from authstatus_api.security.password_hashing import verify_password
+from authstatus_api.security.password_policy import (
+    PASSWORD_POLICY_MESSAGE,
+    PasswordPolicyError,
+)
 from authstatus_api.security.users import (
     create_user,
     get_user_by_id,
@@ -173,6 +177,32 @@ def test_update_user_password_returns_none_for_missing_user():
         )
         is None
     )
+
+
+def test_create_user_rejects_password_below_policy_minimum():
+    with pytest.raises(
+        PasswordPolicyError,
+        match=PASSWORD_POLICY_MESSAGE,
+    ):
+        create_user("short-password@example.com", "short", role="UR")
+
+
+def test_update_user_password_rejects_password_below_policy_minimum():
+    user = create_user(
+        "policy@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    with pytest.raises(
+        PasswordPolicyError,
+        match=PASSWORD_POLICY_MESSAGE,
+    ):
+        update_user_password(
+            user["id"],
+            new_password="short",
+            must_change_password=False,
+        )
 
 
 def test_create_user_rejects_duplicate_username():

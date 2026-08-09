@@ -24,6 +24,10 @@ from authstatus_api.security.dependencies import (
     require_role,
 )
 from authstatus_api.security.password_hashing import verify_password
+from authstatus_api.security.password_policy import (
+    PasswordPolicyError,
+    validate_password_policy,
+)
 from authstatus_api.security.schemas import (
     AdminPasswordResetResponse,
     AdminUserCreateResponse,
@@ -144,11 +148,13 @@ def setup_initial_admin(
             detail="Initial admin setup is no longer available.",
         )
 
-    if len(payload.password) < 12:
+    try:
+        validate_password_policy(payload.password)
+    except PasswordPolicyError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 12 characters.",
-        )
+            detail=str(exc),
+        ) from None
 
     try:
         user = create_user(
@@ -312,6 +318,14 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be different from the current password.",
         )
+
+    try:
+        validate_password_policy(payload.new_password)
+    except PasswordPolicyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
 
     updated_user = update_user_password(
         current_user["id"],

@@ -838,6 +838,32 @@ def test_user_can_change_own_password(client):
     assert new_login.json()["user"]["must_change_password"] is False
 
 
+def test_change_password_rejects_short_new_password(client):
+    create_user(
+        "user@example.com",
+        "old password value",
+        role="UR",
+    )
+
+    response = client.post(
+        "/api/security/change-password",
+        json={
+            "current_password": "old password value",
+            "new_password": "short",
+        },
+        headers=auth_headers_for(
+            client,
+            "user@example.com",
+            "old password value",
+        ),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Password must be at least 12 characters.",
+    }
+
+
 def test_change_password_rejects_incorrect_current_password(client):
     create_user(
         "user@example.com",

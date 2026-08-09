@@ -7,6 +7,7 @@ from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 from authstatus_api.security.mappings import format_datetime, user_row_to_dict
 from authstatus_api.security.password_hashing import hash_password, verify_password
+from authstatus_api.security.password_policy import validate_password_policy
 from authstatus_api.security.sessions import (
     get_active_session_by_token,
     touch_session,
@@ -22,6 +23,8 @@ def create_user(
     must_change_password: bool = False,
 ) -> dict[str, Any]:
     init_db()
+
+    validate_password_policy(password)
 
     normalized_username = username.strip().lower()
     now = format_datetime(utc_now())
@@ -200,6 +203,8 @@ def update_user_password(
     must_change_password: bool,
 ) -> dict[str, Any] | None:
     init_db()
+
+    validate_password_policy(new_password)
 
     now = format_datetime(utc_now())
     password_hash = hash_password(new_password)
