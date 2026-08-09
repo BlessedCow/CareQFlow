@@ -49,16 +49,9 @@ def _normalize_page_text(text: str | None) -> str:
     if not text:
         return ""
 
-    normalized_lines = [
-        " ".join(line.split())
-        for line in text.splitlines()
-    ]
+    normalized_lines = [" ".join(line.split()) for line in text.splitlines()]
 
-    return "\n".join(
-        line
-        for line in normalized_lines
-        if line
-    )
+    return "\n".join(line for line in normalized_lines if line)
 
 
 def _resolve_pdf_object(value: object) -> object:
@@ -82,17 +75,10 @@ def _pdf_value_to_text(value: object) -> str:
             errors="replace",
         ).strip()
 
-    if isinstance(resolved_value, (list, tuple)):
-        values = [
-            _pdf_value_to_text(item)
-            for item in resolved_value
-        ]
+    if isinstance(resolved_value, list | tuple):
+        values = [_pdf_value_to_text(item) for item in resolved_value]
 
-        return ", ".join(
-            item
-            for item in values
-            if item
-        )
+        return ", ".join(item for item in values if item)
 
     text = str(resolved_value).strip()
 
@@ -154,8 +140,7 @@ def _rectangle_from_widget(
 
     try:
         values = tuple(
-            float(_resolve_pdf_object(value))
-            for value in resolved_rectangle
+            float(_resolve_pdf_object(value)) for value in resolved_rectangle
         )
     except (TypeError, ValueError):
         return None
@@ -196,26 +181,18 @@ def _extract_form_fields(reader: PdfReader) -> tuple[PdfFormField, ...]:
                 if not callable(get_value):
                     continue
 
-                subtype = _pdf_value_to_text(
-                    get_value("/Subtype")
-                )
+                subtype = _pdf_value_to_text(get_value("/Subtype"))
 
                 if subtype != "Widget":
                     continue
 
-                name = _pdf_value_to_text(
-                    _field_property(widget, "/T")
-                )
+                name = _pdf_value_to_text(_field_property(widget, "/T"))
 
                 if not name:
                     continue
 
-                value = _pdf_value_to_text(
-                    _field_property(widget, "/V")
-                )
-                field_type = _pdf_value_to_text(
-                    _field_property(widget, "/FT")
-                )
+                value = _pdf_value_to_text(_field_property(widget, "/V"))
+                field_type = _pdf_value_to_text(_field_property(widget, "/FT"))
                 rectangle = _rectangle_from_widget(widget)
                 field_identity = (
                     name,
@@ -256,9 +233,7 @@ def _validate_pdf_bytes(
         raise InvalidPdfError("The uploaded PDF is empty.")
 
     if len(pdf_bytes) > max_size_bytes:
-        raise OversizedPdfError(
-            "The uploaded PDF exceeds the allowed file size."
-        )
+        raise OversizedPdfError("The uploaded PDF exceeds the allowed file size.")
 
     if not pdf_bytes.lstrip().startswith(PDF_FILE_SIGNATURE):
         raise InvalidPdfError("The uploaded file is not a valid PDF.")
@@ -277,47 +252,32 @@ def extract_pdf_text(
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
     except (PdfReadError, OSError, ValueError) as error:
-        raise InvalidPdfError(
-            "The uploaded PDF could not be read."
-        ) from error
+        raise InvalidPdfError("The uploaded PDF could not be read.") from error
 
     if reader.is_encrypted:
-        raise EncryptedPdfError(
-            "Encrypted PDFs are not supported."
-        )
+        raise EncryptedPdfError("Encrypted PDFs are not supported.")
     form_fields = _extract_form_fields(reader)
 
     page_texts: list[str] = []
 
     try:
         for page in reader.pages:
-            page_texts.append(
-                _normalize_page_text(page.extract_text())
-            )
+            page_texts.append(_normalize_page_text(page.extract_text()))
     except (PdfReadError, OSError, ValueError, KeyError) as error:
         raise InvalidPdfError(
             "Text could not be extracted from the uploaded PDF."
         ) from error
 
-    combined_text = "\n\n".join(
-        page_text
-        for page_text in page_texts
-        if page_text
-    )
+    combined_text = "\n\n".join(page_text for page_text in page_texts if page_text)
 
     usable_character_count = sum(
-        1
-        for character in combined_text
-        if character.isalnum()
+        1 for character in combined_text if character.isalnum()
     )
 
     return PdfTextExtractionResult(
         page_count=len(reader.pages),
         page_texts=tuple(page_texts),
         combined_text=combined_text,
-        has_usable_text=(
-            usable_character_count
-            >= MINIMUM_USABLE_TEXT_CHARACTERS
-        ),
+        has_usable_text=(usable_character_count >= MINIMUM_USABLE_TEXT_CHARACTERS),
         form_fields=form_fields,
     )

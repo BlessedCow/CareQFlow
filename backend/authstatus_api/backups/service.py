@@ -248,7 +248,7 @@ def _validate_sqlcipher_database(
         finally:
             conn.close()
     except Exception as exc:
-        if isinstance(exc, (BackupConfigError, BackupError)):
+        if isinstance(exc, BackupConfigError | BackupError):
             raise
 
         raise BackupError(
