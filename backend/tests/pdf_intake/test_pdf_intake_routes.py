@@ -19,6 +19,7 @@ from authstatus_api.pdf_intake.templates.models import (
     ExtractionSource,
     PdfTemplateExtraction,
 )
+from authstatus_api.pdf_intake.worker import PdfExtractionTimeoutError
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
@@ -174,7 +175,7 @@ def test_authorized_role_can_preview_pdf(
 
     with (
         patch(
-            "authstatus_api.pdf_intake.router.extract_pdf_text",
+            "authstatus_api.pdf_intake.router.extract_pdf_text_isolated",
             return_value=extraction_result(),
         ) as extract_mock,
         patch(
@@ -302,7 +303,7 @@ def test_pdf_preview_rejects_invalid_pdf_safely(client):
     )
 
     with patch(
-        "authstatus_api.pdf_intake.router.extract_pdf_text",
+        "authstatus_api.pdf_intake.router.extract_pdf_text_isolated",
         side_effect=InvalidPdfError("sensitive parser internals"),
     ):
         response = client.post(
@@ -331,7 +332,7 @@ def test_pdf_preview_rejects_encrypted_pdf_safely(client):
     )
 
     with patch(
-        "authstatus_api.pdf_intake.router.extract_pdf_text",
+        "authstatus_api.pdf_intake.router.extract_pdf_text_isolated",
         side_effect=EncryptedPdfError("sensitive encryption details"),
     ):
         response = client.post(
@@ -351,6 +352,35 @@ def test_pdf_preview_rejects_encrypted_pdf_safely(client):
     assert "sensitive encryption details" not in response.text
 
 
+def test_pdf_preview_rejects_extraction_timeout_safely(client):
+    create_user(
+        "user@example.com",
+        "password value",
+        role="UR",
+    )
+
+    with patch(
+        "authstatus_api.pdf_intake.router.extract_pdf_text_isolated",
+        side_effect=PdfExtractionTimeoutError("sensitive timeout details"),
+    ):
+        response = client.post(
+            "/api/pdf-intake/preview",
+            content=b"%PDF-timeout",
+            headers=auth_headers_for(
+                client,
+                "user@example.com",
+                "password value",
+            ),
+        )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "The uploaded PDF could not be processed in time.",
+    }
+    assert "sensitive timeout details" not in response.text
+    assert response.headers["cache-control"] == ("no-store, private")
+
+
 def test_pdf_preview_audit_metadata_contains_no_phi(client):
     create_user(
         "user@example.com",
@@ -360,7 +390,7 @@ def test_pdf_preview_audit_metadata_contains_no_phi(client):
 
     with (
         patch(
-            "authstatus_api.pdf_intake.router.extract_pdf_text",
+            "authstatus_api.pdf_intake.router.extract_pdf_text_isolated",
             return_value=extraction_result(),
         ),
         patch(

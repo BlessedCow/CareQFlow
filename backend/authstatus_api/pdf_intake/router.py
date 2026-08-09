@@ -8,7 +8,6 @@ from authstatus_api.pdf_intake.extractor import (
     InvalidPdfError,
     OversizedPdfError,
     PdfExtractionError,
-    extract_pdf_text,
 )
 from authstatus_api.pdf_intake.request_body import (
     PdfRequestBodyTooLargeError,
@@ -20,6 +19,10 @@ from authstatus_api.pdf_intake.schemas import (
 )
 from authstatus_api.pdf_intake.templates.models import ExtractedValue
 from authstatus_api.pdf_intake.templates.registry import parse_pdf_intake
+from authstatus_api.pdf_intake.worker import (
+    PdfExtractionTimeoutError,
+    extract_pdf_text_isolated,
+)
 from authstatus_api.security.dependencies import require_role
 
 router = APIRouter(
@@ -103,7 +106,7 @@ async def preview_pdf_intake(
 
     try:
         pdf_bytes = await read_pdf_request_body(request)
-        extraction_result = extract_pdf_text(pdf_bytes)
+        extraction_result = extract_pdf_text_isolated(pdf_bytes)
     except (
         PdfRequestBodyTooLargeError,
         OversizedPdfError,
@@ -122,9 +125,14 @@ async def preview_pdf_intake(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="The uploaded PDF could not be read.",
         )
+    except PdfExtractionTimeoutError:
+        _raise_pdf_error(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The uploaded PDF could not be processed in time.",
+        )
     except PdfExtractionError:
         _raise_pdf_error(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="The uploaded PDF could not be processed.",
         )
 
