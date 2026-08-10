@@ -112,7 +112,7 @@ async def preview_pdf_intake(
         OversizedPdfError,
     ):
         _raise_pdf_error(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="The uploaded PDF exceeds the allowed file size.",
         )
     except EncryptedPdfError:

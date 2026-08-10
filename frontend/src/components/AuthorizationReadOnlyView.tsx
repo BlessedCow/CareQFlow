@@ -1,6 +1,7 @@
 import type { AuthEvent } from "../api/authEvents";
 import type { AuthRequest } from "../types/auth";
 import { cn } from "../utils/cn";
+import { AuthorizationDocumentsSection } from "./AuthorizationDocumentsSection";
 import {
   formatEventTimestamp,
   sortAuthEventsNewestFirst,
@@ -23,22 +24,6 @@ function formatValue(value?: string | number | null | undefined) {
   }
 
   return String(value);
-}
-
-function hasConfirmedApprovedDays(auth: AuthRequest) {
-  return Number(auth.approvedDays) > 0;
-}
-
-function getDateBasisLabel(auth: AuthRequest) {
-  if (hasConfirmedApprovedDays(auth)) {
-    return "Confirmed from approved days";
-  }
-
-  if (Number(auth.requestedDays) > 0) {
-    return "Projected from requested days";
-  }
-
-  return "Days not confirmed";
 }
 
 function formatDateTime(value?: string | null) {
@@ -238,6 +223,16 @@ export function AuthorizationReadOnlyView({
           </div>
         </div>
       </div>
+
+      <div
+        className={cn("my-5 h-px", darkMode ? "bg-gray-800" : "bg-gray-200")}
+      />
+
+      <AuthorizationDocumentsSection
+        authId={auth.id}
+        darkMode={darkMode}
+        canManage={canEdit}
+      />
 
       <div
         className={cn("my-5 h-px", darkMode ? "bg-gray-800" : "bg-gray-200")}

@@ -69,6 +69,21 @@ def initialize_authorization_tables(conn: Any) -> None:
         )
         """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            auth_id INTEGER NOT NULL,
+            document_type TEXT NOT NULL,
+            original_filename TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            encrypted_pdf BLOB NOT NULL,
+            file_size_bytes INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (auth_id) REFERENCES auths (id) ON DELETE CASCADE
+        )
+        """)
+
     ensure_column(conn, "auths", "member_id", "TEXT")
     ensure_column(conn, "auths", "auth_number", "TEXT")
     ensure_column(conn, "auths", "group_number", "TEXT")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import (
     BaseModel,
@@ -219,6 +220,33 @@ class AuthRecord(AuthBase):
 
 class AuthListResponse(BaseModel):
     auths: list[AuthRecord]
+
+
+AuthDocumentType = Literal[
+    "auth_request",
+    "approval_letter",
+    "denial_letter",
+    "other",
+]
+
+
+class AuthDocumentRecord(BaseModel):
+    id: int
+    auth_id: int
+    document_type: AuthDocumentType
+    original_filename: str
+    content_type: str
+    file_size_bytes: int
+    created_at: str
+    updated_at: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthDocumentListResponse(BaseModel):
+    documents: list[AuthDocumentRecord]
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class AuthEventBase(BaseModel):
