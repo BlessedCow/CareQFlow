@@ -6,6 +6,7 @@ import { calculateAuthEndDate } from "../utils/authSchedule";
 export interface NewAuthFormState {
   clientName: string;
   memberId: string;
+  authNumber: string;
   groupNumber: string;
   dateOfBirth: string;
   facility: string;
@@ -36,6 +37,7 @@ export interface NewAuthFormState {
 export const DEFAULT_AUTH_FORM: NewAuthFormState = {
   clientName: "",
   memberId: "",
+  authNumber: "",
   groupNumber: "",
   dateOfBirth: "",
   facility: "",
@@ -92,6 +94,7 @@ export function getAuthFormFromAuth(auth: AuthRequest): NewAuthFormState {
   return {
     clientName: auth.patientId,
     memberId: auth.memberId,
+    authNumber: auth.authNumber,
     groupNumber: auth.groupNumber,
     dateOfBirth: auth.dateOfBirth,
     facility: auth.facility,

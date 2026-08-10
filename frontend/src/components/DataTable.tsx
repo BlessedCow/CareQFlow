@@ -324,6 +324,9 @@ export function DataTable({
         const searchLower = searchTerm.toLowerCase();
         return (
           item.patientId.toLowerCase().includes(searchLower) ||
+          item.memberId.toLowerCase().includes(searchLower) ||
+          item.authNumber.toLowerCase().includes(searchLower) ||
+          item.groupNumber.toLowerCase().includes(searchLower) ||
           item.facility.toLowerCase().includes(searchLower) ||
           item.urSpecialist.toLowerCase().includes(searchLower) ||
           item.payer.toLowerCase().includes(searchLower)
@@ -395,7 +398,7 @@ export function DataTable({
         </div>
         <input
           type="text"
-          placeholder="Search patient, facility, specialist..."
+          placeholder="Search patient, member ID, auth number, facility..."
           value={searchTerm}
           onChange={(e) => {
             setSearchTerm(e.target.value);
@@ -497,6 +500,17 @@ export function DataTable({
                   >
                     {row.payer}
                   </div>
+
+                  {row.authNumber && (
+                    <div
+                      className={cn(
+                        "text-xs",
+                        darkMode ? "text-gray-500" : "text-gray-500"
+                      )}
+                    >
+                      Auth/Ref: {row.authNumber}
+                    </div>
+                  )}
                 </td>
                 <td className={tdClass}>{row.facility}</td>
                 <td className={tdClass}>

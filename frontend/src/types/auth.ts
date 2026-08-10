@@ -32,6 +32,7 @@ export interface AuthRequest {
   id: string;
   patientId: string;
   memberId: string;
+  authNumber: string;
   groupNumber: string;
   dateOfBirth: string;
   date: Date;

@@ -159,6 +159,11 @@ export function AuthorizationReadOnlyView({
         </div>
 
         <div>
+          <div className={labelClass}>Payer Auth / Reference Number</div>
+          <div className={valueClass}>{formatValue(auth.authNumber)}</div>
+        </div>
+
+        <div>
           <div className={labelClass}>Group Number</div>
           <div className={valueClass}>{formatValue(auth.groupNumber)}</div>
         </div>
