@@ -1,27 +1,100 @@
-import { AlertCircle, CalendarClock, CheckCircle2, Clock, FileWarning, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from "react";
+import {
+  AlertCircle,
+  CalendarClock,
+  CheckCircle2,
+  Clock,
+  FileWarning,
+  RefreshCw,
+} from "lucide-react";
 
-import { AuthRequest } from '../types/auth';
-import { cn } from '../utils/cn';
+import { AuthRequest } from "../types/auth";
+import { cn } from "../utils/cn";
 
 interface UpcomingWorkflowCardProps {
   data: AuthRequest[];
   darkMode: boolean;
 }
 
+type WorkflowFilterKey =
+  | "reviewDue"
+  | "lcd"
+  | "pending"
+  | "p2p"
+  | "appeals"
+  | "denied"
+  | "approved";
+
+type WorkflowFilterSettings = Record<WorkflowFilterKey, boolean>;
+
 interface WorkflowItem {
+  filterKey: WorkflowFilterKey;
   label: string;
   count: number;
   description: string;
   icon: typeof Clock;
-  tone: 'pending' | 'p2p' | 'appeal' | 'denied' | 'complete' | 'due' | 'overdue';
+  tone:
+    | "pending"
+    | "p2p"
+    | "appeal"
+    | "denied"
+    | "complete"
+    | "due"
+    | "overdue";
 }
 
 interface DatedWorkflowItem {
+  filterKey: WorkflowFilterKey;
   auth: AuthRequest;
   label: string;
   dateLabel: string;
   daysUntil: number;
-  tone: 'due' | 'overdue';
+  tone: "due" | "overdue";
+}
+
+const DEFAULT_WORKFLOW_FILTER_SETTINGS: WorkflowFilterSettings = {
+  reviewDue: true,
+  lcd: true,
+  pending: true,
+  p2p: true,
+  appeals: true,
+  denied: true,
+  approved: true,
+};
+
+const WORKFLOW_FILTER_STORAGE_KEY = "carequeue.upcomingWorkflowFilters";
+
+const WORKFLOW_FILTER_LABELS: Record<WorkflowFilterKey, string> = {
+  reviewDue: "Review Due",
+  lcd: "LCD",
+  pending: "Pending Auths",
+  p2p: "P2P Needed",
+  appeals: "Appeals Pending",
+  denied: "Denied Auths",
+  approved: "Approved Auths",
+};
+
+function loadWorkflowFilterSettings(): WorkflowFilterSettings {
+  try {
+    const storedValue = window.localStorage.getItem(
+      WORKFLOW_FILTER_STORAGE_KEY
+    );
+
+    if (!storedValue) {
+      return DEFAULT_WORKFLOW_FILTER_SETTINGS;
+    }
+
+    const parsedValue = JSON.parse(
+      storedValue
+    ) as Partial<WorkflowFilterSettings>;
+
+    return {
+      ...DEFAULT_WORKFLOW_FILTER_SETTINGS,
+      ...parsedValue,
+    };
+  } catch {
+    return DEFAULT_WORKFLOW_FILTER_SETTINGS;
+  }
 }
 
 function parseDateOnly(value?: string) {
@@ -29,7 +102,7 @@ function parseDateOnly(value?: string) {
     return null;
   }
 
-  const [year, month, day] = value.split('-').map(Number);
+  const [year, month, day] = value.split("-").map(Number);
 
   if (!year || !month || !day) {
     return null;
@@ -52,20 +125,22 @@ function getDaysUntil(value?: string) {
   }
 
   const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  return Math.round((date.getTime() - startOfToday().getTime()) / millisecondsPerDay);
+  return Math.round(
+    (date.getTime() - startOfToday().getTime()) / millisecondsPerDay
+  );
 }
 
 function formatDate(value?: string) {
   const date = parseDateOnly(value);
 
   if (!date) {
-    return 'No date';
+    return "No date";
   }
 
   return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
@@ -75,44 +150,59 @@ function isActiveWorkflowStatus(item: AuthRequest) {
 
 function getDatePhrase(daysUntil: number) {
   if (daysUntil < 0) {
-    return `${Math.abs(daysUntil)} day${Math.abs(daysUntil) === 1 ? '' : 's'} overdue`;
+    return `${Math.abs(daysUntil)} day${
+      Math.abs(daysUntil) === 1 ? "" : "s"
+    } overdue`;
   }
 
   if (daysUntil === 0) {
-    return 'Due today';
+    return "Due today";
   }
 
   if (daysUntil === 1) {
-    return 'Due tomorrow';
+    return "Due tomorrow";
   }
 
   return `Due in ${daysUntil} days`;
 }
 
-function getDatedWorkflowItems(data: AuthRequest[]): DatedWorkflowItem[] {
+function getDatedWorkflowItems(
+  data: AuthRequest[],
+  workflowFilters: WorkflowFilterSettings
+): DatedWorkflowItem[] {
   const items: DatedWorkflowItem[] = [];
 
   data.filter(isActiveWorkflowStatus).forEach((auth) => {
     const reviewDaysUntil = getDaysUntil(auth.reviewDueDate);
     const lcdDaysUntil = getDaysUntil(auth.authEndDate);
+    const shouldShowReviewDue =
+      workflowFilters.reviewDue &&
+      reviewDaysUntil !== null &&
+      reviewDaysUntil <= 7;
+    const shouldShowLcd =
+      workflowFilters.lcd && lcdDaysUntil !== null && lcdDaysUntil <= 7;
+    const lcdMatchesReviewDue =
+      Boolean(auth.reviewDueDate) && auth.reviewDueDate === auth.authEndDate;
 
-    if (reviewDaysUntil !== null && reviewDaysUntil <= 7) {
+    if (shouldShowReviewDue) {
       items.push({
+        filterKey: "reviewDue",
         auth,
-        label: 'Review Due',
+        label: "Review Due",
         dateLabel: formatDate(auth.reviewDueDate),
         daysUntil: reviewDaysUntil,
-        tone: reviewDaysUntil < 0 ? 'overdue' : 'due',
+        tone: reviewDaysUntil < 0 ? "overdue" : "due",
       });
     }
 
-    if (lcdDaysUntil !== null && lcdDaysUntil <= 7) {
+    if (shouldShowLcd && !lcdMatchesReviewDue) {
       items.push({
+        filterKey: "lcd",
         auth,
-        label: 'LCD',
+        label: "LCD",
         dateLabel: formatDate(auth.authEndDate),
         daysUntil: lcdDaysUntil,
-        tone: lcdDaysUntil < 0 ? 'overdue' : 'due',
+        tone: lcdDaysUntil < 0 ? "overdue" : "due",
       });
     }
   });
@@ -122,121 +212,192 @@ function getDatedWorkflowItems(data: AuthRequest[]): DatedWorkflowItem[] {
     .slice(0, 5);
 }
 
-function getWorkflowItems(data: AuthRequest[]): WorkflowItem[] {
-  const datedItems = getDatedWorkflowItems(data);
+function getWorkflowItems(
+  data: AuthRequest[],
+  datedItems: DatedWorkflowItem[],
+  workflowFilters: WorkflowFilterSettings
+): WorkflowItem[] {
   const overdueCount = datedItems.filter((item) => item.daysUntil < 0).length;
   const dueSoonCount = datedItems.filter((item) => item.daysUntil >= 0).length;
 
-  const pendingCount = data.filter((item) => item.status === 'Pending').length;
-  const p2pCount = data.filter((item) => item.status === 'P2P').length;
-  const appealedCount = data.filter((item) => item.status === 'Appealed').length;
-  const deniedCount = data.filter((item) => item.status === 'Denied').length;
-  const approvedCount = data.filter((item) => item.status === 'Approved').length;
+  const pendingCount = data.filter((item) => item.status === "Pending").length;
+  const p2pCount = data.filter((item) => item.status === "P2P").length;
+  const appealedCount = data.filter(
+    (item) => item.status === "Appealed"
+  ).length;
+  const deniedCount = data.filter((item) => item.status === "Denied").length;
+  const approvedCount = data.filter(
+    (item) => item.status === "Approved"
+  ).length;
 
-  return [
-    {
-      label: 'Overdue Items',
-      count: overdueCount,
-      description: 'Review dates or LCDs that have already passed.',
-      icon: AlertCircle,
-      tone: 'overdue',
-    },
-    {
-      label: 'Due Soon',
-      count: dueSoonCount,
-      description: 'Reviews or LCDs due within the next 7 days.',
-      icon: CalendarClock,
-      tone: 'due',
-    },
-    {
-      label: 'Pending Auths',
+  const items: WorkflowItem[] = [];
+
+  if (workflowFilters.reviewDue || workflowFilters.lcd) {
+    items.push(
+      {
+        filterKey: "reviewDue",
+        label: "Overdue Items",
+        count: overdueCount,
+        description: "Review dates or LCDs that have already passed.",
+        icon: AlertCircle,
+        tone: "overdue",
+      },
+      {
+        filterKey: "lcd",
+        label: "Due Soon",
+        count: dueSoonCount,
+        description: "Reviews or LCDs due within the next 7 days.",
+        icon: CalendarClock,
+        tone: "due",
+      }
+    );
+  }
+
+  if (workflowFilters.pending) {
+    items.push({
+      filterKey: "pending",
+      label: "Pending Auths",
       count: pendingCount,
-      description: 'Awaiting payer response or next action.',
+      description: "Awaiting payer response or next action.",
       icon: Clock,
-      tone: 'pending',
-    },
-    {
-      label: 'P2P Needed',
+      tone: "pending",
+    });
+  }
+
+  if (workflowFilters.p2p) {
+    items.push({
+      filterKey: "p2p",
+      label: "P2P Needed",
       count: p2pCount,
-      description: 'Peer review or escalation workflow needed.',
+      description: "Peer review or escalation workflow needed.",
       icon: AlertCircle,
-      tone: 'p2p',
-    },
-    {
-      label: 'Appeals Pending',
+      tone: "p2p",
+    });
+  }
+
+  if (workflowFilters.appeals) {
+    items.push({
+      filterKey: "appeals",
+      label: "Appeals Pending",
       count: appealedCount,
-      description: 'Cases currently in appeal status.',
+      description: "Cases currently in appeal status.",
       icon: RefreshCw,
-      tone: 'appeal',
-    },
-    {
-      label: 'Denied Auths',
+      tone: "appeal",
+    });
+  }
+
+  if (workflowFilters.denied) {
+    items.push({
+      filterKey: "denied",
+      label: "Denied Auths",
       count: deniedCount,
-      description: 'Denied cases that may need follow-up.',
+      description: "Denied cases that may need follow-up.",
       icon: FileWarning,
-      tone: 'denied',
-    },
-    {
-      label: 'Approved Auths',
+      tone: "denied",
+    });
+  }
+
+  if (workflowFilters.approved) {
+    items.push({
+      filterKey: "approved",
+      label: "Approved Auths",
       count: approvedCount,
-      description: 'Completed approvals in the selected filters.',
+      description: "Completed approvals in the selected filters.",
       icon: CheckCircle2,
-      tone: 'complete',
-    },
-  ];
+      tone: "complete",
+    });
+  }
+
+  return items;
 }
 
-function getToneClasses(tone: WorkflowItem['tone'] | DatedWorkflowItem['tone'], darkMode: boolean) {
-  if (tone === 'overdue') {
+function getToneClasses(
+  tone: WorkflowItem["tone"] | DatedWorkflowItem["tone"],
+  darkMode: boolean
+) {
+  if (tone === "overdue") {
     return darkMode
-      ? 'border-red-900/70 bg-red-950/40 text-red-200'
-      : 'border-red-200 bg-red-50 text-red-700';
+      ? "border-red-900/70 bg-red-950/40 text-red-200"
+      : "border-red-200 bg-red-50 text-red-700";
   }
 
-  if (tone === 'due') {
+  if (tone === "due") {
     return darkMode
-      ? 'border-orange-900/70 bg-orange-950/40 text-orange-200'
-      : 'border-orange-200 bg-orange-50 text-orange-700';
+      ? "border-orange-900/70 bg-orange-950/40 text-orange-200"
+      : "border-orange-200 bg-orange-50 text-orange-700";
   }
 
-  if (tone === 'pending') {
+  if (tone === "pending") {
     return darkMode
-      ? 'border-amber-900/60 bg-amber-950/30 text-amber-200'
-      : 'border-amber-200 bg-amber-50 text-amber-700';
+      ? "border-amber-900/60 bg-amber-950/30 text-amber-200"
+      : "border-amber-200 bg-amber-50 text-amber-700";
   }
 
-  if (tone === 'p2p') {
+  if (tone === "p2p") {
     return darkMode
-      ? 'border-blue-900/60 bg-blue-950/30 text-blue-200'
-      : 'border-blue-200 bg-blue-50 text-blue-700';
+      ? "border-blue-900/60 bg-blue-950/30 text-blue-200"
+      : "border-blue-200 bg-blue-50 text-blue-700";
   }
 
-  if (tone === 'appeal') {
+  if (tone === "appeal") {
     return darkMode
-      ? 'border-purple-900/60 bg-purple-950/30 text-purple-200'
-      : 'border-purple-200 bg-purple-50 text-purple-700';
+      ? "border-purple-900/60 bg-purple-950/30 text-purple-200"
+      : "border-purple-200 bg-purple-50 text-purple-700";
   }
 
-  if (tone === 'denied') {
+  if (tone === "denied") {
     return darkMode
-      ? 'border-red-900/60 bg-red-950/30 text-red-200'
-      : 'border-red-200 bg-red-50 text-red-700';
+      ? "border-red-900/60 bg-red-950/30 text-red-200"
+      : "border-red-200 bg-red-50 text-red-700";
   }
 
   return darkMode
-    ? 'border-emerald-900/60 bg-emerald-950/30 text-emerald-200'
-    : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    ? "border-emerald-900/60 bg-emerald-950/30 text-emerald-200"
+    : "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
-export function UpcomingWorkflowCard({ data, darkMode }: UpcomingWorkflowCardProps) {
-  const datedWorkflowItems = getDatedWorkflowItems(data);
-  const workflowItems = getWorkflowItems(data);
+export function UpcomingWorkflowCard({
+  data,
+  darkMode,
+}: UpcomingWorkflowCardProps) {
+  const [workflowFilters, setWorkflowFilters] =
+    useState<WorkflowFilterSettings>(loadWorkflowFilterSettings);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      WORKFLOW_FILTER_STORAGE_KEY,
+      JSON.stringify(workflowFilters)
+    );
+  }, [workflowFilters]);
+
+  const datedWorkflowItems = getDatedWorkflowItems(data, workflowFilters);
+  const workflowItems = getWorkflowItems(
+    data,
+    datedWorkflowItems,
+    workflowFilters
+  );
   const activeItems = workflowItems.filter((item) => item.count > 0);
+
+  const handleToggleWorkflowFilter = (filterKey: WorkflowFilterKey) => {
+    setWorkflowFilters((currentFilters) => ({
+      ...currentFilters,
+      [filterKey]: !currentFilters[filterKey],
+    }));
+  };
+
+  const handleResetWorkflowFilters = () => {
+    setWorkflowFilters(DEFAULT_WORKFLOW_FILTER_SETTINGS);
+  };
 
   if (data.length === 0) {
     return (
       <div className="flex h-80 items-center justify-center">
-        <p className={cn('text-sm', darkMode ? 'text-gray-400' : 'text-gray-500')}>
+        <p
+          className={cn(
+            "text-sm",
+            darkMode ? "text-gray-400" : "text-gray-500"
+          )}
+        >
           No workflow items found for the selected filters.
         </p>
       </div>
@@ -245,16 +406,77 @@ export function UpcomingWorkflowCard({ data, darkMode }: UpcomingWorkflowCardPro
 
   return (
     <div className="space-y-4">
+      <details
+        className={cn(
+          "rounded-xl border px-4 py-3 text-sm",
+          darkMode
+            ? "border-gray-800 bg-gray-950/50"
+            : "border-gray-200 bg-gray-50"
+        )}
+      >
+        <summary className="cursor-pointer font-semibold">
+          Filter workflow items
+        </summary>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {(
+            Object.entries(WORKFLOW_FILTER_LABELS) as [
+              WorkflowFilterKey,
+              string
+            ][]
+          ).map(([filterKey, label]) => (
+            <label
+              key={filterKey}
+              className={cn(
+                "flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2",
+                darkMode
+                  ? "border-gray-800 bg-gray-900 text-gray-200"
+                  : "border-gray-200 bg-white text-gray-700"
+              )}
+            >
+              <span>{label}</span>
+              <input
+                type="checkbox"
+                checked={workflowFilters[filterKey]}
+                onChange={() => handleToggleWorkflowFilter(filterKey)}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+            </label>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleResetWorkflowFilters}
+          className={cn(
+            "mt-3 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+            darkMode
+              ? "border-gray-700 text-gray-200 hover:bg-gray-800"
+              : "border-gray-300 text-gray-700 hover:bg-gray-100"
+          )}
+        >
+          Reset workflow filters
+        </button>
+      </details>
+
       {datedWorkflowItems.length > 0 && (
         <div className="space-y-2">
-          <p className={cn('text-xs font-semibold uppercase tracking-wide', darkMode ? 'text-gray-400' : 'text-gray-500')}>
+          <p
+            className={cn(
+              "text-xs font-semibold uppercase tracking-wide",
+              darkMode ? "text-gray-400" : "text-gray-500"
+            )}
+          >
             Next date-based items
           </p>
 
           {datedWorkflowItems.map((item) => (
             <div
-              key={`${item.auth.id}-${item.label}-${item.dateLabel}`}
-              className={cn('rounded-xl border px-4 py-3 text-sm', getToneClasses(item.tone, darkMode))}
+              key={`${item.auth.id}-${item.filterKey}-${item.dateLabel}`}
+              className={cn(
+                "rounded-xl border px-4 py-3 text-sm",
+                getToneClasses(item.tone, darkMode)
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -268,7 +490,9 @@ export function UpcomingWorkflowCard({ data, darkMode }: UpcomingWorkflowCardPro
 
                 <div className="text-right">
                   <p className="text-xs font-semibold">{item.dateLabel}</p>
-                  <p className="mt-1 text-xs opacity-80">{getDatePhrase(item.daysUntil)}</p>
+                  <p className="mt-1 text-xs opacity-80">
+                    {getDatePhrase(item.daysUntil)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -284,12 +508,12 @@ export function UpcomingWorkflowCard({ data, darkMode }: UpcomingWorkflowCardPro
             <div
               key={item.label}
               className={cn(
-                'rounded-xl border px-4 py-3 transition-colors',
+                "rounded-xl border px-4 py-3 transition-colors",
                 item.count > 0
                   ? getToneClasses(item.tone, darkMode)
                   : darkMode
-                    ? 'border-gray-800 bg-gray-950/40 text-gray-500'
-                    : 'border-gray-200 bg-gray-50 text-gray-500',
+                  ? "border-gray-800 bg-gray-950/40 text-gray-500"
+                  : "border-gray-200 bg-gray-50 text-gray-500"
               )}
             >
               <div className="flex items-start justify-between gap-3">
@@ -298,11 +522,15 @@ export function UpcomingWorkflowCard({ data, darkMode }: UpcomingWorkflowCardPro
 
                   <div>
                     <p className="text-sm font-semibold">{item.label}</p>
-                    <p className="mt-1 text-xs opacity-80">{item.description}</p>
+                    <p className="mt-1 text-xs opacity-80">
+                      {item.description}
+                    </p>
                   </div>
                 </div>
 
-                <span className="text-2xl font-bold leading-none">{item.count}</span>
+                <span className="text-2xl font-bold leading-none">
+                  {item.count}
+                </span>
               </div>
             </div>
           );
@@ -310,8 +538,13 @@ export function UpcomingWorkflowCard({ data, darkMode }: UpcomingWorkflowCardPro
       </div>
 
       {activeItems.length === 0 && (
-        <p className={cn('pt-2 text-center text-sm', darkMode ? 'text-gray-400' : 'text-gray-500')}>
-          No active follow-up items in the selected filters.
+        <p
+          className={cn(
+            "pt-2 text-center text-sm",
+            darkMode ? "text-gray-400" : "text-gray-500"
+          )}
+        >
+          No active follow-up items in the selected workflow filters.
         </p>
       )}
     </div>

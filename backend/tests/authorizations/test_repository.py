@@ -149,6 +149,44 @@ def test_update_auth_updates_selected_fields():
     assert updated["client_name"] == "John Smith"
 
 
+def test_update_auth_to_approved_preserves_approved_days():
+    payload = make_payload()
+    payload["status"] = "Pending"
+    payload["los_requested"] = "7"
+    payload["days_approved"] = ""
+
+    created = create_auth(payload)
+
+    updated = update_auth(
+        created["id"],
+        {
+            "status": "Approved",
+            "days_approved": "5",
+            "approved_days": 5,
+            "requested_days": 7,
+            "auth_start_date": "2026-06-25",
+            "auth_end_date": "2026-06-29",
+            "review_due_date": "2026-06-29",
+        },
+    )
+
+    assert updated is not None
+    assert updated["status"] == "Approved"
+    assert updated["days_approved"] == "5"
+    assert updated["approved_days"] == 5
+    assert updated["requested_days"] == 7
+    assert updated["auth_end_date"] == "2026-06-29"
+    assert updated["review_due_date"] == "2026-06-29"
+
+    events = list_auth_events(created["id"])
+
+    assert events is not None
+    assert events[-1]["event_type"] == "Payer Response"
+    assert events[-1]["outcome"] == "Approved"
+    assert events[-1]["approved_days"] == 5
+    assert events[-1]["requested_days"] == 7
+
+
 def test_update_auth_encrypts_updated_sensitive_fields():
     created = create_auth(make_payload())
 

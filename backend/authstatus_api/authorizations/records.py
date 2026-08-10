@@ -175,6 +175,11 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
                 "event_time": "",
                 "outcome": "Approved",
                 "notes": "Authorization marked approved.",
+                "requested_days": int(updated_auth.get("requested_days") or 0),
+                "approved_days": int(updated_auth.get("approved_days") or 0),
+                "auth_start_date": str(updated_auth.get("auth_start_date") or ""),
+                "auth_end_date": str(updated_auth.get("auth_end_date") or ""),
+                "review_due_date": str(updated_auth.get("review_due_date") or ""),
             },
         )
 
