@@ -51,6 +51,7 @@ class AuthBase(BaseModel):
     facility: str
     client_name: str
     member_id: str = ""
+    auth_number: str = ""
     group_number: str = ""
     date_of_birth: str = ""
     loc: str
@@ -130,6 +131,7 @@ class AuthUpdate(BaseModel):
     facility: str | None = None
     client_name: str | None = None
     member_id: str | None = None
+    auth_number: str | None = None
     group_number: str | None = None
     date_of_birth: str | None = None
     loc: str | None = None

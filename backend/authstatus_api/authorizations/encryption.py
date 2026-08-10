@@ -14,6 +14,7 @@ from authstatus_api.persistence.schema import init_db
 AUTH_IDENTITY_FIELDS = {
     "client_name",
     "member_id",
+    "auth_number",
     "group_number",
     "date_of_birth",
     "insurance_phone",

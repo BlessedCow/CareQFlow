@@ -42,6 +42,7 @@ def insert_authorization(**overrides) -> int:
         "facility": "Example Facility",
         "client_name": "Example Patient",
         "member_id": "MEMBER123",
+        "auth_number": "AUTH789",
         "group_number": "GROUP456",
         "date_of_birth": "1990-01-15",
         "loc": "RTC",
@@ -60,6 +61,7 @@ def insert_authorization(**overrides) -> int:
                 facility,
                 client_name,
                 member_id,
+                auth_number,
                 group_number,
                 date_of_birth,
                 loc,
@@ -69,12 +71,13 @@ def insert_authorization(**overrides) -> int:
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 values["facility"],
                 values["client_name"],
                 values["member_id"],
+                values["auth_number"],
                 values["group_number"],
                 values["date_of_birth"],
                 values["loc"],
@@ -99,7 +102,7 @@ def test_encrypt_plaintext_authorization_fields_encrypts_identity_values():
     with get_conn() as conn:
         row = conn.execute(
             """
-            SELECT client_name, member_id, group_number, date_of_birth
+            SELECT client_name, member_id, auth_number, group_number, date_of_birth
             FROM auths
             WHERE id = ?
             """,
@@ -111,6 +114,7 @@ def test_encrypt_plaintext_authorization_fields_encrypts_identity_values():
     for field in (
         "client_name",
         "member_id",
+        "auth_number",
         "group_number",
         "date_of_birth",
     ):
@@ -118,6 +122,7 @@ def test_encrypt_plaintext_authorization_fields_encrypts_identity_values():
 
     assert decrypt_text(row["client_name"]) == "Example Patient"
     assert decrypt_text(row["member_id"]) == "MEMBER123"
+    assert decrypt_text(row["auth_number"]) == "AUTH789"
     assert decrypt_text(row["group_number"]) == "GROUP456"
     assert decrypt_text(row["date_of_birth"]) == "1990-01-15"
 
@@ -132,6 +137,7 @@ def test_encrypt_plaintext_authorization_fields_is_idempotent():
 def test_encrypt_plaintext_authorization_fields_skips_empty_values():
     auth_id = insert_authorization(
         member_id="",
+        auth_number="",
         group_number="",
         date_of_birth="",
     )
@@ -141,7 +147,7 @@ def test_encrypt_plaintext_authorization_fields_skips_empty_values():
     with get_conn() as conn:
         row = conn.execute(
             """
-            SELECT member_id, group_number, date_of_birth
+            SELECT member_id, auth_number, group_number, date_of_birth
             FROM auths
             WHERE id = ?
             """,
@@ -150,6 +156,7 @@ def test_encrypt_plaintext_authorization_fields_skips_empty_values():
 
     assert row is not None
     assert row["member_id"] == ""
+    assert row["auth_number"] == ""
     assert row["group_number"] == ""
     assert row["date_of_birth"] == ""
 

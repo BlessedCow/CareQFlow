@@ -39,6 +39,7 @@ def make_payload() -> dict:
         "facility": "Facility A",
         "client_name": "John Smith",
         "member_id": "ABC123",
+        "auth_number": "UM12345678",
         "group_number": "GRP456",
         "date_of_birth": "1990-01-15",
         "loc": "RTC",
@@ -73,6 +74,7 @@ def test_create_auth_returns_decrypted_record():
     assert created["id"] == 1
     assert created["client_name"] == "John Smith"
     assert created["member_id"] == "ABC123"
+    assert created["auth_number"] == "UM12345678"
     assert created["group_number"] == "GRP456"
     assert created["date_of_birth"] == "1990-01-15"
     assert created["facility"] == "Facility A"
@@ -95,6 +97,7 @@ def test_create_auth_stores_selected_fields_encrypted():
     assert row is not None
     assert row["client_name"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
     assert row["member_id"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert row["auth_number"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
     assert row["group_number"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
     assert row["date_of_birth"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
     assert row["insurance_phone"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
@@ -110,6 +113,7 @@ def test_list_auths_returns_decrypted_records():
     assert len(records) == 1
     assert records[0]["client_name"] == "John Smith"
     assert records[0]["member_id"] == "ABC123"
+    assert records[0]["auth_number"] == "UM12345678"
     assert records[0]["group_number"] == "GRP456"
     assert records[0]["date_of_birth"] == "1990-01-15"
 
@@ -194,6 +198,7 @@ def test_update_auth_encrypts_updated_sensitive_fields():
         created["id"],
         {
             "client_name": "Jane Smith",
+            "auth_number": "12345-678910",
             "member_id": "XYZ789",
         },
     )
@@ -201,6 +206,7 @@ def test_update_auth_encrypts_updated_sensitive_fields():
     assert updated is not None
     assert updated["client_name"] == "Jane Smith"
     assert updated["member_id"] == "XYZ789"
+    assert updated["auth_number"] == "12345-678910"
 
     database_path = get_settings().database_path
 
@@ -215,6 +221,8 @@ def test_update_auth_encrypts_updated_sensitive_fields():
     assert row["member_id"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
     assert "Jane Smith" not in row["client_name"]
     assert "XYZ789" not in row["member_id"]
+    assert row["auth_number"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert "12345-678910" not in row["auth_number"]
 
 
 def test_update_auth_returns_none_for_missing_record():

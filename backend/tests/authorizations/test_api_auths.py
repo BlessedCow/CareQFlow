@@ -65,6 +65,7 @@ def make_payload() -> dict:
         "facility": "Facility A",
         "client_name": "John Smith",
         "member_id": "ABC123",
+        "auth_number": "AUTH-789",
         "group_number": "GRP456",
         "date_of_birth": "1990-01-15",
         "loc": "RTC",
@@ -103,6 +104,7 @@ def test_create_auth_endpoint_returns_decrypted_record(client, auth_headers):
     assert data["id"] == 1
     assert data["client_name"] == "John Smith"
     assert data["member_id"] == "ABC123"
+    assert data["auth_number"] == "AUTH-789"
     assert data["group_number"] == "GRP456"
     assert data["date_of_birth"] == "1990-01-15"
     assert data["facility"] == "Facility A"
@@ -125,6 +127,7 @@ def test_create_auth_endpoint_stores_selected_fields_encrypted(client, auth_head
     assert row is not None
     assert row["client_name"].startswith(ENCRYPTED_TEXT_PREFIX)
     assert row["member_id"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert row["auth_number"].startswith(ENCRYPTED_TEXT_PREFIX)
     assert row["group_number"].startswith(ENCRYPTED_TEXT_PREFIX)
     assert row["date_of_birth"].startswith(ENCRYPTED_TEXT_PREFIX)
     assert row["insurance_phone"].startswith(ENCRYPTED_TEXT_PREFIX)
@@ -150,6 +153,7 @@ def test_list_auths_endpoint_returns_decrypted_records(client, auth_headers):
     assert len(data["auths"]) == 1
     assert data["auths"][0]["client_name"] == "John Smith"
     assert data["auths"][0]["member_id"] == "ABC123"
+    assert data["auths"][0]["auth_number"] == "AUTH-789"
     assert data["auths"][0]["group_number"] == "GRP456"
     assert data["auths"][0]["date_of_birth"] == "1990-01-15"
 
@@ -301,6 +305,7 @@ def test_patch_auth_endpoint_encrypts_updated_sensitive_fields(client, auth_head
         json={
             "client_name": "Jane Smith",
             "member_id": "XYZ789",
+            "auth_number": "AUTH-999",
         },
         headers=auth_headers,
     )
@@ -311,6 +316,7 @@ def test_patch_auth_endpoint_encrypts_updated_sensitive_fields(client, auth_head
 
     assert data["client_name"] == "Jane Smith"
     assert data["member_id"] == "XYZ789"
+    assert data["auth_number"] == "AUTH-999"
 
     database_path = get_settings().database_path
 
@@ -323,6 +329,8 @@ def test_patch_auth_endpoint_encrypts_updated_sensitive_fields(client, auth_head
     assert row["member_id"].startswith(ENCRYPTED_TEXT_PREFIX)
     assert "Jane Smith" not in row["client_name"]
     assert "XYZ789" not in row["member_id"]
+    assert row["auth_number"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert "AUTH-999" not in row["auth_number"]
 
 
 def test_patch_auth_endpoint_returns_404_for_missing_record(client, auth_headers):
@@ -397,6 +405,7 @@ def test_update_auth_writes_audit_event_without_phi_values(client, auth_headers)
         json={
             "client_name": "Jane Smith",
             "member_id": "XYZ789",
+            "auth_number": "AUTH-999",
             "status": "Submitted",
         },
         headers=auth_headers,
@@ -413,9 +422,10 @@ def test_update_auth_writes_audit_event_without_phi_values(client, auth_headers)
 
     metadata = json.loads(rows[-1]["metadata"])
 
-    assert metadata == {"fields": ["client_name", "member_id", "status"]}
+    assert metadata == {"fields": ["auth_number", "client_name", "member_id", "status"]}
     assert "Jane Smith" not in rows[-1]["metadata"]
     assert "XYZ789" not in rows[-1]["metadata"]
+    assert "AUTH-999" not in rows[-1]["metadata"]
 
 
 def test_delete_auth_writes_audit_event(client, auth_headers):

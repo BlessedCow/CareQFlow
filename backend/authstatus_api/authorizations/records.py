@@ -27,6 +27,7 @@ AUTH_TABLE_COLUMNS = {
     "facility",
     "client_name",
     "member_id",
+    "auth_number",
     "group_number",
     "date_of_birth",
     "loc",

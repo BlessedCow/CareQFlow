@@ -12,6 +12,7 @@ def initialize_authorization_tables(conn: Any) -> None:
             facility TEXT NOT NULL,
             client_name TEXT NOT NULL,
             member_id TEXT,
+            auth_number TEXT,
             group_number TEXT,
             date_of_birth TEXT,
             loc TEXT NOT NULL,
@@ -69,6 +70,7 @@ def initialize_authorization_tables(conn: Any) -> None:
         """)
 
     ensure_column(conn, "auths", "member_id", "TEXT")
+    ensure_column(conn, "auths", "auth_number", "TEXT")
     ensure_column(conn, "auths", "group_number", "TEXT")
     ensure_column(conn, "auths", "date_of_birth", "TEXT")
     ensure_column(conn, "auths", "insurance", "TEXT")
