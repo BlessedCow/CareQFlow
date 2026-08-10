@@ -335,6 +335,26 @@ Use it for:
 - Frontend build
 - Local reset and dependency recreation
 
+### Command Reference
+
+See:
+
+```text
+development/command-reference.md
+```
+
+Use it for:
+
+- Local backend start commands
+- Local frontend start commands
+- Concurrent backend and frontend runs
+- Installed Windows app start and stop commands
+- Health checks
+- Installer build and repair commands
+- Checksum commands
+- Security and test commands
+- Common URLs and runtime paths
+
 ## Troubleshooting
 
 See:
@@ -374,6 +394,7 @@ docs/
 │   ├── linux.md
 │   └── windows.md
 ├── development/
+│   ├── command-reference.md
 │   └── local-development.md
 ├── operations/
 │   ├── health-checks.md
@@ -548,13 +569,14 @@ When documentation accompanies code changes, run the relevant checks.
 Backend:
 
 ```powershell
-pytest tests -n auto -q
-python -m ruff check . --fix
+pytest backend\tests -n auto -q
+ruff check . --fix
 ```
 
 Frontend:
 
 ```powershell
+npm audit
 npm test
 npm run build
 ```
