@@ -299,6 +299,27 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
     assert row["retro_notes"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
     assert "Payer says RTC criteria not met." not in row["denial_reason_notes"]
     assert "P2P requested by facility UR." not in row["p2p_notes"]
+    events = list_auth_events(created["id"])
+
+    assert events is not None
+
+    denial_event = next(
+        (
+            event
+            for event in events
+            if event["event_type"] == "Payer Response" and event["outcome"] == "Denied"
+        ),
+        None,
+    )
+
+    assert denial_event is not None
+    assert denial_event["event_date"] == "2026-06-27"
+    assert "Denial details recorded." in denial_event["notes"]
+    assert "Reason category: Medical Necessity." in denial_event["notes"]
+    assert "Source: Concurrent." in denial_event["notes"]
+    assert "Denied LOC: RTC." in denial_event["notes"]
+    assert "Denied through: 2026-06-30." in denial_event["notes"]
+    assert "Reason notes: Payer says RTC criteria not met." in denial_event["notes"]
 
 
 def test_update_auth_returns_none_for_missing_record():

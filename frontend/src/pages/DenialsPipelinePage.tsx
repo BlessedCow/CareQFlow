@@ -36,6 +36,20 @@ interface P2PFormState {
   p2pNotes: string;
 }
 
+interface AppealFormState {
+  appealSubmitted: boolean;
+  appealDeadline: string;
+  appealOutcome: string;
+  appealNotes: string;
+}
+
+interface RetroFormState {
+  retroRequested: boolean;
+  retroDeadline: string;
+  retroOutcome: string;
+  retroNotes: string;
+}
+
 const DENIAL_REASON_OPTIONS = [
   "",
   "Not Medically Necessary",
@@ -67,6 +81,29 @@ const P2P_OUTCOME_OPTIONS = [
   "Denied",
   "Upheld",
   "Overturned",
+  "Withdrawn",
+  "Other",
+];
+
+const APPEAL_OUTCOME_OPTIONS = [
+  "",
+  "Pending",
+  "Submitted",
+  "Approved",
+  "Denied",
+  "Upheld",
+  "Overturned",
+  "Withdrawn",
+  "Other",
+];
+
+const RETRO_OUTCOME_OPTIONS = [
+  "",
+  "Pending",
+  "Submitted",
+  "Approved",
+  "Denied",
+  "Partially Approved",
   "Withdrawn",
   "Other",
 ];
@@ -120,6 +157,46 @@ function buildP2PPayload(
     p2p_outcome: form.p2pOutcome,
     p2p_reviewer: form.p2pReviewer,
     p2p_notes: form.p2pNotes,
+  };
+}
+
+function getAppealFormFromAuth(auth: AuthRequest): AppealFormState {
+  return {
+    appealSubmitted: Boolean(auth.appealSubmitted),
+    appealDeadline: auth.appealDeadline ?? "",
+    appealOutcome: auth.appealOutcome ?? "",
+    appealNotes: auth.appealNotes ?? "",
+  };
+}
+
+function buildAppealPayload(
+  form: AppealFormState
+): Partial<CreateAuthRequestPayload> {
+  return {
+    appeal_submitted: form.appealSubmitted,
+    appeal_deadline: form.appealDeadline,
+    appeal_outcome: form.appealOutcome,
+    appeal_notes: form.appealNotes,
+  };
+}
+
+function getRetroFormFromAuth(auth: AuthRequest): RetroFormState {
+  return {
+    retroRequested: Boolean(auth.retroRequested),
+    retroDeadline: auth.retroDeadline ?? "",
+    retroOutcome: auth.retroOutcome ?? "",
+    retroNotes: auth.retroNotes ?? "",
+  };
+}
+
+function buildRetroPayload(
+  form: RetroFormState
+): Partial<CreateAuthRequestPayload> {
+  return {
+    retro_requested: form.retroRequested,
+    retro_deadline: form.retroDeadline,
+    retro_outcome: form.retroOutcome,
+    retro_notes: form.retroNotes,
   };
 }
 
@@ -238,12 +315,22 @@ export function DenialsPipelinePage({
   const [p2pForm, setP2PForm] = useState<P2PFormState | null>(null);
   const [isSavingP2P, setIsSavingP2P] = useState(false);
   const [p2pError, setP2PError] = useState<string | null>(null);
+  const [appealForm, setAppealForm] = useState<AppealFormState | null>(null);
+  const [isSavingAppeal, setIsSavingAppeal] = useState(false);
+  const [appealError, setAppealError] = useState<string | null>(null);
+  const [retroForm, setRetroForm] = useState<RetroFormState | null>(null);
+  const [isSavingRetro, setIsSavingRetro] = useState(false);
+  const [retroError, setRetroError] = useState<string | null>(null);
 
   useEffect(() => {
     setDenialForm(selectedAuth ? getDenialFormFromAuth(selectedAuth) : null);
     setP2PForm(selectedAuth ? getP2PFormFromAuth(selectedAuth) : null);
+    setAppealForm(selectedAuth ? getAppealFormFromAuth(selectedAuth) : null);
+    setRetroForm(selectedAuth ? getRetroFormFromAuth(selectedAuth) : null);
     setDenialError(null);
     setP2PError(null);
+    setAppealError(null);
+    setRetroError(null);
   }, [selectedAuth]);
 
   const handleDenialFieldChange = (
@@ -327,6 +414,92 @@ export function DenialsPipelinePage({
       );
     } finally {
       setIsSavingP2P(false);
+    }
+  };
+
+  const handleAppealFieldChange = (
+    field: keyof AppealFormState,
+    value: string | boolean
+  ) => {
+    setAppealForm((currentForm) => {
+      if (!currentForm) {
+        return currentForm;
+      }
+
+      return {
+        ...currentForm,
+        [field]: value,
+      };
+    });
+  };
+
+  const handleSaveAppeal = async () => {
+    if (!selectedAuth || !appealForm) {
+      return;
+    }
+
+    setIsSavingAppeal(true);
+    setAppealError(null);
+
+    try {
+      const updatedAuth = await updateAuthRequest(
+        selectedAuth.id,
+        buildAppealPayload(appealForm)
+      );
+
+      onAuthUpdated(updatedAuth);
+      setAppealForm(null);
+    } catch (error) {
+      setAppealError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save appeal details."
+      );
+    } finally {
+      setIsSavingAppeal(false);
+    }
+  };
+
+  const handleRetroFieldChange = (
+    field: keyof RetroFormState,
+    value: string | boolean
+  ) => {
+    setRetroForm((currentForm) => {
+      if (!currentForm) {
+        return currentForm;
+      }
+
+      return {
+        ...currentForm,
+        [field]: value,
+      };
+    });
+  };
+
+  const handleSaveRetro = async () => {
+    if (!selectedAuth || !retroForm) {
+      return;
+    }
+
+    setIsSavingRetro(true);
+    setRetroError(null);
+
+    try {
+      const updatedAuth = await updateAuthRequest(
+        selectedAuth.id,
+        buildRetroPayload(retroForm)
+      );
+
+      onAuthUpdated(updatedAuth);
+      setRetroForm(null);
+    } catch (error) {
+      setRetroError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save retro auth details."
+      );
+    } finally {
+      setIsSavingRetro(false);
     }
   };
 
@@ -805,6 +978,309 @@ export function DenialsPipelinePage({
               )}
             >
               {isSavingP2P ? "Saving..." : "Save P2P Details"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {selectedAuth && appealForm && (
+        <section
+          className={cn(
+            "mb-6 rounded-xl border p-4",
+            darkMode
+              ? "border-gray-800 bg-gray-950"
+              : "border-gray-200 bg-white"
+          )}
+        >
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold">
+              Start / Update Appeal Details
+            </h3>
+            <p
+              className={cn(
+                "mt-1 text-sm",
+                darkMode ? "text-gray-400" : "text-gray-600"
+              )}
+            >
+              Track appeal submission, deadline, outcome, and notes for this
+              authorization.
+            </p>
+          </div>
+
+          {appealError && (
+            <div
+              role="alert"
+              className={cn(
+                "mb-4 rounded-lg border p-3 text-sm",
+                darkMode
+                  ? "border-red-900 bg-red-950/30 text-red-200"
+                  : "border-red-200 bg-red-50 text-red-700"
+              )}
+            >
+              {appealError}
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm border-inherit">
+              <input
+                type="checkbox"
+                checked={appealForm.appealSubmitted}
+                onChange={(event) =>
+                  handleAppealFieldChange(
+                    "appealSubmitted",
+                    event.target.checked
+                  )
+                }
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Appeal submitted
+              </span>
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Appeal Deadline
+              </span>
+              <input
+                type="date"
+                value={appealForm.appealDeadline}
+                onChange={(event) =>
+                  handleAppealFieldChange("appealDeadline", event.target.value)
+                }
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  darkMode
+                    ? "border-gray-700 bg-gray-900 text-gray-100"
+                    : "border-gray-300 bg-white text-gray-900"
+                )}
+              />
+            </label>
+
+            <label className="space-y-1 text-sm md:col-span-2">
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Appeal Outcome
+              </span>
+              <select
+                value={appealForm.appealOutcome}
+                onChange={(event) =>
+                  handleAppealFieldChange("appealOutcome", event.target.value)
+                }
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  darkMode
+                    ? "border-gray-700 bg-gray-900 text-gray-100"
+                    : "border-gray-300 bg-white text-gray-900"
+                )}
+              >
+                {APPEAL_OUTCOME_OPTIONS.map((option) => (
+                  <option key={option || "blank"} value={option}>
+                    {option || "Not selected"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm md:col-span-2">
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Appeal Notes
+              </span>
+              <textarea
+                value={appealForm.appealNotes}
+                onChange={(event) =>
+                  handleAppealFieldChange("appealNotes", event.target.value)
+                }
+                rows={3}
+                placeholder="Add appeal submission details, documents sent, payer instructions, or outcome notes."
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  darkMode
+                    ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
+                    : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
+                )}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClearSelectedAuth}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium",
+                darkMode
+                  ? "bg-gray-800 text-gray-200 hover:bg-gray-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              )}
+            >
+              Back to Dashboard
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                void handleSaveAppeal();
+              }}
+              disabled={isSavingAppeal}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium text-white",
+                isSavingAppeal
+                  ? "cursor-not-allowed bg-blue-400"
+                  : "bg-blue-600 hover:bg-blue-700"
+              )}
+            >
+              {isSavingAppeal ? "Saving..." : "Save Appeal Details"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {selectedAuth && retroForm && (
+        <section
+          className={cn(
+            "mb-6 rounded-xl border p-4",
+            darkMode
+              ? "border-gray-800 bg-gray-950"
+              : "border-gray-200 bg-white"
+          )}
+        >
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold">
+              Start / Update Retro Auth Details
+            </h3>
+            <p
+              className={cn(
+                "mt-1 text-sm",
+                darkMode ? "text-gray-400" : "text-gray-600"
+              )}
+            >
+              Track retro authorization submission, deadline, outcome, and notes
+              for this authorization.
+            </p>
+          </div>
+
+          {retroError && (
+            <div
+              role="alert"
+              className={cn(
+                "mb-4 rounded-lg border p-3 text-sm",
+                darkMode
+                  ? "border-red-900 bg-red-950/30 text-red-200"
+                  : "border-red-200 bg-red-50 text-red-700"
+              )}
+            >
+              {retroError}
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm border-inherit">
+              <input
+                type="checkbox"
+                checked={retroForm.retroRequested}
+                onChange={(event) =>
+                  handleRetroFieldChange("retroRequested", event.target.checked)
+                }
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Retro auth requested
+              </span>
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Retro Auth Deadline
+              </span>
+              <input
+                type="date"
+                value={retroForm.retroDeadline}
+                onChange={(event) =>
+                  handleRetroFieldChange("retroDeadline", event.target.value)
+                }
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  darkMode
+                    ? "border-gray-700 bg-gray-900 text-gray-100"
+                    : "border-gray-300 bg-white text-gray-900"
+                )}
+              />
+            </label>
+
+            <label className="space-y-1 text-sm md:col-span-2">
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Retro Auth Outcome
+              </span>
+              <select
+                value={retroForm.retroOutcome}
+                onChange={(event) =>
+                  handleRetroFieldChange("retroOutcome", event.target.value)
+                }
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  darkMode
+                    ? "border-gray-700 bg-gray-900 text-gray-100"
+                    : "border-gray-300 bg-white text-gray-900"
+                )}
+              >
+                {RETRO_OUTCOME_OPTIONS.map((option) => (
+                  <option key={option || "blank"} value={option}>
+                    {option || "Not selected"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm md:col-span-2">
+              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+                Retro Auth Notes
+              </span>
+              <textarea
+                value={retroForm.retroNotes}
+                onChange={(event) =>
+                  handleRetroFieldChange("retroNotes", event.target.value)
+                }
+                rows={3}
+                placeholder="Add retro auth details, dates submitted, payer instructions, or outcome notes."
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  darkMode
+                    ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
+                    : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
+                )}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClearSelectedAuth}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium",
+                darkMode
+                  ? "bg-gray-800 text-gray-200 hover:bg-gray-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              )}
+            >
+              Back to Dashboard
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                void handleSaveRetro();
+              }}
+              disabled={isSavingRetro}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium text-white",
+                isSavingRetro
+                  ? "cursor-not-allowed bg-blue-400"
+                  : "bg-blue-600 hover:bg-blue-700"
+              )}
+            >
+              {isSavingRetro ? "Saving..." : "Save Retro Auth Details"}
             </button>
           </div>
         </section>
