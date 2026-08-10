@@ -93,7 +93,9 @@ Oversized requests return:
 
 ## Processing and Persistence
 
-The current preview workflow processes the PDF in memory.
+The current preview workflow processes the PDF in memory through an isolated extraction worker.
+
+The worker has timeout handling so a stalled parser can be terminated without blocking the API process indefinitely.
 
 It does not write the uploaded document to the CareQueue database or a permanent upload directory.
 
@@ -118,6 +120,7 @@ Common responses:
 422 The uploaded PDF could not be read.
 422 Encrypted PDFs are not supported.
 422 The uploaded PDF could not be processed.
+422 The uploaded PDF could not be processed in time.
 ```
 
 Internal parser details should not be returned to the client.
@@ -523,6 +526,7 @@ PDF intake tests should cover:
 - Oversized request
 - Invalid PDF
 - Encrypted PDF
+- Extraction timeout
 - Text normalization
 - Form-field extraction
 - Template matching

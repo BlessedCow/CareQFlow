@@ -39,6 +39,8 @@ The frontend includes:
 CareQueue includes several layers of application security:
 
 - Argon2id password hashing
+- Shared server-side password policy enforcement
+- Failed-login tracking and temporary account lockout
 - Role-based access for Admin, UR, and Read Only users
 - Server-side sessions with hashed session tokens
 - Secure browser cookies
@@ -49,6 +51,9 @@ CareQueue includes several layers of application security:
 - Separately encrypted database backups
 - Audit logging for security and authorization activity
 - Production log sanitization intended to keep credentials, tokens, and sensitive field values out of logs
+- Local PDF extraction through an isolated worker with timeout handling
+- Private HTTPS security headers, including Content Security Policy
+- Automated security checks for backend and frontend dependencies
 
 These controls reduce risk, but they do not replace a complete security or compliance program. See [SECURITY.md](SECURITY.md) and [DISCLAIMER.md](DISCLAIMER.md) before using CareQueue with sensitive information.
 

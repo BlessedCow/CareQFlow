@@ -2,7 +2,7 @@
 
 CareQueue is a local-first healthcare workflow application intended for private development, testing, and controlled deployment.
 
-It includes authentication, role-based authorization, session controls, CSRF protection, encrypted storage options, encrypted backups, audit logging, log sanitization, private HTTPS deployment, and backup scheduling support.
+It includes authentication, role-based authorization, session controls, CSRF protection, encrypted storage options, encrypted backups, audit logging, log sanitization, isolated PDF extraction, private HTTPS deployment, browser security headers, dependency checks, and backup scheduling support.
 
 Those controls do not make CareQueue HIPAA compliant by themselves. Any organization using CareQueue with protected health information remains responsible for its own administrative, physical, technical, contractual, legal, and operational safeguards.
 
@@ -135,6 +135,8 @@ Environment files must not be pasted into issues, screenshots, terminal transcri
 CareQueue currently includes:
 
 - Argon2id password hashing
+- Shared server-side password policy enforcement
+- Failed-login tracking and temporary account lockout
 - Local user authentication
 - Role-based access control
 - Server-side sessions
@@ -151,8 +153,15 @@ CareQueue currently includes:
 - Audit logging for selected security and workflow actions
 - Centralized production log sanitization
 - Local PDF text extraction with confidence and review flags
+- Isolated PDF extraction worker with timeout handling
+- Bounded backend production dependency requirements
+- Backend dependency audit checks with `pip-audit`
+- Frontend dependency audit checks with `npm audit`
+- Static security scanning with Bandit
 - Windows and Linux backup scheduling helpers
 - Private Windows HTTPS through Caddy
+- Content Security Policy and related browser security headers
+- Loopback-only first-time Admin setup
 - Loopback-only API binding in the Windows production deployment
 - Restricted production runtime directories
 - Service-aware production upgrades
@@ -170,6 +179,22 @@ Public self-registration is not provided. Administrators create users through ap
 Temporary-password workflows require a password change before normal use.
 
 Authentication failures should use generic responses that do not reveal whether a username exists.
+
+A failed login records:
+
+```text
+security.login_failed
+```
+
+Repeated failed logins increment the account's failed-login count. After the configured threshold is reached, the account is temporarily locked and later login attempts receive a generic locked-account response.
+
+A locked login attempt records:
+
+```text
+security.login_locked
+```
+
+Successful authentication clears the failed-login state.
 
 ## Roles and Authorization
 
@@ -434,7 +459,7 @@ The intake workflow should not:
 
 Uploaded documents may contain PHI, PII, payer identifiers, member identifiers, dates of birth, clinical information, and facility details.
 
-The current extraction workflow reads embedded PDF text and does not depend on an external OCR service.
+The current extraction workflow reads embedded PDF text and does not depend on an external OCR service. PDF parsing runs in an isolated worker process with timeout handling so a stalled parser can be terminated without blocking the API process indefinitely.
 
 Scanned PDFs without a usable text layer may require a separately reviewed local OCR implementation.
 
@@ -562,6 +587,8 @@ CareQueueCaddy
 
 `CareQueueCaddy` serves the frontend and proxies `/api` through private HTTPS.
 
+The Caddy configuration also applies browser security headers, including Content Security Policy, frame denial, content-type sniffing protection, referrer policy, permissions policy, and HSTS.
+
 A local installation may use a private hostname such as:
 
 ```text
@@ -679,18 +706,18 @@ Examples include:
 Backend checks include:
 
 ```powershell
-pytest tests -n auto -q
-python -m ruff check . --fix
-bandit -r authstatus_api
-pip-audit
+pytest backend\tests -n auto -q
+ruff check . --fix
+bandit -r backend\authstatus_api backend\scripts -c backend\pyproject.toml
+python -m pip_audit -r backend\requirements.txt
 ```
 
 Frontend checks include:
 
 ```powershell
+npm audit
 npm test
 npm run build
-npm audit
 ```
 
 PowerShell, Caddy, WinSW, systemd, and certificate changes also require platform-specific manual validation.

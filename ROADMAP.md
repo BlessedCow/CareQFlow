@@ -77,12 +77,19 @@ Recent backup work includes:
 Recent security work includes:
 
 - Session and CSRF token rotation
+- Shared server-side password policy enforcement
+- Failed-login tracking and temporary account lockout
+- Loopback-only first-time Admin setup
 - Trusted storage path checks
 - Safer directory enumeration
 - Symlink rejection in sensitive file workflows
 - Centralized validated file reads
 - Production log sanitization
-- Dependency and static analysis review
+- Bounded backend dependency requirements
+- Backend and frontend dependency audit checks
+- Static security scanning with Bandit
+- Content Security Policy through Caddy
+- Isolated PDF extraction with timeout handling
 - Private same-origin production API requests
 - Restricted production runtime directories
 - Service-aware production upgrades

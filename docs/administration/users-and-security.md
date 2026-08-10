@@ -207,13 +207,19 @@ A successful change:
 
 ## Password Policy Boundary
 
-The command-line creation script requires at least 12 characters.
+CareQueue enforces a shared server-side password policy for account creation, first-time Admin setup, and password changes.
+
+The current minimum password length is:
+
+```text
+12 characters
+```
 
 The web Admin flow generates a strong 24-character temporary password.
 
-The current authenticated password-change endpoint verifies that the current password is correct and the new password is different. It does not currently enforce a separate centralized minimum length or complexity rule for the user-selected replacement password.
+Authenticated password changes also verify that the current password is correct and that the new password differs from it.
 
-Until that is centralized, the deploying organization should define and communicate its password standard.
+The deploying organization should still define and communicate its password standard for users, including passphrase guidance and secure temporary-password delivery expectations.
 
 ## Create the First Admin
 
@@ -232,6 +238,8 @@ The setup window:
 3. Sends the username and password to the local setup endpoint over loopback.
 4. Creates the first account with the `Admin` role.
 5. Disables the setup path for future use.
+
+The setup endpoint accepts only loopback requests from the local machine.
 
 The setup window does not pass the password through command-line arguments.
 
@@ -346,7 +354,15 @@ A failed login records:
 security.login_failed
 ```
 
-The user table contains `failed_login_count` and `locked_until`, but the current authentication flow does not implement a documented automatic account-lockout policy.
+Repeated failed logins increment `failed_login_count`. After the configured threshold is reached, CareQueue temporarily locks the account with `locked_until`. Login attempts against a temporarily locked account receive a generic locked-account response.
+
+A locked login attempt records:
+
+```text
+security.login_locked
+```
+
+Successful authentication clears the failed-login state.
 
 ## Server-Side Sessions
 
@@ -615,6 +631,7 @@ Relevant actions include:
 ```text
 security.login
 security.login_failed
+security.login_locked
 security.logout
 security.initial_admin_setup
 security.password_change
@@ -647,8 +664,7 @@ CareQueue does not currently provide:
 - Automatic account expiration
 - Automatic account deletion
 - Individual Admin session revocation
-- A documented failed-login lockout policy
-- A centralized replacement-password complexity policy
+- A replacement-password complexity policy beyond the shared minimum length rule
 
 ## Common Problems
 
@@ -696,10 +712,11 @@ Check:
 - Username spelling
 - Password
 - Active status
+- Temporary lockout status
 - Correct development or production database
 - Application origin
 - API readiness
-- Failed-login audit events
+- Failed-login and locked-login audit events
 
 ### 401 from `/api/security/me`
 
