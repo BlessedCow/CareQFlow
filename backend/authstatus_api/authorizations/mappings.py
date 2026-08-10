@@ -16,15 +16,36 @@ BOOLEAN_FIELDS = {
     "progress_made",
     "facility_informed",
     "waiting_on_clinicals",
+    "p2p_requested",
+    "appeal_submitted",
+    "retro_requested",
 }
 
-OPTIONAL_AUTH_DATE_FIELDS = {
+OPTIONAL_AUTH_TEXT_FIELDS = {
     "auth_start_date",
     "auth_end_date",
     "programming_days",
     "review_due_date",
     "submitted_at",
     "decision_at",
+    "denial_reason_category",
+    "denial_reason_notes",
+    "denial_prevention_notes",
+    "denial_date",
+    "denial_through_date",
+    "denial_level_of_care",
+    "denial_source",
+    "p2p_scheduled_at",
+    "p2p_deadline",
+    "p2p_outcome",
+    "p2p_reviewer",
+    "p2p_notes",
+    "appeal_deadline",
+    "appeal_outcome",
+    "appeal_notes",
+    "retro_deadline",
+    "retro_outcome",
+    "retro_notes",
 }
 
 OPTIONAL_EVENT_DATE_FIELDS = {
@@ -42,7 +63,7 @@ def auth_row_to_dict(row: Any) -> dict[str, Any]:
         if field in decrypted:
             decrypted[field] = bool(decrypted[field])
 
-    for field in OPTIONAL_AUTH_DATE_FIELDS:
+    for field in OPTIONAL_AUTH_TEXT_FIELDS:
         if decrypted.get(field) is None:
             decrypted[field] = ""
 

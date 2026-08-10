@@ -24,6 +24,7 @@ import { CalendarRoutePage } from "./pages/CalendarRoutePage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminAuditPage } from "./pages/AdminAuditPage";
 import { AdminSystemPage } from "./pages/AdminSystemPage";
+import { DenialsPipelinePage } from "./pages/DenialsPipelinePage";
 
 // Hooks
 import { useDashboardCardSettings } from "./hooks/useDashboardCardSettings";
@@ -46,6 +47,8 @@ import { AuthRequest } from "./types/auth";
 function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [activePage, setActivePage] = useState<AppPage>("dashboard");
+  const [selectedDenialFollowUpAuthId, setSelectedDenialFollowUpAuthId] =
+    useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
@@ -303,6 +306,12 @@ function App() {
     await handleStartViewAuth(auth);
   };
 
+  const handleOpenDenialFollowUp = (auth: AuthRequest) => {
+    setSelectedDenialFollowUpAuthId(auth.id);
+    handleCloseViewAuth();
+    setActivePage("denials-pipeline");
+  };
+
   const handleCreateAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAuthsError(null);
@@ -512,6 +521,7 @@ function App() {
             onSubmitAuth={handleCreateAuth}
             onViewAuth={handleStartViewAuth}
             onEditAuth={handleStartEditAuth}
+            onManageDenialFollowUp={handleOpenDenialFollowUp}
             onDeleteAuth={handleDeleteAuth}
             onTimelineEventFieldChange={handleTimelineEventFieldChange}
             onAddTimelineEvent={async () => {
@@ -568,6 +578,28 @@ function App() {
                 approvedDays: newAuthForm.approvedDays,
               })
             }
+          />
+        )}
+
+        {activePage === "denials-pipeline" && (
+          <DenialsPipelinePage
+            data={authRequests}
+            darkMode={darkMode}
+            selectedAuthId={selectedDenialFollowUpAuthId}
+            onSelectAuth={(auth) => {
+              setSelectedDenialFollowUpAuthId(auth.id);
+            }}
+            onClearSelectedAuth={() => {
+              setSelectedDenialFollowUpAuthId(null);
+            }}
+            onAuthUpdated={(updatedAuth) => {
+              setAuthRequests((currentAuths) =>
+                currentAuths.map((auth) =>
+                  auth.id === updatedAuth.id ? updatedAuth : auth
+                )
+              );
+              setSelectedDenialFollowUpAuthId(null);
+            }}
           />
         )}
 

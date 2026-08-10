@@ -22,6 +22,12 @@ AUTH_IDENTITY_FIELDS = {
     "fax_numbers",
     "care_manager_details",
     "notes_links",
+    "denial_reason_notes",
+    "denial_prevention_notes",
+    "p2p_reviewer",
+    "p2p_notes",
+    "appeal_notes",
+    "retro_notes",
 }
 
 

@@ -216,6 +216,70 @@ def test_create_auth_endpoint_rejects_unknown_fields(client, auth_headers):
     assert response.status_code == 422
 
 
+def test_list_auths_endpoint_returns_existing_records_with_null_pipeline_fields(
+    client,
+    auth_headers,
+):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    database_path = get_settings().database_path
+
+    with sqlite3.connect(database_path) as conn:
+        conn.execute("""
+            UPDATE auths
+            SET
+                denial_reason_category = NULL,
+                denial_reason_notes = NULL,
+                denial_prevention_notes = NULL,
+                denial_date = NULL,
+                denial_level_of_care = NULL,
+                denial_source = NULL,
+                p2p_scheduled_at = NULL,
+                p2p_deadline = NULL,
+                p2p_outcome = NULL,
+                p2p_reviewer = NULL,
+                p2p_notes = NULL,
+                appeal_deadline = NULL,
+                appeal_outcome = NULL,
+                appeal_notes = NULL,
+                retro_deadline = NULL,
+                retro_outcome = NULL,
+                retro_notes = NULL
+            WHERE id = 1
+            """)
+
+    response = client.get("/api/auths", headers=auth_headers)
+
+    assert response.status_code == 200
+
+    auth = response.json()["auths"][0]
+
+    assert auth["denial_reason_category"] == ""
+    assert auth["denial_reason_notes"] == ""
+    assert auth["denial_prevention_notes"] == ""
+    assert auth["denial_date"] == ""
+    assert auth["denial_through_date"] == ""
+    assert auth["denial_level_of_care"] == ""
+    assert auth["denial_source"] == ""
+    assert auth["p2p_scheduled_at"] == ""
+    assert auth["p2p_deadline"] == ""
+    assert auth["p2p_outcome"] == ""
+    assert auth["p2p_reviewer"] == ""
+    assert auth["p2p_notes"] == ""
+    assert auth["appeal_deadline"] == ""
+    assert auth["appeal_outcome"] == ""
+    assert auth["appeal_notes"] == ""
+    assert auth["retro_deadline"] == ""
+    assert auth["retro_outcome"] == ""
+    assert auth["retro_notes"] == ""
+
+
 def test_validation_error_response_does_not_echo_request_payload(
     client,
     auth_headers,
@@ -597,6 +661,91 @@ def test_update_auth_event_writes_audit_event_without_note_value(client, auth_he
 
     assert metadata == {"auth_id": 1, "fields": ["notes", "outcome"]}
     assert "Sensitive update note" not in rows[-1]["metadata"]
+
+
+def test_patch_auth_endpoint_tracks_denial_p2p_appeal_and_retro_pipeline_fields(
+    client,
+    auth_headers,
+):
+    create_response = client.post(
+        "/api/auths", json=make_payload(), headers=auth_headers
+    )
+
+    assert create_response.status_code == 201
+
+    response = client.patch(
+        "/api/auths/1",
+        json={
+            "status": "Denied",
+            "denial_reason_category": "Medical Necessity",
+            "denial_reason_notes": "Payer says RTC criteria not met.",
+            "denial_prevention_notes": "Document Dimension 3 risks earlier.",
+            "denied_days": 3,
+            "denial_date": "2026-06-27",
+            "denial_through_date": "2026-06-30",
+            "denial_level_of_care": "RTC",
+            "denial_source": "Concurrent",
+            "p2p_requested": True,
+            "p2p_scheduled_at": "2026-06-28T10:30",
+            "p2p_deadline": "2026-06-28",
+            "p2p_outcome": "Pending",
+            "p2p_reviewer": "Medical Director",
+            "p2p_notes": "P2P requested by facility UR.",
+            "appeal_submitted": True,
+            "appeal_deadline": "2026-07-02",
+            "appeal_outcome": "Pending",
+            "appeal_notes": "Expedited appeal planned.",
+            "retro_requested": True,
+            "retro_deadline": "2026-07-05",
+            "retro_outcome": "Pending",
+            "retro_notes": "Retro auth needed for gap days.",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["status"] == "Denied"
+    assert data["denial_reason_category"] == "Medical Necessity"
+    assert data["denial_reason_notes"] == "Payer says RTC criteria not met."
+    assert data["denial_prevention_notes"] == "Document Dimension 3 risks earlier."
+    assert data["denied_days"] == 3
+    assert data["denial_date"] == "2026-06-27"
+    assert data["denial_through_date"] == "2026-06-30"
+    assert data["denial_level_of_care"] == "RTC"
+    assert data["denial_source"] == "Concurrent"
+    assert data["p2p_requested"] is True
+    assert data["p2p_scheduled_at"] == "2026-06-28T10:30"
+    assert data["p2p_deadline"] == "2026-06-28"
+    assert data["p2p_outcome"] == "Pending"
+    assert data["p2p_reviewer"] == "Medical Director"
+    assert data["p2p_notes"] == "P2P requested by facility UR."
+    assert data["appeal_submitted"] is True
+    assert data["appeal_deadline"] == "2026-07-02"
+    assert data["appeal_outcome"] == "Pending"
+    assert data["appeal_notes"] == "Expedited appeal planned."
+    assert data["retro_requested"] is True
+    assert data["retro_deadline"] == "2026-07-05"
+    assert data["retro_outcome"] == "Pending"
+    assert data["retro_notes"] == "Retro auth needed for gap days."
+
+    database_path = get_settings().database_path
+
+    with sqlite3.connect(database_path) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM auths WHERE id = 1").fetchone()
+
+    assert row is not None
+    assert row["denial_reason_notes"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert row["denial_prevention_notes"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert row["p2p_reviewer"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert row["p2p_notes"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert row["appeal_notes"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert row["retro_notes"].startswith(ENCRYPTED_TEXT_PREFIX)
+    assert "Payer says RTC criteria not met." not in row["denial_reason_notes"]
+    assert "P2P requested by facility UR." not in row["p2p_notes"]
 
 
 def test_delete_auth_event_writes_audit_event(client, auth_headers):

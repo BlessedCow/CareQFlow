@@ -5,4 +5,5 @@ export type AppPage =
   | "settings"
   | "adminUsers"
   | "adminAudit"
-  | "adminSystem";
+  | "adminSystem"
+  | "denials-pipeline";

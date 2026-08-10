@@ -7,6 +7,7 @@ from typing import Any
 REDACTED_VALUE = "[REDACTED]"
 
 SENSITIVE_FIELD_NAMES = {
+    "appeal_notes",
     "auth_number",
     "authorization",
     "authorization_header",
@@ -18,13 +19,18 @@ SENSITIVE_FIELD_NAMES = {
     "cookies",
     "csrf_token",
     "date_of_birth",
+    "denial_prevention_notes",
+    "denial_reason_notes",
     "dob",
     "group_number",
     "medical_group_number",
     "medical_member_id",
     "member_id",
+    "p2p_notes",
+    "p2p_reviewer",
     "password",
     "password_hash",
+    "retro_notes",
     "session",
     "session_id",
     "session_token",

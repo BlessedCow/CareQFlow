@@ -35,6 +35,28 @@ function mapApiAuthToAuthRequest(item: any): AuthRequest {
     programmingDays: item.programming_days ?? "",
     submittedAt: item.submitted_at ?? null,
     decisionAt: item.decision_at ?? null,
+    denialReasonCategory: item.denial_reason_category ?? "",
+    denialReasonNotes: item.denial_reason_notes ?? "",
+    denialPreventionNotes: item.denial_prevention_notes ?? "",
+    deniedDays: Number(item.denied_days ?? 0),
+    denialDate: item.denial_date ?? "",
+    denialThroughDate: item.denial_through_date ?? "",
+    denialLevelOfCare: item.denial_level_of_care ?? "",
+    denialSource: item.denial_source ?? "",
+    p2pRequested: Boolean(item.p2p_requested),
+    p2pScheduledAt: item.p2p_scheduled_at ?? "",
+    p2pDeadline: item.p2p_deadline ?? "",
+    p2pOutcome: item.p2p_outcome ?? "",
+    p2pReviewer: item.p2p_reviewer ?? "",
+    p2pNotes: item.p2p_notes ?? "",
+    appealSubmitted: Boolean(item.appeal_submitted),
+    appealDeadline: item.appeal_deadline ?? "",
+    appealOutcome: item.appeal_outcome ?? "",
+    appealNotes: item.appeal_notes ?? "",
+    retroRequested: Boolean(item.retro_requested),
+    retroDeadline: item.retro_deadline ?? "",
+    retroOutcome: item.retro_outcome ?? "",
+    retroNotes: item.retro_notes ?? "",
   };
 }
 
@@ -89,6 +111,28 @@ export interface CreateAuthRequestPayload {
   care_manager_details?: string;
   submitted_at?: string | null;
   decision_at?: string | null;
+  denial_reason_category?: string;
+  denial_reason_notes?: string;
+  denial_prevention_notes?: string;
+  denied_days?: number;
+  denial_date?: string;
+  denial_through_date?: string;
+  denial_level_of_care?: string;
+  denial_source?: string;
+  p2p_requested?: boolean;
+  p2p_scheduled_at?: string;
+  p2p_deadline?: string;
+  p2p_outcome?: string;
+  p2p_reviewer?: string;
+  p2p_notes?: string;
+  appeal_submitted?: boolean;
+  appeal_deadline?: string;
+  appeal_outcome?: string;
+  appeal_notes?: string;
+  retro_requested?: boolean;
+  retro_deadline?: string;
+  retro_outcome?: string;
+  retro_notes?: string;
 }
 
 export type UpdateAuthRequestPayload = Partial<CreateAuthRequestPayload>;

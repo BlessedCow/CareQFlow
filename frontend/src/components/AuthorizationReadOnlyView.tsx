@@ -16,6 +16,7 @@ interface AuthorizationReadOnlyViewProps {
   canEdit: boolean;
   onClose: () => void;
   onEdit: (auth: AuthRequest) => void;
+  onManageDenialFollowUp: (auth: AuthRequest) => void;
 }
 
 function formatValue(value?: string | number | null | undefined) {
@@ -63,6 +64,7 @@ export function AuthorizationReadOnlyView({
   canEdit,
   onClose,
   onEdit,
+  onManageDenialFollowUp,
 }: AuthorizationReadOnlyViewProps) {
   const labelClass = cn(
     "text-xs font-medium uppercase tracking-wide",
@@ -114,6 +116,21 @@ export function AuthorizationReadOnlyView({
               )}
             >
               Edit Auth
+            </button>
+          )}
+
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => onManageDenialFollowUp(auth)}
+              className={cn(
+                "rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                darkMode
+                  ? "border-amber-800 bg-amber-950/30 text-amber-200 hover:bg-amber-900/40"
+                  : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+              )}
+            >
+              Manage Denial / P2P / Retro
             </button>
           )}
 

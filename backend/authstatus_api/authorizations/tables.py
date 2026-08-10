@@ -44,6 +44,28 @@ def initialize_authorization_tables(conn: Any) -> None:
             submitted_at TEXT,
             review_due_date TEXT,
             decision_at TEXT,
+            denial_reason_category TEXT,
+            denial_reason_notes TEXT,
+            denial_prevention_notes TEXT,
+            denied_days INTEGER NOT NULL DEFAULT 0,
+            denial_date TEXT,
+            denial_through_date TEXT,
+            denial_level_of_care TEXT,
+            denial_source TEXT,
+            p2p_requested INTEGER NOT NULL DEFAULT 0,
+            p2p_scheduled_at TEXT,
+            p2p_deadline TEXT,
+            p2p_outcome TEXT,
+            p2p_reviewer TEXT,
+            p2p_notes TEXT,
+            appeal_submitted INTEGER NOT NULL DEFAULT 0,
+            appeal_deadline TEXT,
+            appeal_outcome TEXT,
+            appeal_notes TEXT,
+            retro_requested INTEGER NOT NULL DEFAULT 0,
+            retro_deadline TEXT,
+            retro_outcome TEXT,
+            retro_notes TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
@@ -106,6 +128,48 @@ def initialize_authorization_tables(conn: Any) -> None:
     ensure_column(conn, "auths", "programming_days", "TEXT")
     ensure_column(conn, "auths", "submitted_at", "TEXT")
     ensure_column(conn, "auths", "decision_at", "TEXT")
+    ensure_column(conn, "auths", "denial_reason_category", "TEXT")
+    ensure_column(conn, "auths", "denial_reason_notes", "TEXT")
+    ensure_column(conn, "auths", "denial_prevention_notes", "TEXT")
+    ensure_column(
+        conn,
+        "auths",
+        "denied_days",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(conn, "auths", "denial_date", "TEXT")
+    ensure_column(conn, "auths", "denial_through_date", "TEXT")
+    ensure_column(conn, "auths", "denial_level_of_care", "TEXT")
+    ensure_column(conn, "auths", "denial_source", "TEXT")
+    ensure_column(
+        conn,
+        "auths",
+        "p2p_requested",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(conn, "auths", "p2p_scheduled_at", "TEXT")
+    ensure_column(conn, "auths", "p2p_deadline", "TEXT")
+    ensure_column(conn, "auths", "p2p_outcome", "TEXT")
+    ensure_column(conn, "auths", "p2p_reviewer", "TEXT")
+    ensure_column(conn, "auths", "p2p_notes", "TEXT")
+    ensure_column(
+        conn,
+        "auths",
+        "appeal_submitted",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(conn, "auths", "appeal_deadline", "TEXT")
+    ensure_column(conn, "auths", "appeal_outcome", "TEXT")
+    ensure_column(conn, "auths", "appeal_notes", "TEXT")
+    ensure_column(
+        conn,
+        "auths",
+        "retro_requested",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(conn, "auths", "retro_deadline", "TEXT")
+    ensure_column(conn, "auths", "retro_outcome", "TEXT")
+    ensure_column(conn, "auths", "retro_notes", "TEXT")
 
     ensure_column(
         conn,

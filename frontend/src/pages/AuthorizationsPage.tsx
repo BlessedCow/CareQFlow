@@ -65,6 +65,7 @@ interface AuthorizationsPageProps {
   onSubmitAuth: (event: FormEvent<HTMLFormElement>) => void;
   onViewAuth: (auth: AuthRequest) => void;
   onEditAuth: (auth: AuthRequest) => void;
+  onManageDenialFollowUp: (auth: AuthRequest) => void;
   onDeleteAuth: (auth: AuthRequest) => void;
   onTimelineEventFieldChange: (
     field: keyof TimelineEventFormState,
@@ -132,6 +133,7 @@ export function AuthorizationsPage({
   onSubmitAuth,
   onViewAuth,
   onEditAuth,
+  onManageDenialFollowUp,
   onDeleteAuth,
   onTimelineEventFieldChange,
   onAddTimelineEvent,
@@ -296,8 +298,7 @@ export function AuthorizationsPage({
                   : "Add Authorization"
               }
               allowPdfIntake={
-                !editingAuthId &&
-                newAuthForm.authType !== "Concurrent"
+                !editingAuthId && newAuthForm.authType !== "Concurrent"
               }
               registeredFacilities={registeredFacilities}
               registeredInsurances={registeredInsurances}
@@ -439,6 +440,7 @@ export function AuthorizationsPage({
               canEdit={canManageAuthorizations}
               onClose={onCloseViewAuth}
               onEdit={onEditAuth}
+              onManageDenialFollowUp={onManageDenialFollowUp}
             />
           </div>
         )}

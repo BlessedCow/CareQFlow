@@ -225,6 +225,82 @@ def test_update_auth_encrypts_updated_sensitive_fields():
     assert "12345-678910" not in row["auth_number"]
 
 
+def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
+    created = create_auth(make_payload())
+
+    updated = update_auth(
+        created["id"],
+        {
+            "status": "Denied",
+            "denial_reason_category": "Medical Necessity",
+            "denial_reason_notes": "Payer says RTC criteria not met.",
+            "denial_prevention_notes": "Document Dimension 3 risks earlier.",
+            "denied_days": 3,
+            "denial_date": "2026-06-27",
+            "denial_through_date": "2026-06-30",
+            "denial_level_of_care": "RTC",
+            "denial_source": "Concurrent",
+            "p2p_requested": True,
+            "p2p_scheduled_at": "2026-06-28T10:30",
+            "p2p_deadline": "2026-06-28",
+            "p2p_outcome": "Pending",
+            "p2p_reviewer": "Medical Director",
+            "p2p_notes": "P2P requested by facility UR.",
+            "appeal_submitted": True,
+            "appeal_deadline": "2026-07-02",
+            "appeal_outcome": "Pending",
+            "appeal_notes": "Expedited appeal planned.",
+            "retro_requested": True,
+            "retro_deadline": "2026-07-05",
+            "retro_outcome": "Pending",
+            "retro_notes": "Retro auth needed for gap days.",
+        },
+    )
+
+    assert updated is not None
+    assert updated["status"] == "Denied"
+    assert updated["denial_reason_category"] == "Medical Necessity"
+    assert updated["denial_reason_notes"] == "Payer says RTC criteria not met."
+    assert updated["denial_prevention_notes"] == "Document Dimension 3 risks earlier."
+    assert updated["denied_days"] == 3
+    assert updated["denial_date"] == "2026-06-27"
+    assert updated["denial_through_date"] == "2026-06-30"
+    assert updated["denial_level_of_care"] == "RTC"
+    assert updated["denial_source"] == "Concurrent"
+    assert updated["p2p_requested"] is True
+    assert updated["p2p_scheduled_at"] == "2026-06-28T10:30"
+    assert updated["p2p_deadline"] == "2026-06-28"
+    assert updated["p2p_outcome"] == "Pending"
+    assert updated["p2p_reviewer"] == "Medical Director"
+    assert updated["p2p_notes"] == "P2P requested by facility UR."
+    assert updated["appeal_submitted"] is True
+    assert updated["appeal_deadline"] == "2026-07-02"
+    assert updated["appeal_outcome"] == "Pending"
+    assert updated["appeal_notes"] == "Expedited appeal planned."
+    assert updated["retro_requested"] is True
+    assert updated["retro_deadline"] == "2026-07-05"
+    assert updated["retro_outcome"] == "Pending"
+    assert updated["retro_notes"] == "Retro auth needed for gap days."
+
+    database_path = get_settings().database_path
+
+    with sqlite3.connect(database_path) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM auths WHERE id = ?", (created["id"],)
+        ).fetchone()
+
+    assert row is not None
+    assert row["denial_reason_notes"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert row["denial_prevention_notes"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert row["p2p_reviewer"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert row["p2p_notes"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert row["appeal_notes"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert row["retro_notes"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert "Payer says RTC criteria not met." not in row["denial_reason_notes"]
+    assert "P2P requested by facility UR." not in row["p2p_notes"]
+
+
 def test_update_auth_returns_none_for_missing_record():
     assert update_auth(999, {"status": "Submitted"}) is None
 

@@ -84,12 +84,39 @@ class AuthBase(BaseModel):
     review_due_date: str = ""
     submitted_at: str | None = None
     decision_at: str | None = None
+    denial_reason_category: str = ""
+    denial_reason_notes: str = ""
+    denial_prevention_notes: str = ""
+    denied_days: int = Field(default=0, ge=0)
+    denial_date: str = ""
+    denial_through_date: str = ""
+    denial_level_of_care: str = ""
+    denial_source: str = ""
+    p2p_requested: bool = False
+    p2p_scheduled_at: str = ""
+    p2p_deadline: str = ""
+    p2p_outcome: str = ""
+    p2p_reviewer: str = ""
+    p2p_notes: str = ""
+    appeal_submitted: bool = False
+    appeal_deadline: str = ""
+    appeal_outcome: str = ""
+    appeal_notes: str = ""
+    retro_requested: bool = False
+    retro_deadline: str = ""
+    retro_outcome: str = ""
+    retro_notes: str = ""
 
     @field_validator(
         "date_of_birth",
         "auth_start_date",
         "auth_end_date",
         "review_due_date",
+        "denial_date",
+        "denial_through_date",
+        "p2p_deadline",
+        "appeal_deadline",
+        "retro_deadline",
         mode="before",
     )
     @classmethod
@@ -164,6 +191,28 @@ class AuthUpdate(BaseModel):
     decision_at: str | None = None
     requested_days: int | None = Field(default=None, ge=0)
     approved_days: int | None = Field(default=None, ge=0)
+    denial_reason_category: str | None = None
+    denial_reason_notes: str | None = None
+    denial_prevention_notes: str | None = None
+    denied_days: int | None = Field(default=None, ge=0)
+    denial_date: str | None = None
+    denial_through_date: str | None = None
+    denial_level_of_care: str | None = None
+    denial_source: str | None = None
+    p2p_requested: bool | None = None
+    p2p_scheduled_at: str | None = None
+    p2p_deadline: str | None = None
+    p2p_outcome: str | None = None
+    p2p_reviewer: str | None = None
+    p2p_notes: str | None = None
+    appeal_submitted: bool | None = None
+    appeal_deadline: str | None = None
+    appeal_outcome: str | None = None
+    appeal_notes: str | None = None
+    retro_requested: bool | None = None
+    retro_deadline: str | None = None
+    retro_outcome: str | None = None
+    retro_notes: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -172,6 +221,11 @@ class AuthUpdate(BaseModel):
         "auth_start_date",
         "auth_end_date",
         "review_due_date",
+        "denial_date",
+        "denial_through_date",
+        "p2p_deadline",
+        "appeal_deadline",
+        "retro_deadline",
         mode="before",
     )
     @classmethod

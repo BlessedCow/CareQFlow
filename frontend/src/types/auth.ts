@@ -53,4 +53,26 @@ export interface AuthRequest {
   programmingDays?: string;
   submittedAt?: string | null;
   decisionAt?: string | null;
+  denialReasonCategory?: string;
+  denialReasonNotes?: string;
+  denialPreventionNotes?: string;
+  deniedDays?: number;
+  denialDate?: string;
+  denialThroughDate?: string;
+  denialLevelOfCare?: string;
+  denialSource?: string;
+  p2pRequested?: boolean;
+  p2pScheduledAt?: string;
+  p2pDeadline?: string;
+  p2pOutcome?: string;
+  p2pReviewer?: string;
+  p2pNotes?: string;
+  appealSubmitted?: boolean;
+  appealDeadline?: string;
+  appealOutcome?: string;
+  appealNotes?: string;
+  retroRequested?: boolean;
+  retroDeadline?: string;
+  retroOutcome?: string;
+  retroNotes?: string;
 }

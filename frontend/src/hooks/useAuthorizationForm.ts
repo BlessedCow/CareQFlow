@@ -32,6 +32,27 @@ export interface NewAuthFormState {
   careManagerPhone: string;
   careManagerFax: string;
   careManagerNotes: string;
+  denialReasonCategory: string;
+  denialReasonNotes: string;
+  denialPreventionNotes: string;
+  deniedDays: string;
+  denialDate: string;
+  denialLevelOfCare: string;
+  denialSource: string;
+  p2pRequested: boolean;
+  p2pScheduledAt: string;
+  p2pDeadline: string;
+  p2pOutcome: string;
+  p2pReviewer: string;
+  p2pNotes: string;
+  appealSubmitted: boolean;
+  appealDeadline: string;
+  appealOutcome: string;
+  appealNotes: string;
+  retroRequested: boolean;
+  retroDeadline: string;
+  retroOutcome: string;
+  retroNotes: string;
 }
 
 export const DEFAULT_AUTH_FORM: NewAuthFormState = {
@@ -63,6 +84,27 @@ export const DEFAULT_AUTH_FORM: NewAuthFormState = {
   careManagerPhone: "",
   careManagerFax: "",
   careManagerNotes: "",
+  denialReasonCategory: "",
+  denialReasonNotes: "",
+  denialPreventionNotes: "",
+  deniedDays: "",
+  denialDate: "",
+  denialLevelOfCare: "",
+  denialSource: "",
+  p2pRequested: false,
+  p2pScheduledAt: "",
+  p2pDeadline: "",
+  p2pOutcome: "",
+  p2pReviewer: "",
+  p2pNotes: "",
+  appealSubmitted: false,
+  appealDeadline: "",
+  appealOutcome: "",
+  appealNotes: "",
+  retroRequested: false,
+  retroDeadline: "",
+  retroOutcome: "",
+  retroNotes: "",
 };
 
 function normalizeFormLoc(loc: string): string {
@@ -120,6 +162,27 @@ export function getAuthFormFromAuth(auth: AuthRequest): NewAuthFormState {
     careManagerPhone: "",
     careManagerFax: "",
     careManagerNotes: "",
+    denialReasonCategory: auth.denialReasonCategory ?? "",
+    denialReasonNotes: auth.denialReasonNotes ?? "",
+    denialPreventionNotes: auth.denialPreventionNotes ?? "",
+    deniedDays: String(auth.deniedDays ?? ""),
+    denialDate: auth.denialDate ?? "",
+    denialLevelOfCare: auth.denialLevelOfCare ?? "",
+    denialSource: auth.denialSource ?? "",
+    p2pRequested: Boolean(auth.p2pRequested),
+    p2pScheduledAt: auth.p2pScheduledAt ?? "",
+    p2pDeadline: auth.p2pDeadline ?? "",
+    p2pOutcome: auth.p2pOutcome ?? "",
+    p2pReviewer: auth.p2pReviewer ?? "",
+    p2pNotes: auth.p2pNotes ?? "",
+    appealSubmitted: Boolean(auth.appealSubmitted),
+    appealDeadline: auth.appealDeadline ?? "",
+    appealOutcome: auth.appealOutcome ?? "",
+    appealNotes: auth.appealNotes ?? "",
+    retroRequested: Boolean(auth.retroRequested),
+    retroDeadline: auth.retroDeadline ?? "",
+    retroOutcome: auth.retroOutcome ?? "",
+    retroNotes: auth.retroNotes ?? "",
   };
 }
 
