@@ -1,12 +1,37 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
-import {
-  updateAuthRequest,
-  type CreateAuthRequestPayload,
-} from "../api/authStatus";
+import { updateAuthRequest } from "../api/authStatus";
 import type { AuthRequest } from "../types/auth";
 import { cn } from "../utils/cn";
+import {
+  APPEAL_OUTCOME_OPTIONS,
+  DENIAL_LEVEL_OF_CARE_OPTIONS,
+  DENIAL_REASON_OPTIONS,
+  DENIAL_SOURCE_OPTIONS,
+  P2P_OUTCOME_OPTIONS,
+  RETRO_OUTCOME_OPTIONS,
+  buildAppealPayload,
+  buildClearAppealPayload,
+  buildClearDenialPayload,
+  buildClearP2PPayload,
+  buildClearRetroPayload,
+  buildDenialPayload,
+  buildP2PPayload,
+  buildRetroPayload,
+  confirmClear,
+  formatDate,
+  getAppealFormFromAuth,
+  getDenialFormFromAuth,
+  getFollowUpItems,
+  getP2PFormFromAuth,
+  getRetroFormFromAuth,
+  isOverdue,
+  type AppealFormState,
+  type DenialFormState,
+  type P2PFormState,
+  type RetroFormState,
+} from "./denialsPipeline/followUpModels";
 
 interface DenialsPipelinePageProps {
   data: AuthRequest[];
@@ -15,329 +40,6 @@ interface DenialsPipelinePageProps {
   onSelectAuth: (auth: AuthRequest) => void;
   onClearSelectedAuth: () => void;
   onAuthUpdated: (auth: AuthRequest) => void;
-}
-
-interface DenialFormState {
-  denialReasonCategory: string;
-  denialDate: string;
-  denialThroughDate: string;
-  denialLevelOfCare: string;
-  denialSource: string;
-  denialReasonNotes: string;
-  denialPreventionNotes: string;
-}
-
-interface P2PFormState {
-  p2pRequested: boolean;
-  p2pScheduledAt: string;
-  p2pDeadline: string;
-  p2pOutcome: string;
-  p2pReviewer: string;
-  p2pNotes: string;
-}
-
-interface AppealFormState {
-  appealSubmitted: boolean;
-  appealDeadline: string;
-  appealOutcome: string;
-  appealNotes: string;
-}
-
-interface RetroFormState {
-  retroRequested: boolean;
-  retroDeadline: string;
-  retroOutcome: string;
-  retroNotes: string;
-}
-
-const DENIAL_REASON_OPTIONS = [
-  "",
-  "Not Medically Necessary",
-  "Insufficient Clinical Documentation",
-  "Lack of Progress",
-  "Detox Scores Too Low",
-  "Lower LOC Recommended",
-  "Downcertified to Lower LOC",
-  "No Active Treatment Needs",
-  "Administrative Issue",
-  "Timely Filing / Late Submission",
-  "Benefit Issue",
-  "Other",
-];
-
-const DENIAL_SOURCE_OPTIONS = [
-  "",
-  "Initial Auth",
-  "Concurrent Auth",
-  "Retro Auth",
-  "Appeal",
-  "Other",
-];
-
-const P2P_OUTCOME_OPTIONS = [
-  "",
-  "Pending",
-  "Approved",
-  "Denied",
-  "Upheld",
-  "Overturned",
-  "Withdrawn",
-  "Other",
-];
-
-const APPEAL_OUTCOME_OPTIONS = [
-  "",
-  "Pending",
-  "Submitted",
-  "Approved",
-  "Denied",
-  "Upheld",
-  "Overturned",
-  "Withdrawn",
-  "Other",
-];
-
-const RETRO_OUTCOME_OPTIONS = [
-  "",
-  "Pending",
-  "Submitted",
-  "Approved",
-  "Denied",
-  "Partially Approved",
-  "Withdrawn",
-  "Other",
-];
-
-function getDenialFormFromAuth(auth: AuthRequest): DenialFormState {
-  return {
-    denialReasonCategory: auth.denialReasonCategory ?? "",
-    denialDate: auth.denialDate ?? "",
-    denialThroughDate: auth.denialThroughDate ?? "",
-    denialLevelOfCare: auth.denialLevelOfCare ?? "",
-    denialSource: auth.denialSource ?? "",
-    denialReasonNotes: auth.denialReasonNotes ?? "",
-    denialPreventionNotes: auth.denialPreventionNotes ?? "",
-  };
-}
-
-function buildDenialPayload(
-  form: DenialFormState
-): Partial<CreateAuthRequestPayload> {
-  return {
-    status: "Denied",
-    denial_reason_category: form.denialReasonCategory,
-    denied_days: 0,
-    denial_date: form.denialDate,
-    denial_through_date: form.denialThroughDate,
-    denial_level_of_care: form.denialLevelOfCare,
-    denial_source: form.denialSource,
-    denial_reason_notes: form.denialReasonNotes,
-    denial_prevention_notes: form.denialPreventionNotes,
-  };
-}
-
-function getP2PFormFromAuth(auth: AuthRequest): P2PFormState {
-  return {
-    p2pRequested: Boolean(auth.p2pRequested),
-    p2pScheduledAt: auth.p2pScheduledAt ?? "",
-    p2pDeadline: auth.p2pDeadline ?? "",
-    p2pOutcome: auth.p2pOutcome ?? "",
-    p2pReviewer: auth.p2pReviewer ?? "",
-    p2pNotes: auth.p2pNotes ?? "",
-  };
-}
-
-function buildP2PPayload(
-  form: P2PFormState
-): Partial<CreateAuthRequestPayload> {
-  return {
-    p2p_requested: form.p2pRequested,
-    p2p_scheduled_at: form.p2pScheduledAt,
-    p2p_deadline: form.p2pDeadline,
-    p2p_outcome: form.p2pOutcome,
-    p2p_reviewer: form.p2pReviewer,
-    p2p_notes: form.p2pNotes,
-  };
-}
-
-function getAppealFormFromAuth(auth: AuthRequest): AppealFormState {
-  return {
-    appealSubmitted: Boolean(auth.appealSubmitted),
-    appealDeadline: auth.appealDeadline ?? "",
-    appealOutcome: auth.appealOutcome ?? "",
-    appealNotes: auth.appealNotes ?? "",
-  };
-}
-
-function buildAppealPayload(
-  form: AppealFormState
-): Partial<CreateAuthRequestPayload> {
-  return {
-    appeal_submitted: form.appealSubmitted,
-    appeal_deadline: form.appealDeadline,
-    appeal_outcome: form.appealOutcome,
-    appeal_notes: form.appealNotes,
-  };
-}
-
-function getRetroFormFromAuth(auth: AuthRequest): RetroFormState {
-  return {
-    retroRequested: Boolean(auth.retroRequested),
-    retroDeadline: auth.retroDeadline ?? "",
-    retroOutcome: auth.retroOutcome ?? "",
-    retroNotes: auth.retroNotes ?? "",
-  };
-}
-
-function buildRetroPayload(
-  form: RetroFormState
-): Partial<CreateAuthRequestPayload> {
-  return {
-    retro_requested: form.retroRequested,
-    retro_deadline: form.retroDeadline,
-    retro_outcome: form.retroOutcome,
-    retro_notes: form.retroNotes,
-  };
-}
-
-function buildClearDenialPayload(): Partial<CreateAuthRequestPayload> {
-  return {
-    status: "In Progress",
-    denial_reason_category: "",
-    denied_days: 0,
-    denial_date: "",
-    denial_through_date: "",
-    denial_level_of_care: "",
-    denial_source: "",
-    denial_reason_notes: "",
-    denial_prevention_notes: "",
-  };
-}
-
-function buildClearP2PPayload(): Partial<CreateAuthRequestPayload> {
-  return {
-    p2p_requested: false,
-    p2p_scheduled_at: "",
-    p2p_deadline: "",
-    p2p_outcome: "",
-    p2p_reviewer: "",
-    p2p_notes: "",
-  };
-}
-
-function buildClearAppealPayload(): Partial<CreateAuthRequestPayload> {
-  return {
-    appeal_submitted: false,
-    appeal_deadline: "",
-    appeal_outcome: "",
-    appeal_notes: "",
-  };
-}
-
-function buildClearRetroPayload(): Partial<CreateAuthRequestPayload> {
-  return {
-    retro_requested: false,
-    retro_deadline: "",
-    retro_outcome: "",
-    retro_notes: "",
-  };
-}
-
-type FollowUpType = "Denial" | "P2P" | "Appeal" | "Retro Auth";
-
-interface FollowUpListItem {
-  auth: AuthRequest;
-  type: FollowUpType;
-  dueDate: string;
-  reason: string;
-  outcome: string;
-}
-
-function getFollowUpItems(data: AuthRequest[]): FollowUpListItem[] {
-  return data
-    .flatMap((auth) => {
-      const items: FollowUpListItem[] = [];
-
-      if (auth.status === "Denied" || auth.denialReasonCategory) {
-        items.push({
-          auth,
-          type: "Denial",
-          dueDate: auth.denialThroughDate || auth.denialDate || "",
-          reason: auth.denialReasonCategory || "Denial recorded",
-          outcome: auth.denialSource || "",
-        });
-      }
-
-      if (auth.p2pRequested) {
-        items.push({
-          auth,
-          type: "P2P",
-          dueDate: auth.p2pDeadline || "",
-          reason: "P2P requested",
-          outcome: auth.p2pOutcome || "",
-        });
-      }
-
-      if (auth.appealSubmitted) {
-        items.push({
-          auth,
-          type: "Appeal",
-          dueDate: auth.appealDeadline || "",
-          reason: "Appeal submitted",
-          outcome: auth.appealOutcome || "",
-        });
-      }
-
-      if (auth.retroRequested) {
-        items.push({
-          auth,
-          type: "Retro Auth",
-          dueDate: auth.retroDeadline || "",
-          reason: "Retro auth requested",
-          outcome: auth.retroOutcome || "",
-        });
-      }
-
-      return items;
-    })
-    .sort((firstItem, secondItem) => {
-      const firstDate = firstItem.dueDate || "9999-12-31";
-      const secondDate = secondItem.dueDate || "9999-12-31";
-
-      return firstDate.localeCompare(secondDate);
-    });
-}
-
-function formatDate(value: string) {
-  if (!value) {
-    return "No due date";
-  }
-
-  const date = new Date(`${value}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString();
-}
-
-function confirmClear(label: string) {
-  return window.confirm(
-    `Clear ${label} details for this authorization? This will also remove the synced timeline event.`
-  );
-}
-
-function isOverdue(value: string) {
-  if (!value) {
-    return false;
-  }
-
-  const dueDate = new Date(`${value}T00:00:00`);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  return !Number.isNaN(dueDate.getTime()) && dueDate < today;
 }
 
 export function DenialsPipelinePage({
@@ -820,39 +522,28 @@ export function DenialsPipelinePage({
                     : "border-gray-300 bg-white text-gray-900"
                 )}
               />
+              <p
+                className={cn(
+                  "text-xs",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Optional. Use this only when the payer gives a denied-through
+                date.
+              </p>
             </label>
 
             <label className="space-y-1 text-sm">
               <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
                 Denied LOC
               </span>
-              <input
-                type="text"
+              <select
                 value={denialForm.denialLevelOfCare}
                 onChange={(event) =>
                   handleDenialFieldChange(
                     "denialLevelOfCare",
                     event.target.value
                   )
-                }
-                placeholder="RTC, PHP, IOP, DTX, etc."
-                className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
-                  darkMode
-                    ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
-                    : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
-                )}
-              />
-            </label>
-
-            <label className="space-y-1 text-sm">
-              <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
-                Denial Source
-              </span>
-              <select
-                value={denialForm.denialSource}
-                onChange={(event) =>
-                  handleDenialFieldChange("denialSource", event.target.value)
                 }
                 className={cn(
                   "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
@@ -861,7 +552,7 @@ export function DenialsPipelinePage({
                     : "border-gray-300 bg-white text-gray-900"
                 )}
               >
-                {DENIAL_SOURCE_OPTIONS.map((option) => (
+                {DENIAL_LEVEL_OF_CARE_OPTIONS.map((option) => (
                   <option key={option || "blank"} value={option}>
                     {option || "Not selected"}
                   </option>
@@ -983,8 +674,8 @@ export function DenialsPipelinePage({
                 darkMode ? "text-gray-400" : "text-gray-600"
               )}
             >
-              Track peer review scheduling, deadline, outcome, reviewer, and
-              notes for this authorization.
+              Track peer review scheduling, follow-up date, outcome, reviewer,
+              and notes for this authorization.
             </p>
           </div>
 
@@ -1038,7 +729,7 @@ export function DenialsPipelinePage({
 
             <label className="space-y-1 text-sm">
               <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
-                P2P Deadline
+                P2P Follow-up Date
               </span>
               <input
                 type="date"
@@ -1053,6 +744,15 @@ export function DenialsPipelinePage({
                     : "border-gray-300 bg-white text-gray-900"
                 )}
               />
+              <p
+                className={cn(
+                  "text-xs",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Optional. Use this only if you need a separate follow-up date
+                beyond the scheduled peer review time.
+              </p>
             </label>
 
             <label className="space-y-1 text-sm">
@@ -1356,8 +1056,8 @@ export function DenialsPipelinePage({
                 darkMode ? "text-gray-400" : "text-gray-600"
               )}
             >
-              Track retro authorization submission, deadline, outcome, and notes
-              for this authorization.
+              Track retro authorization submission, follow-up date, outcome, and
+              notes for this authorization.
             </p>
           </div>
 
@@ -1392,7 +1092,7 @@ export function DenialsPipelinePage({
 
             <label className="space-y-1 text-sm">
               <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
-                Retro Auth Deadline
+                Retro Follow-up Date
               </span>
               <input
                 type="date"
@@ -1407,6 +1107,15 @@ export function DenialsPipelinePage({
                     : "border-gray-300 bg-white text-gray-900"
                 )}
               />
+              <p
+                className={cn(
+                  "text-xs",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Optional. Use this to track when you want to follow up or submit
+                the retro authorization by.
+              </p>
             </label>
 
             <label className="space-y-1 text-sm md:col-span-2">
