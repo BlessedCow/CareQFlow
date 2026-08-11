@@ -278,7 +278,7 @@ export function FollowUpFormSections({
                   : "bg-red-50 text-red-700 hover:bg-red-100"
               )}
             >
-              Clear Denial Details
+              Delete Denial Details
             </button>
             <button
               type="button"
@@ -491,7 +491,7 @@ export function FollowUpFormSections({
                   : "bg-red-50 text-red-700 hover:bg-red-100"
               )}
             >
-              Clear P2P Details
+              Delete P2P Details
             </button>
             <button
               type="button"
@@ -831,7 +831,7 @@ export function FollowUpFormSections({
                   : "bg-red-50 text-red-700 hover:bg-red-100"
               )}
             >
-              Clear Retro Auth Details
+              Delete Retro Auth Details
             </button>
 
             <button
