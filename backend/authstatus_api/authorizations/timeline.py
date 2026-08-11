@@ -93,7 +93,7 @@ def status_from_timeline_event(
     }:
         return "P2P"
 
-    if event_type == "appeal" or outcome in {"appeal pending", "pending"}:
+    if event_type == "appeal" or outcome in {"appeal pending"}:
         return "Appealed"
 
     if outcome == "no pa required":

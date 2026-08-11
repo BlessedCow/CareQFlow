@@ -375,6 +375,77 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
     assert "Notes: Retro auth needed for gap days." in retro_event["notes"]
 
 
+def test_update_auth_clears_follow_up_timeline_events_when_details_are_removed():
+    created = create_auth(make_payload())
+
+    update_auth(
+        created["id"],
+        {
+            "status": "Denied",
+            "denial_reason_category": "Medical Necessity",
+            "denial_reason_notes": "Payer says RTC criteria not met.",
+            "denial_date": "2026-06-27",
+            "denial_through_date": "2026-06-30",
+            "denial_level_of_care": "RTC",
+            "denial_source": "Concurrent",
+            "p2p_requested": True,
+            "p2p_scheduled_at": "2026-06-28T10:30",
+            "p2p_deadline": "2026-06-28",
+            "p2p_outcome": "Pending",
+            "p2p_reviewer": "Medical Director",
+            "p2p_notes": "P2P requested by facility UR.",
+            "appeal_submitted": True,
+            "appeal_deadline": "2026-07-02",
+            "appeal_outcome": "Pending",
+            "appeal_notes": "Expedited appeal planned.",
+            "retro_requested": True,
+            "retro_deadline": "2026-07-05",
+            "retro_outcome": "Pending",
+            "retro_notes": "Retro auth needed for gap days.",
+        },
+    )
+
+    update_auth(
+        created["id"],
+        {
+            "status": "In Progress",
+            "denial_reason_category": "",
+            "denial_reason_notes": "",
+            "denial_prevention_notes": "",
+            "denied_days": 0,
+            "denial_date": "",
+            "denial_through_date": "",
+            "denial_level_of_care": "",
+            "denial_source": "",
+            "p2p_requested": False,
+            "p2p_scheduled_at": "",
+            "p2p_deadline": "",
+            "p2p_outcome": "",
+            "p2p_reviewer": "",
+            "p2p_notes": "",
+            "appeal_submitted": False,
+            "appeal_deadline": "",
+            "appeal_outcome": "",
+            "appeal_notes": "",
+            "retro_requested": False,
+            "retro_deadline": "",
+            "retro_outcome": "",
+            "retro_notes": "",
+        },
+    )
+
+    events = list_auth_events(created["id"])
+
+    assert events is not None
+    assert not any(
+        event["event_type"] == "Payer Response" and event["outcome"] == "Denied"
+        for event in events
+    )
+    assert not any(event["event_type"] == "Peer Review" for event in events)
+    assert not any(event["event_type"] == "Appeal" for event in events)
+    assert not any(event["event_type"] == "Retro Auth" for event in events)
+
+
 def test_update_auth_returns_none_for_missing_record():
     assert update_auth(999, {"status": "Submitted"}) is None
 
