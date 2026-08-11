@@ -7,6 +7,19 @@ import {
   sortAuthEventsNewestFirst,
 } from "../utils/authEvents";
 
+function getTimelineEventTitle(event: AuthEvent) {
+  const isInitialPendingAnchor =
+    event.eventType === "Initial Authorization" && event.outcome === "Pending";
+
+  if (isInitialPendingAnchor) {
+    return event.eventType;
+  }
+
+  return event.outcome
+    ? `${event.eventType} - ${event.outcome}`
+    : event.eventType;
+}
+
 interface AuthorizationReadOnlyViewProps {
   auth: AuthRequest;
   darkMode: boolean;
@@ -55,6 +68,25 @@ function formatDateOnly(value?: string | null) {
   return date.toLocaleDateString();
 }
 
+function hasDenialFollowUpWork(auth: AuthRequest) {
+  return (
+    auth.status === "Denied" ||
+    auth.status === "P2P" ||
+    auth.status === "Appealed" ||
+    auth.authType === "Retro" ||
+    Boolean(auth.denialReasonCategory) ||
+    Boolean(auth.denialDate) ||
+    Boolean(auth.denialReasonNotes) ||
+    Boolean(auth.p2pRequested) ||
+    Boolean(auth.appealSubmitted) ||
+    Boolean(auth.retroRequested)
+  );
+}
+
+function isDeniedTimelineEvent(event: AuthEvent) {
+  return event.outcome === "Denied";
+}
+
 export function AuthorizationReadOnlyView({
   auth,
   darkMode,
@@ -75,6 +107,9 @@ export function AuthorizationReadOnlyView({
     darkMode ? "text-gray-100" : "text-gray-900"
   );
   const sortedEvents = sortAuthEventsNewestFirst(events);
+  const showDenialFollowUpAction =
+    canEdit &&
+    (hasDenialFollowUpWork(auth) || sortedEvents.some(isDeniedTimelineEvent));
 
   return (
     <section
@@ -119,7 +154,7 @@ export function AuthorizationReadOnlyView({
             </button>
           )}
 
-          {canEdit && (
+          {showDenialFollowUpAction && (
             <button
               type="button"
               onClick={() => onManageDenialFollowUp(auth)}
@@ -314,8 +349,7 @@ export function AuthorizationReadOnlyView({
                     darkMode ? "text-gray-100" : "text-gray-900"
                   )}
                 >
-                  {event.eventType}
-                  {event.outcome ? ` - ${event.outcome}` : ""}
+                  {getTimelineEventTitle(event)}
                 </div>
 
                 <div
@@ -337,6 +371,22 @@ export function AuthorizationReadOnlyView({
                     {event.notes}
                   </p>
                 ) : null}
+                {canEdit && isDeniedTimelineEvent(event) && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => onManageDenialFollowUp(auth)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+                        darkMode
+                          ? "border-amber-800 bg-amber-950/30 text-amber-200 hover:bg-amber-900/40"
+                          : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      )}
+                    >
+                      Track Denial / P2P / Retro
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

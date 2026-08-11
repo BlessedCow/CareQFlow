@@ -289,6 +289,23 @@ def _retro_timeline_notes(auth_record: dict[str, Any]) -> str:
     return " ".join(notes)
 
 
+def _approval_timeline_event_date(
+    payload: dict[str, Any],
+    auth_record: dict[str, Any],
+) -> str:
+    explicit_decision_at = str(payload.get("decision_at") or "").strip()
+
+    if explicit_decision_at:
+        return explicit_decision_at[:10]
+
+    return _timeline_date_from(
+        auth_record,
+        "auth_start_date",
+        "review_due_date",
+        "auth_end_date",
+    )
+
+
 def _timeline_date_from(
     auth_record: dict[str, Any],
     *field_names: str,
@@ -576,9 +593,7 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
             auth_id,
             {
                 "event_type": "Payer Response",
-                "event_date": str(
-                    updated_auth.get("decision_at") or current_timestamp()
-                )[:10],
+                "event_date": _approval_timeline_event_date(payload, updated_auth),
                 "event_time": "",
                 "outcome": "Approved",
                 "notes": "Authorization marked approved.",

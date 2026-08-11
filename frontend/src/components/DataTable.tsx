@@ -230,7 +230,12 @@ function getWorkflowCue(row: AuthRequest) {
     return "Follow-up needed";
   }
 
-  if (status === "Approved" && row.approvedDays < row.requestedDays) {
+  if (
+    status === "Approved" &&
+    row.requestedDays > 0 &&
+    row.approvedDays > 0 &&
+    row.approvedDays < row.requestedDays
+  ) {
     return "Partial approval";
   }
 

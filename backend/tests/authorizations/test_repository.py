@@ -197,6 +197,7 @@ def test_update_auth_to_approved_preserves_approved_days():
     )
 
     assert approved_event is not None
+    assert approved_event["event_date"] == "2026-06-25"
     assert approved_event["approved_days"] == 5
     assert approved_event["requested_days"] == 7
     assert approved_event["auth_end_date"] == "2026-06-29"

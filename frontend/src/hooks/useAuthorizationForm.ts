@@ -72,7 +72,7 @@ export const DEFAULT_AUTH_FORM: NewAuthFormState = {
   approvedDays: "",
   insurance: "",
   authType: "Initial",
-  submissionMethod: "",
+  submissionMethod: "Web Portal",
   phoneNumber: "",
   phoneExtension: "",
   faxNumber: "",

@@ -43,6 +43,7 @@ interface AuthTimelineSectionProps {
   onCancelDeleteEvent: () => void;
   onConfirmDeleteEvent: (eventId: number) => void;
   onStartContinuedStay: () => void;
+  onManageDenialFollowUp?: () => void;
 }
 
 const EVENT_TYPES = [
@@ -81,6 +82,23 @@ const OUTCOMES = [
   "Other",
 ];
 
+function isDeniedTimelineEvent(event: AuthEvent) {
+  return event.outcome === "Denied";
+}
+
+function getTimelineEventTitle(event: AuthEvent) {
+  const isInitialPendingAnchor =
+    event.eventType === "Initial Authorization" && event.outcome === "Pending";
+
+  if (isInitialPendingAnchor) {
+    return event.eventType;
+  }
+
+  return event.outcome
+    ? `${event.eventType} - ${event.outcome}`
+    : event.eventType;
+}
+
 export function AuthTimelineSection({
   darkMode,
   events,
@@ -99,6 +117,7 @@ export function AuthTimelineSection({
   onCancelDeleteEvent,
   onConfirmDeleteEvent,
   onStartContinuedStay,
+  onManageDenialFollowUp,
 }: AuthTimelineSectionProps) {
   const sortedEvents = sortAuthEventsNewestFirst(events);
   const [showTimelineNotes, setShowTimelineNotes] = useState(true);
@@ -589,8 +608,7 @@ export function AuthTimelineSection({
                         darkMode ? "text-gray-100" : "text-gray-900"
                       )}
                     >
-                      {event.eventType}
-                      {event.outcome ? ` - ${event.outcome}` : ""}
+                      {getTimelineEventTitle(event)}
                     </div>
                     <div
                       className={cn(
@@ -717,6 +735,22 @@ export function AuthTimelineSection({
                     {event.notes}
                   </p>
                 ) : null}
+                {onManageDenialFollowUp && isDeniedTimelineEvent(event) && (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={onManageDenialFollowUp}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+                        darkMode
+                          ? "border-amber-800 bg-amber-950/30 text-amber-200 hover:bg-amber-900/40"
+                          : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      )}
+                    >
+                      Track Denial / P2P / Retro
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })

@@ -147,6 +147,10 @@ export function AuthorizationsPage({
   onConfirmDeleteTimelineEvent,
   onStartContinuedStay,
 }: AuthorizationsPageProps) {
+  const editingAuth = editingAuthId
+    ? filteredData.find((auth) => auth.id === editingAuthId) ?? null
+    : null;
+
   return (
     <>
       {isLoadingAuths && (
@@ -422,6 +426,11 @@ export function AuthorizationsPage({
                     onCancelDeleteEvent={onCancelDeleteTimelineEvent}
                     onConfirmDeleteEvent={onConfirmDeleteTimelineEvent}
                     onStartContinuedStay={onStartContinuedStay}
+                    onManageDenialFollowUp={
+                      editingAuth
+                        ? () => onManageDenialFollowUp(editingAuth)
+                        : undefined
+                    }
                   />
                 )}
               </div>
