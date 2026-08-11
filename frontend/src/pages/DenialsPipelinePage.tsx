@@ -200,6 +200,49 @@ function buildRetroPayload(
   };
 }
 
+function buildClearDenialPayload(): Partial<CreateAuthRequestPayload> {
+  return {
+    status: "In Progress",
+    denial_reason_category: "",
+    denied_days: 0,
+    denial_date: "",
+    denial_through_date: "",
+    denial_level_of_care: "",
+    denial_source: "",
+    denial_reason_notes: "",
+    denial_prevention_notes: "",
+  };
+}
+
+function buildClearP2PPayload(): Partial<CreateAuthRequestPayload> {
+  return {
+    p2p_requested: false,
+    p2p_scheduled_at: "",
+    p2p_deadline: "",
+    p2p_outcome: "",
+    p2p_reviewer: "",
+    p2p_notes: "",
+  };
+}
+
+function buildClearAppealPayload(): Partial<CreateAuthRequestPayload> {
+  return {
+    appeal_submitted: false,
+    appeal_deadline: "",
+    appeal_outcome: "",
+    appeal_notes: "",
+  };
+}
+
+function buildClearRetroPayload(): Partial<CreateAuthRequestPayload> {
+  return {
+    retro_requested: false,
+    retro_deadline: "",
+    retro_outcome: "",
+    retro_notes: "",
+  };
+}
+
 type FollowUpType = "Denial" | "P2P" | "Appeal" | "Retro Auth";
 
 interface FollowUpListItem {
@@ -277,6 +320,12 @@ function formatDate(value: string) {
   }
 
   return date.toLocaleDateString();
+}
+
+function confirmClear(label: string) {
+  return window.confirm(
+    `Clear ${label} details for this authorization? This will also remove the synced timeline event.`
+  );
 }
 
 function isOverdue(value: string) {
@@ -497,6 +546,112 @@ export function DenialsPipelinePage({
         error instanceof Error
           ? error.message
           : "Unable to save retro auth details."
+      );
+    } finally {
+      setIsSavingRetro(false);
+    }
+  };
+
+  const handleClearDenial = async () => {
+    if (!selectedAuth || !confirmClear("denial")) {
+      return;
+    }
+
+    setIsSavingDenial(true);
+    setDenialError(null);
+
+    try {
+      const updatedAuth = await updateAuthRequest(
+        selectedAuth.id,
+        buildClearDenialPayload()
+      );
+
+      onAuthUpdated(updatedAuth);
+      setDenialForm(null);
+    } catch (error) {
+      setDenialError(
+        error instanceof Error
+          ? error.message
+          : "Unable to clear denial details."
+      );
+    } finally {
+      setIsSavingDenial(false);
+    }
+  };
+
+  const handleClearP2P = async () => {
+    if (!selectedAuth || !confirmClear("P2P")) {
+      return;
+    }
+
+    setIsSavingP2P(true);
+    setP2PError(null);
+
+    try {
+      const updatedAuth = await updateAuthRequest(
+        selectedAuth.id,
+        buildClearP2PPayload()
+      );
+
+      onAuthUpdated(updatedAuth);
+      setP2PForm(null);
+    } catch (error) {
+      setP2PError(
+        error instanceof Error ? error.message : "Unable to clear P2P details."
+      );
+    } finally {
+      setIsSavingP2P(false);
+    }
+  };
+
+  const handleClearAppeal = async () => {
+    if (!selectedAuth || !confirmClear("appeal")) {
+      return;
+    }
+
+    setIsSavingAppeal(true);
+    setAppealError(null);
+
+    try {
+      const updatedAuth = await updateAuthRequest(
+        selectedAuth.id,
+        buildClearAppealPayload()
+      );
+
+      onAuthUpdated(updatedAuth);
+      setAppealForm(null);
+    } catch (error) {
+      setAppealError(
+        error instanceof Error
+          ? error.message
+          : "Unable to clear appeal details."
+      );
+    } finally {
+      setIsSavingAppeal(false);
+    }
+  };
+
+  const handleClearRetro = async () => {
+    if (!selectedAuth || !confirmClear("retro auth")) {
+      return;
+    }
+
+    setIsSavingRetro(true);
+    setRetroError(null);
+
+    try {
+      const updatedAuth = await updateAuthRequest(
+        selectedAuth.id,
+        buildClearRetroPayload()
+      );
+
+      onAuthUpdated(updatedAuth);
+      setRetroForm(null);
+    } catch (error) {
+      setRetroError(
+        error instanceof Error
+          ? error.message
+          : "Unable to clear retro auth details."
       );
     } finally {
       setIsSavingRetro(false);
@@ -764,6 +919,21 @@ export function DenialsPipelinePage({
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
+              onClick={() => {
+                void handleClearDenial();
+              }}
+              disabled={isSavingDenial}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium",
+                darkMode
+                  ? "bg-red-950 text-red-200 hover:bg-red-900"
+                  : "bg-red-50 text-red-700 hover:bg-red-100"
+              )}
+            >
+              Clear Denial Details
+            </button>
+            <button
+              type="button"
               onClick={onClearSelectedAuth}
               className={cn(
                 "rounded-lg px-4 py-2 text-sm font-medium",
@@ -953,6 +1123,21 @@ export function DenialsPipelinePage({
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
+              onClick={() => {
+                void handleClearP2P();
+              }}
+              disabled={isSavingP2P}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium",
+                darkMode
+                  ? "bg-red-950 text-red-200 hover:bg-red-900"
+                  : "bg-red-50 text-red-700 hover:bg-red-100"
+              )}
+            >
+              Clear P2P Details
+            </button>
+            <button
+              type="button"
               onClick={onClearSelectedAuth}
               className={cn(
                 "rounded-lg px-4 py-2 text-sm font-medium",
@@ -1106,6 +1291,22 @@ export function DenialsPipelinePage({
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
+              onClick={() => {
+                void handleClearAppeal();
+              }}
+              disabled={isSavingAppeal}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium",
+                darkMode
+                  ? "bg-red-950 text-red-200 hover:bg-red-900"
+                  : "bg-red-50 text-red-700 hover:bg-red-100"
+              )}
+            >
+              Clear Appeal Details
+            </button>
+
+            <button
+              type="button"
               onClick={onClearSelectedAuth}
               className={cn(
                 "rounded-lg px-4 py-2 text-sm font-medium",
@@ -1254,6 +1455,22 @@ export function DenialsPipelinePage({
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void handleClearRetro();
+              }}
+              disabled={isSavingRetro}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium",
+                darkMode
+                  ? "bg-red-950 text-red-200 hover:bg-red-900"
+                  : "bg-red-50 text-red-700 hover:bg-red-100"
+              )}
+            >
+              Clear Retro Auth Details
+            </button>
+
             <button
               type="button"
               onClick={onClearSelectedAuth}
