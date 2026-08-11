@@ -15,6 +15,11 @@ import {
   type DatedWorkflowItem,
 } from "./upcomingWorkflow/DatedWorkflowItems";
 
+import {
+  WorkflowStatusItems,
+  type WorkflowStatusItem,
+} from "./upcomingWorkflow/WorkflowStatusItems";
+
 interface UpcomingWorkflowCardProps {
   data: AuthRequest[];
   darkMode: boolean;
@@ -30,22 +35,6 @@ type WorkflowFilterKey =
   | "approved";
 
 type WorkflowFilterSettings = Record<WorkflowFilterKey, boolean>;
-
-interface WorkflowItem {
-  filterKey: WorkflowFilterKey;
-  label: string;
-  count: number;
-  description: string;
-  icon: typeof Clock;
-  tone:
-    | "pending"
-    | "p2p"
-    | "appeal"
-    | "denied"
-    | "complete"
-    | "due"
-    | "overdue";
-}
 
 const DEFAULT_WORKFLOW_FILTER_SETTINGS: WorkflowFilterSettings = {
   reviewDue: true,
@@ -193,7 +182,7 @@ function getWorkflowItems(
   data: AuthRequest[],
   datedItems: DatedWorkflowItem[],
   workflowFilters: WorkflowFilterSettings
-): WorkflowItem[] {
+): WorkflowStatusItem[] {
   const overdueCount = datedItems.filter((item) => item.daysUntil < 0).length;
   const dueSoonCount = datedItems.filter((item) => item.daysUntil >= 0).length;
 
@@ -207,12 +196,11 @@ function getWorkflowItems(
     (item) => item.status === "Approved"
   ).length;
 
-  const items: WorkflowItem[] = [];
+  const items: WorkflowStatusItem[] = [];
 
   if (workflowFilters.reviewDue || workflowFilters.lcd) {
     items.push(
       {
-        filterKey: "reviewDue",
         label: "Overdue Items",
         count: overdueCount,
         description: "Review dates or LCDs that have already passed.",
@@ -220,7 +208,6 @@ function getWorkflowItems(
         tone: "overdue",
       },
       {
-        filterKey: "lcd",
         label: "Due Soon",
         count: dueSoonCount,
         description: "Reviews or LCDs due within the next 7 days.",
@@ -232,7 +219,6 @@ function getWorkflowItems(
 
   if (workflowFilters.pending) {
     items.push({
-      filterKey: "pending",
       label: "Pending Auths",
       count: pendingCount,
       description: "Awaiting payer response or next action.",
@@ -243,7 +229,6 @@ function getWorkflowItems(
 
   if (workflowFilters.p2p) {
     items.push({
-      filterKey: "p2p",
       label: "P2P Needed",
       count: p2pCount,
       description: "Peer review or escalation workflow needed.",
@@ -254,7 +239,6 @@ function getWorkflowItems(
 
   if (workflowFilters.appeals) {
     items.push({
-      filterKey: "appeals",
       label: "Appeals Pending",
       count: appealedCount,
       description: "Cases currently in appeal status.",
@@ -265,7 +249,6 @@ function getWorkflowItems(
 
   if (workflowFilters.denied) {
     items.push({
-      filterKey: "denied",
       label: "Denied Auths",
       count: deniedCount,
       description: "Denied cases that may need follow-up.",
@@ -276,7 +259,6 @@ function getWorkflowItems(
 
   if (workflowFilters.approved) {
     items.push({
-      filterKey: "approved",
       label: "Approved Auths",
       count: approvedCount,
       description: "Completed approvals in the selected filters.",
@@ -289,7 +271,7 @@ function getWorkflowItems(
 }
 
 function getToneClasses(
-  tone: WorkflowItem["tone"] | DatedWorkflowItem["tone"],
+  tone: WorkflowStatusItem["tone"] | DatedWorkflowItem["tone"],
   darkMode: boolean
 ) {
   if (tone === "overdue") {
@@ -353,7 +335,6 @@ export function UpcomingWorkflowCard({
     datedWorkflowItems,
     workflowFilters
   );
-  const activeItems = workflowItems.filter((item) => item.count > 0);
 
   const handleToggleWorkflowFilter = (filterKey: WorkflowFilterKey) => {
     setWorkflowFilters((currentFilters) => ({
@@ -442,53 +423,11 @@ export function UpcomingWorkflowCard({
         getToneClasses={getToneClasses}
       />
 
-      <div className="space-y-3">
-        {workflowItems.map((item) => {
-          const Icon = item.icon;
-
-          return (
-            <div
-              key={item.label}
-              className={cn(
-                "rounded-xl border px-4 py-3 transition-colors",
-                item.count > 0
-                  ? getToneClasses(item.tone, darkMode)
-                  : darkMode
-                  ? "border-gray-800 bg-gray-950/40 text-gray-500"
-                  : "border-gray-200 bg-gray-50 text-gray-500"
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <Icon className="mt-0.5 h-5 w-5 shrink-0" />
-
-                  <div>
-                    <p className="text-sm font-semibold">{item.label}</p>
-                    <p className="mt-1 text-xs opacity-80">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-
-                <span className="text-2xl font-bold leading-none">
-                  {item.count}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {activeItems.length === 0 && (
-        <p
-          className={cn(
-            "pt-2 text-center text-sm",
-            darkMode ? "text-gray-400" : "text-gray-500"
-          )}
-        >
-          No active follow-up items in the selected workflow filters.
-        </p>
-      )}
+      <WorkflowStatusItems
+        items={workflowItems}
+        darkMode={darkMode}
+        getToneClasses={getToneClasses}
+      />
     </div>
   );
 }
