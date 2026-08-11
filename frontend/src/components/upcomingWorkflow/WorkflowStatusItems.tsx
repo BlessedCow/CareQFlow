@@ -1,21 +1,7 @@
-import type { LucideIcon } from "lucide-react";
 
 import { cn } from "../../utils/cn";
 
-export interface WorkflowStatusItem {
-  label: string;
-  count: number;
-  description: string;
-  icon: LucideIcon;
-  tone:
-    | "pending"
-    | "p2p"
-    | "appeal"
-    | "denied"
-    | "complete"
-    | "due"
-    | "overdue";
-}
+import type { WorkflowStatusItem } from "./workflowModels";
 
 interface WorkflowStatusItemsProps {
   items: WorkflowStatusItem[];

@@ -1,14 +1,5 @@
-import type { AuthRequest } from "../../types/auth";
 import { cn } from "../../utils/cn";
-
-export interface DatedWorkflowItem {
-  filterKey: "reviewDue" | "lcd";
-  auth: AuthRequest;
-  label: string;
-  dateLabel: string;
-  daysUntil: number;
-  tone: "due" | "overdue";
-}
+import type { DatedWorkflowItem } from "./workflowModels";
 
 interface DatedWorkflowItemsProps {
   items: DatedWorkflowItem[];

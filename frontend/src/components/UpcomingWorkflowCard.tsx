@@ -1,40 +1,26 @@
 import { useEffect, useState } from "react";
-import {
-  AlertCircle,
-  CalendarClock,
-  CheckCircle2,
-  Clock,
-  FileWarning,
-  RefreshCw,
-} from "lucide-react";
 
 import { AuthRequest } from "../types/auth";
 import { cn } from "../utils/cn";
-import {
-  DatedWorkflowItems,
-  type DatedWorkflowItem,
-} from "./upcomingWorkflow/DatedWorkflowItems";
+import { DatedWorkflowItems } from "./upcomingWorkflow/DatedWorkflowItems";
+
+import { WorkflowStatusItems } from "./upcomingWorkflow/WorkflowStatusItems";
+
+import { WorkflowFilterControls } from "./upcomingWorkflow/WorkflowFilterControls";
 
 import {
-  WorkflowStatusItems,
+  getDatedWorkflowItems,
+  getWorkflowItems,
+  type DatedWorkflowItem,
+  type WorkflowFilterKey,
+  type WorkflowFilterSettings,
   type WorkflowStatusItem,
-} from "./upcomingWorkflow/WorkflowStatusItems";
+} from "./upcomingWorkflow/workflowModels";
 
 interface UpcomingWorkflowCardProps {
   data: AuthRequest[];
   darkMode: boolean;
 }
-
-type WorkflowFilterKey =
-  | "reviewDue"
-  | "lcd"
-  | "pending"
-  | "p2p"
-  | "appeals"
-  | "denied"
-  | "approved";
-
-type WorkflowFilterSettings = Record<WorkflowFilterKey, boolean>;
 
 const DEFAULT_WORKFLOW_FILTER_SETTINGS: WorkflowFilterSettings = {
   reviewDue: true,
@@ -47,16 +33,6 @@ const DEFAULT_WORKFLOW_FILTER_SETTINGS: WorkflowFilterSettings = {
 };
 
 const WORKFLOW_FILTER_STORAGE_KEY = "carequeue.upcomingWorkflowFilters";
-
-const WORKFLOW_FILTER_LABELS: Record<WorkflowFilterKey, string> = {
-  reviewDue: "Review Due",
-  lcd: "LCD",
-  pending: "Pending Auths",
-  p2p: "P2P Needed",
-  appeals: "Appeals Pending",
-  denied: "Denied Auths",
-  approved: "Approved Auths",
-};
 
 function loadWorkflowFilterSettings(): WorkflowFilterSettings {
   try {
@@ -79,195 +55,6 @@ function loadWorkflowFilterSettings(): WorkflowFilterSettings {
   } catch {
     return DEFAULT_WORKFLOW_FILTER_SETTINGS;
   }
-}
-
-function parseDateOnly(value?: string) {
-  if (!value) {
-    return null;
-  }
-
-  const [year, month, day] = value.split("-").map(Number);
-
-  if (!year || !month || !day) {
-    return null;
-  }
-
-  return new Date(year, month - 1, day);
-}
-
-function startOfToday() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
-
-function getDaysUntil(value?: string) {
-  const date = parseDateOnly(value);
-
-  if (!date) {
-    return null;
-  }
-
-  const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  return Math.round(
-    (date.getTime() - startOfToday().getTime()) / millisecondsPerDay
-  );
-}
-
-function formatDate(value?: string) {
-  const date = parseDateOnly(value);
-
-  if (!date) {
-    return "No date";
-  }
-
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function isActiveWorkflowStatus(item: AuthRequest) {
-  return !["Completed", "Discharged", "No PA Required"].includes(item.status);
-}
-
-function getDatedWorkflowItems(
-  data: AuthRequest[],
-  workflowFilters: WorkflowFilterSettings
-): DatedWorkflowItem[] {
-  const items: DatedWorkflowItem[] = [];
-
-  data.filter(isActiveWorkflowStatus).forEach((auth) => {
-    const reviewDaysUntil = getDaysUntil(auth.reviewDueDate);
-    const lcdDaysUntil = getDaysUntil(auth.authEndDate);
-    const shouldShowReviewDue =
-      workflowFilters.reviewDue &&
-      reviewDaysUntil !== null &&
-      reviewDaysUntil <= 7;
-    const shouldShowLcd =
-      workflowFilters.lcd && lcdDaysUntil !== null && lcdDaysUntil <= 7;
-    const lcdMatchesReviewDue =
-      Boolean(auth.reviewDueDate) && auth.reviewDueDate === auth.authEndDate;
-
-    if (shouldShowReviewDue) {
-      items.push({
-        filterKey: "reviewDue",
-        auth,
-        label: "Review Due",
-        dateLabel: formatDate(auth.reviewDueDate),
-        daysUntil: reviewDaysUntil,
-        tone: reviewDaysUntil < 0 ? "overdue" : "due",
-      });
-    }
-
-    if (shouldShowLcd && !lcdMatchesReviewDue) {
-      items.push({
-        filterKey: "lcd",
-        auth,
-        label: "LCD",
-        dateLabel: formatDate(auth.authEndDate),
-        daysUntil: lcdDaysUntil,
-        tone: lcdDaysUntil < 0 ? "overdue" : "due",
-      });
-    }
-  });
-
-  return items
-    .sort((firstItem, secondItem) => firstItem.daysUntil - secondItem.daysUntil)
-    .slice(0, 5);
-}
-
-function getWorkflowItems(
-  data: AuthRequest[],
-  datedItems: DatedWorkflowItem[],
-  workflowFilters: WorkflowFilterSettings
-): WorkflowStatusItem[] {
-  const overdueCount = datedItems.filter((item) => item.daysUntil < 0).length;
-  const dueSoonCount = datedItems.filter((item) => item.daysUntil >= 0).length;
-
-  const pendingCount = data.filter((item) => item.status === "Pending").length;
-  const p2pCount = data.filter((item) => item.status === "P2P").length;
-  const appealedCount = data.filter(
-    (item) => item.status === "Appealed"
-  ).length;
-  const deniedCount = data.filter((item) => item.status === "Denied").length;
-  const approvedCount = data.filter(
-    (item) => item.status === "Approved"
-  ).length;
-
-  const items: WorkflowStatusItem[] = [];
-
-  if (workflowFilters.reviewDue || workflowFilters.lcd) {
-    items.push(
-      {
-        label: "Overdue Items",
-        count: overdueCount,
-        description: "Review dates or LCDs that have already passed.",
-        icon: AlertCircle,
-        tone: "overdue",
-      },
-      {
-        label: "Due Soon",
-        count: dueSoonCount,
-        description: "Reviews or LCDs due within the next 7 days.",
-        icon: CalendarClock,
-        tone: "due",
-      }
-    );
-  }
-
-  if (workflowFilters.pending) {
-    items.push({
-      label: "Pending Auths",
-      count: pendingCount,
-      description: "Awaiting payer response or next action.",
-      icon: Clock,
-      tone: "pending",
-    });
-  }
-
-  if (workflowFilters.p2p) {
-    items.push({
-      label: "P2P Needed",
-      count: p2pCount,
-      description: "Peer review or escalation workflow needed.",
-      icon: AlertCircle,
-      tone: "p2p",
-    });
-  }
-
-  if (workflowFilters.appeals) {
-    items.push({
-      label: "Appeals Pending",
-      count: appealedCount,
-      description: "Cases currently in appeal status.",
-      icon: RefreshCw,
-      tone: "appeal",
-    });
-  }
-
-  if (workflowFilters.denied) {
-    items.push({
-      label: "Denied Auths",
-      count: deniedCount,
-      description: "Denied cases that may need follow-up.",
-      icon: FileWarning,
-      tone: "denied",
-    });
-  }
-
-  if (workflowFilters.approved) {
-    items.push({
-      label: "Approved Auths",
-      count: approvedCount,
-      description: "Completed approvals in the selected filters.",
-      icon: CheckCircle2,
-      tone: "complete",
-    });
-  }
-
-  return items;
 }
 
 function getToneClasses(
@@ -364,58 +151,12 @@ export function UpcomingWorkflowCard({
 
   return (
     <div className="space-y-4">
-      <details
-        className={cn(
-          "rounded-xl border px-4 py-3 text-sm",
-          darkMode
-            ? "border-gray-800 bg-gray-950/50"
-            : "border-gray-200 bg-gray-50"
-        )}
-      >
-        <summary className="cursor-pointer font-semibold">
-          Filter workflow items
-        </summary>
-
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {(
-            Object.entries(WORKFLOW_FILTER_LABELS) as [
-              WorkflowFilterKey,
-              string
-            ][]
-          ).map(([filterKey, label]) => (
-            <label
-              key={filterKey}
-              className={cn(
-                "flex cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2",
-                darkMode
-                  ? "border-gray-800 bg-gray-900 text-gray-200"
-                  : "border-gray-200 bg-white text-gray-700"
-              )}
-            >
-              <span>{label}</span>
-              <input
-                type="checkbox"
-                checked={workflowFilters[filterKey]}
-                onChange={() => handleToggleWorkflowFilter(filterKey)}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-            </label>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={handleResetWorkflowFilters}
-          className={cn(
-            "mt-3 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
-            darkMode
-              ? "border-gray-700 text-gray-200 hover:bg-gray-800"
-              : "border-gray-300 text-gray-700 hover:bg-gray-100"
-          )}
-        >
-          Reset workflow filters
-        </button>
-      </details>
+      <WorkflowFilterControls
+        workflowFilters={workflowFilters}
+        darkMode={darkMode}
+        onToggleFilter={handleToggleWorkflowFilter}
+        onResetFilters={handleResetWorkflowFilters}
+      />
 
       <DatedWorkflowItems
         items={datedWorkflowItems}
