@@ -20,8 +20,17 @@ from authstatus_api.security.csrf import (
 )
 from authstatus_api.security.dependencies import (
     AuthenticatedUserDependency,
+    CurrentUserDependency,
     extract_session_token,
     require_role,
+)
+from authstatus_api.security.mfa import (
+    build_totp_provisioning_uri,
+    enable_user_mfa,
+    generate_totp_secret,
+    get_user_mfa_secret,
+    store_user_mfa_secret,
+    verify_totp_code,
 )
 from authstatus_api.security.password_hashing import verify_password
 from authstatus_api.security.password_policy import (
@@ -41,6 +50,11 @@ from authstatus_api.security.schemas import (
     LoginRequest,
     LoginResponse,
     LogoutResponse,
+    MfaEnrollmentConfirmRequest,
+    MfaEnrollmentConfirmResponse,
+    MfaEnrollmentStartRequest,
+    MfaEnrollmentStartResponse,
+    MfaStatusResponse,
     PasswordUpdateResponse,
     SessionResponse,
     UserCreateRequest,
@@ -354,6 +368,136 @@ def change_password(
     return PasswordUpdateResponse(
         password_changed=True,
         sessions_revoked=sessions_revoked,
+    )
+
+
+@router.get(
+    "/mfa/status",
+    response_model=MfaStatusResponse,
+)
+def get_mfa_status(
+    current_user: dict = CurrentUserDependency,
+) -> MfaStatusResponse:
+    secret = get_user_mfa_secret(current_user["id"])
+
+    return MfaStatusResponse(
+        enabled=current_user["mfa_enabled"],
+        enrollment_pending=bool(secret) and not current_user["mfa_enabled"],
+    )
+
+
+@router.post(
+    "/mfa/enroll",
+    response_model=MfaEnrollmentStartResponse,
+)
+def start_mfa_enrollment(
+    payload: MfaEnrollmentStartRequest,
+    request: Request,
+    current_user: dict = CurrentUserDependency,
+) -> MfaEnrollmentStartResponse:
+    if current_user["mfa_enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="MFA is already enabled.",
+        )
+
+    if not verify_password(
+        current_user["password_hash"],
+        payload.current_password,
+    ):
+        record_audit_event(
+            action="security.mfa_enrollment_password_failed",
+            resource_type="user",
+            resource_id=current_user["id"],
+            user=current_user,
+            request=request,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+
+    secret = generate_totp_secret()
+
+    if not store_user_mfa_secret(current_user["id"], secret):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    provisioning_uri = build_totp_provisioning_uri(
+        current_user["username"],
+        secret,
+    )
+
+    record_audit_event(
+        action="security.mfa_enrollment_started",
+        resource_type="user",
+        resource_id=current_user["id"],
+        user=current_user,
+        request=request,
+    )
+
+    return MfaEnrollmentStartResponse(
+        secret=secret,
+        provisioning_uri=provisioning_uri,
+    )
+
+
+@router.post(
+    "/mfa/enroll/confirm",
+    response_model=MfaEnrollmentConfirmResponse,
+)
+def confirm_mfa_enrollment(
+    payload: MfaEnrollmentConfirmRequest,
+    request: Request,
+    current_user: dict = CurrentUserDependency,
+) -> MfaEnrollmentConfirmResponse:
+    if current_user["mfa_enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="MFA is already enabled.",
+        )
+
+    secret = get_user_mfa_secret(current_user["id"])
+
+    if secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="MFA enrollment has not been started.",
+        )
+
+    if not verify_totp_code(secret, payload.code):
+        record_audit_event(
+            action="security.mfa_enrollment_verification_failed",
+            resource_type="user",
+            resource_id=current_user["id"],
+            user=current_user,
+            request=request,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid authentication code.",
+        )
+
+    if not enable_user_mfa(current_user["id"]):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Unable to enable MFA.",
+        )
+
+    record_audit_event(
+        action="security.mfa_enabled",
+        resource_type="user",
+        resource_id=current_user["id"],
+        user=current_user,
+        request=request,
+    )
+
+    return MfaEnrollmentConfirmResponse(
+        enabled=True,
     )
 
 

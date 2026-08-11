@@ -19,6 +19,7 @@ def user_row_to_dict(row: Any) -> dict[str, Any] | None:
     user = dict(row)
     user["is_active"] = bool(user["is_active"])
     user["must_change_password"] = bool(user["must_change_password"])
+    user["mfa_enabled"] = bool(user["mfa_enabled"])
 
     return user
 

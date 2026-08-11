@@ -45,6 +45,7 @@ def test_user_row_to_dict_converts_boolean_fields():
             "username": "reviewer",
             "is_active": 1,
             "must_change_password": 0,
+            "mfa_enabled": 1,
         }
     )
 
@@ -53,6 +54,7 @@ def test_user_row_to_dict_converts_boolean_fields():
         "username": "reviewer",
         "is_active": True,
         "must_change_password": False,
+        "mfa_enabled": True,
     }
 
 

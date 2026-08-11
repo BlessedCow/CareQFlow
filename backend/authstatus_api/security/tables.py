@@ -18,6 +18,8 @@ def initialize_security_tables(conn: Any) -> None:
             last_login_at TEXT,
             password_changed_at TEXT NOT NULL,
             must_change_password INTEGER NOT NULL DEFAULT 0,
+            mfa_enabled INTEGER NOT NULL DEFAULT 0,
+            mfa_secret TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             CHECK (role IN ('Admin', 'UR', 'Read Only')),
@@ -56,6 +58,18 @@ def initialize_security_tables(conn: Any) -> None:
         "users",
         "must_change_password",
         "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(
+        conn,
+        "users",
+        "mfa_enabled",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+    ensure_column(
+        conn,
+        "users",
+        "mfa_secret",
+        "TEXT",
     )
 
     ensure_column(conn, "sessions", "ip_address", "TEXT")

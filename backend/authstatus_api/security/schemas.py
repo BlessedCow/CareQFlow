@@ -42,6 +42,32 @@ class ChangePasswordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class MfaEnrollmentStartRequest(BaseModel):
+    current_password: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MfaEnrollmentStartResponse(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class MfaEnrollmentConfirmRequest(BaseModel):
+    code: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MfaEnrollmentConfirmResponse(BaseModel):
+    enabled: bool
+
+
+class MfaStatusResponse(BaseModel):
+    enabled: bool
+    enrollment_pending: bool
+
+
 class PasswordUpdateResponse(BaseModel):
     password_changed: bool
     sessions_revoked: int

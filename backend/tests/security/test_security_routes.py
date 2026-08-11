@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pyotp
 import pytest
 from fastapi.testclient import TestClient
 
@@ -253,6 +254,429 @@ def test_me_returns_current_user(client):
     assert data["user"]["username"] == "user@example.com"
     assert data["user"]["role"] == "UR"
     assert data["session"]["expires_at"]
+
+
+def test_mfa_status_reports_disabled_without_pending_enrollment(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    auth_headers_for(
+        client,
+        "user@example.com",
+        "correct horse battery staple",
+    )
+
+    response = client.get("/api/security/mfa/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": False,
+        "enrollment_pending": False,
+    }
+
+
+def test_user_can_start_mfa_enrollment(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "correct horse battery staple",
+        },
+        headers=auth_headers_for(
+            client,
+            "user@example.com",
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["secret"]
+    assert data["provisioning_uri"].startswith("otpauth://totp/")
+    assert "CareQueue" in data["provisioning_uri"]
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT mfa_enabled, mfa_secret
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["mfa_enabled"] == 0
+    assert row["mfa_secret"]
+    assert row["mfa_secret"] != data["secret"]
+
+
+def test_mfa_enrollment_requires_correct_current_password(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "wrong password",
+        },
+        headers=auth_headers_for(
+            client,
+            "user@example.com",
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Current password is incorrect.",
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT mfa_enabled, mfa_secret
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["mfa_enabled"] == 0
+    assert row["mfa_secret"] is None
+
+
+def test_mfa_status_reports_pending_enrollment(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "user@example.com",
+        "correct horse battery staple",
+    )
+
+    enrollment_response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "correct horse battery staple",
+        },
+        headers=headers,
+    )
+
+    assert enrollment_response.status_code == 200
+
+    response = client.get("/api/security/mfa/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": False,
+        "enrollment_pending": True,
+    }
+
+
+def test_mfa_enrollment_confirm_rejects_without_pending_enrollment(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.post(
+        "/api/security/mfa/enroll/confirm",
+        json={
+            "code": "123456",
+        },
+        headers=auth_headers_for(
+            client,
+            "user@example.com",
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "MFA enrollment has not been started.",
+    }
+
+
+def test_mfa_enrollment_confirm_rejects_invalid_code(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "user@example.com",
+        "correct horse battery staple",
+    )
+
+    enrollment_response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "correct horse battery staple",
+        },
+        headers=headers,
+    )
+
+    assert enrollment_response.status_code == 200
+
+    response = client.post(
+        "/api/security/mfa/enroll/confirm",
+        json={
+            "code": "000000",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Invalid authentication code.",
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT mfa_enabled
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["mfa_enabled"] == 0
+
+
+def test_user_can_confirm_mfa_enrollment(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "user@example.com",
+        "correct horse battery staple",
+    )
+
+    enrollment_response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "correct horse battery staple",
+        },
+        headers=headers,
+    )
+
+    assert enrollment_response.status_code == 200
+
+    secret = enrollment_response.json()["secret"]
+    code = pyotp.TOTP(secret).now()
+
+    response = client.post(
+        "/api/security/mfa/enroll/confirm",
+        json={
+            "code": code,
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT mfa_enabled
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["mfa_enabled"] == 1
+
+
+def test_mfa_status_reports_enabled_after_confirmation(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "user@example.com",
+        "correct horse battery staple",
+    )
+
+    enrollment_response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "correct horse battery staple",
+        },
+        headers=headers,
+    )
+
+    secret = enrollment_response.json()["secret"]
+
+    confirm_response = client.post(
+        "/api/security/mfa/enroll/confirm",
+        json={
+            "code": pyotp.TOTP(secret).now(),
+        },
+        headers=headers,
+    )
+
+    assert confirm_response.status_code == 200
+
+    response = client.get("/api/security/mfa/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "enrollment_pending": False,
+    }
+
+
+def test_mfa_enrollment_writes_safe_audit_events(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "user@example.com",
+        "correct horse battery staple",
+    )
+
+    enrollment_response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "correct horse battery staple",
+        },
+        headers=headers,
+    )
+
+    assert enrollment_response.status_code == 200
+
+    secret = enrollment_response.json()["secret"]
+    code = pyotp.TOTP(secret).now()
+
+    confirm_response = client.post(
+        "/api/security/mfa/enroll/confirm",
+        json={
+            "code": code,
+        },
+        headers=headers,
+    )
+
+    assert confirm_response.status_code == 200
+
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT action, metadata
+            FROM audit_events
+            WHERE action IN (
+                'security.mfa_enrollment_started',
+                'security.mfa_enabled'
+            )
+            ORDER BY id
+            """).fetchall()
+
+    assert [row["action"] for row in rows] == [
+        "security.mfa_enrollment_started",
+        "security.mfa_enabled",
+    ]
+
+    for row in rows:
+        assert secret not in row["metadata"]
+        assert code not in row["metadata"]
+
+
+def test_failed_mfa_enrollment_attempts_are_audited(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "user@example.com",
+        "correct horse battery staple",
+    )
+
+    wrong_password_response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "wrong password",
+        },
+        headers=headers,
+    )
+
+    assert wrong_password_response.status_code == 400
+
+    enrollment_response = client.post(
+        "/api/security/mfa/enroll",
+        json={
+            "current_password": "correct horse battery staple",
+        },
+        headers=headers,
+    )
+
+    assert enrollment_response.status_code == 200
+
+    invalid_code_response = client.post(
+        "/api/security/mfa/enroll/confirm",
+        json={
+            "code": "000000",
+        },
+        headers=headers,
+    )
+
+    assert invalid_code_response.status_code == 400
+
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT action
+            FROM audit_events
+            WHERE action IN (
+                'security.mfa_enrollment_password_failed',
+                'security.mfa_enrollment_verification_failed'
+            )
+            ORDER BY id
+            """).fetchall()
+
+    assert [row["action"] for row in rows] == [
+        "security.mfa_enrollment_password_failed",
+        "security.mfa_enrollment_verification_failed",
+    ]
 
 
 def test_login_sets_httponly_session_cookie(client):

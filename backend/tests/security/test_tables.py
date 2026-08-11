@@ -40,6 +40,8 @@ def test_init_db_creates_users_table():
         "last_login_at",
         "password_changed_at",
         "must_change_password",
+        "mfa_enabled",
+        "mfa_secret",
         "created_at",
         "updated_at",
     }.issubset(table_columns("users"))
@@ -82,6 +84,46 @@ def test_new_users_do_not_require_password_change_by_default():
 
     assert row is not None
     assert row["must_change_password"] == 0
+
+
+def test_new_users_have_mfa_disabled_by_default():
+    init_db()
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO users (
+                username,
+                password_hash,
+                role,
+                password_changed_at,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "default-mfa-state@example.com",
+                "test-password-hash",
+                "UR",
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+
+        row = conn.execute(
+            """
+            SELECT mfa_enabled, mfa_secret
+            FROM users
+            WHERE username = ?
+            """,
+            ("default-mfa-state@example.com",),
+        ).fetchone()
+
+    assert row is not None
+    assert row["mfa_enabled"] == 0
+    assert row["mfa_secret"] is None
 
 
 def test_init_db_creates_sessions_table():
