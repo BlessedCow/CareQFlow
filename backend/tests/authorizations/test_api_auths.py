@@ -707,7 +707,7 @@ def test_patch_auth_endpoint_tracks_denial_p2p_appeal_and_retro_pipeline_fields(
 
     data = response.json()
 
-    assert data["status"] == "Denied"
+    assert data["status"] == "Appealed"
     assert data["denial_reason_category"] == "Medical Necessity"
     assert data["denial_reason_notes"] == "Payer says RTC criteria not met."
     assert data["denial_prevention_notes"] == "Document Dimension 3 risks earlier."

@@ -69,7 +69,7 @@ def status_from_timeline_event(
     event_type = normalize_event_label(event.get("event_type"))
     outcome = normalize_event_label(event.get("outcome"))
 
-    if event_type == "request submitted" or outcome == "pending":
+    if event_type == "request submitted":
         return "Pending"
 
     if outcome in {
@@ -93,7 +93,7 @@ def status_from_timeline_event(
     }:
         return "P2P"
 
-    if event_type == "appeal" or outcome == "appeal pending":
+    if event_type == "appeal" or outcome in {"appeal pending", "pending"}:
         return "Appealed"
 
     if outcome == "no pa required":

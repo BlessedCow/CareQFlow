@@ -91,6 +91,10 @@ AUTH_TABLE_COLUMNS = {
 DENIAL_TIMELINE_EVENT_TYPE = "Payer Response"
 DENIAL_TIMELINE_OUTCOME = "Denied"
 
+P2P_TIMELINE_EVENT_TYPE = "Peer Review"
+APPEAL_TIMELINE_EVENT_TYPE = "Appeal"
+RETRO_TIMELINE_EVENT_TYPE = "Retro Auth"
+
 DENIAL_TIMELINE_FIELDS = {
     "status",
     "denial_reason_category",
@@ -99,6 +103,29 @@ DENIAL_TIMELINE_FIELDS = {
     "denial_through_date",
     "denial_level_of_care",
     "denial_source",
+}
+
+P2P_TIMELINE_FIELDS = {
+    "p2p_requested",
+    "p2p_scheduled_at",
+    "p2p_deadline",
+    "p2p_outcome",
+    "p2p_reviewer",
+    "p2p_notes",
+}
+
+APPEAL_TIMELINE_FIELDS = {
+    "appeal_submitted",
+    "appeal_deadline",
+    "appeal_outcome",
+    "appeal_notes",
+}
+
+RETRO_TIMELINE_FIELDS = {
+    "retro_requested",
+    "retro_deadline",
+    "retro_outcome",
+    "retro_notes",
 }
 
 
@@ -114,6 +141,53 @@ def _should_sync_denial_timeline_event(
     denial_date = str(updated_auth.get("denial_date") or "").strip()
 
     return status == "Denied" or bool(reason) or bool(denial_date)
+
+
+def _should_sync_p2p_timeline_event(
+    payload: dict[str, Any],
+    updated_auth: dict[str, Any],
+) -> bool:
+    if not P2P_TIMELINE_FIELDS.intersection(payload):
+        return False
+
+    return (
+        bool(updated_auth.get("p2p_requested"))
+        or bool(str(updated_auth.get("p2p_scheduled_at") or "").strip())
+        or bool(str(updated_auth.get("p2p_deadline") or "").strip())
+        or bool(str(updated_auth.get("p2p_outcome") or "").strip())
+        or bool(str(updated_auth.get("p2p_reviewer") or "").strip())
+        or bool(str(updated_auth.get("p2p_notes") or "").strip())
+    )
+
+
+def _should_sync_appeal_timeline_event(
+    payload: dict[str, Any],
+    updated_auth: dict[str, Any],
+) -> bool:
+    if not APPEAL_TIMELINE_FIELDS.intersection(payload):
+        return False
+
+    return (
+        bool(updated_auth.get("appeal_submitted"))
+        or bool(str(updated_auth.get("appeal_deadline") or "").strip())
+        or bool(str(updated_auth.get("appeal_outcome") or "").strip())
+        or bool(str(updated_auth.get("appeal_notes") or "").strip())
+    )
+
+
+def _should_sync_retro_timeline_event(
+    payload: dict[str, Any],
+    updated_auth: dict[str, Any],
+) -> bool:
+    if not RETRO_TIMELINE_FIELDS.intersection(payload):
+        return False
+
+    return (
+        bool(updated_auth.get("retro_requested"))
+        or bool(str(updated_auth.get("retro_deadline") or "").strip())
+        or bool(str(updated_auth.get("retro_outcome") or "").strip())
+        or bool(str(updated_auth.get("retro_notes") or "").strip())
+    )
 
 
 def _denial_timeline_notes(auth_record: dict[str, Any]) -> str:
@@ -143,17 +217,81 @@ def _denial_timeline_notes(auth_record: dict[str, Any]) -> str:
     return " ".join(notes)
 
 
+def _p2p_timeline_notes(auth_record: dict[str, Any]) -> str:
+    notes = ["P2P details recorded."]
+
+    scheduled_at = str(auth_record.get("p2p_scheduled_at") or "").strip()
+    deadline = str(auth_record.get("p2p_deadline") or "").strip()
+    reviewer = str(auth_record.get("p2p_reviewer") or "").strip()
+    p2p_notes = str(auth_record.get("p2p_notes") or "").strip()
+
+    if scheduled_at:
+        notes.append(f"Scheduled at: {scheduled_at}.")
+
+    if deadline:
+        notes.append(f"Deadline: {deadline}.")
+
+    if reviewer:
+        notes.append(f"Reviewer: {reviewer}.")
+
+    if p2p_notes:
+        notes.append(f"Notes: {p2p_notes}")
+
+    return " ".join(notes)
+
+
+def _appeal_timeline_notes(auth_record: dict[str, Any]) -> str:
+    notes = ["Appeal details recorded."]
+
+    deadline = str(auth_record.get("appeal_deadline") or "").strip()
+    appeal_notes = str(auth_record.get("appeal_notes") or "").strip()
+
+    if deadline:
+        notes.append(f"Deadline: {deadline}.")
+
+    if appeal_notes:
+        notes.append(f"Notes: {appeal_notes}")
+
+    return " ".join(notes)
+
+
+def _retro_timeline_notes(auth_record: dict[str, Any]) -> str:
+    notes = ["Retro auth details recorded."]
+
+    deadline = str(auth_record.get("retro_deadline") or "").strip()
+    retro_notes = str(auth_record.get("retro_notes") or "").strip()
+
+    if deadline:
+        notes.append(f"Deadline: {deadline}.")
+
+    if retro_notes:
+        notes.append(f"Notes: {retro_notes}")
+
+    return " ".join(notes)
+
+
+def _timeline_date_from(
+    auth_record: dict[str, Any],
+    *field_names: str,
+) -> str:
+    for field_name in field_names:
+        value = str(auth_record.get(field_name) or "").strip()
+
+        if value:
+            return value[:10]
+
+    return str(auth_record.get("decision_at") or current_timestamp())[:10]
+
+
 def _denial_timeline_payload(
     auth_record: dict[str, Any],
 ) -> dict[str, Any]:
-    event_date = str(auth_record.get("denial_date") or "").strip()
-
-    if not event_date:
-        event_date = str(auth_record.get("decision_at") or current_timestamp())[:10]
-
     return {
         "event_type": DENIAL_TIMELINE_EVENT_TYPE,
-        "event_date": event_date,
+        "event_date": _timeline_date_from(
+            auth_record,
+            "denial_date",
+        ),
         "event_time": "",
         "outcome": DENIAL_TIMELINE_OUTCOME,
         "notes": _denial_timeline_notes(auth_record),
@@ -165,29 +303,125 @@ def _denial_timeline_payload(
     }
 
 
-def _sync_denial_timeline_event(auth_id: int, auth_record: dict[str, Any]) -> None:
+def _p2p_timeline_payload(
+    auth_record: dict[str, Any],
+) -> dict[str, Any]:
+    outcome = str(auth_record.get("p2p_outcome") or "").strip()
+
+    return {
+        "event_type": P2P_TIMELINE_EVENT_TYPE,
+        "event_date": _timeline_date_from(
+            auth_record,
+            "p2p_deadline",
+            "p2p_scheduled_at",
+        ),
+        "event_time": "",
+        "outcome": outcome or "Pending",
+        "notes": _p2p_timeline_notes(auth_record),
+        "requested_days": 0,
+        "approved_days": 0,
+        "auth_start_date": "",
+        "auth_end_date": "",
+        "review_due_date": str(auth_record.get("p2p_deadline") or ""),
+    }
+
+
+def _appeal_timeline_payload(
+    auth_record: dict[str, Any],
+) -> dict[str, Any]:
+    outcome = str(auth_record.get("appeal_outcome") or "").strip()
+
+    return {
+        "event_type": APPEAL_TIMELINE_EVENT_TYPE,
+        "event_date": _timeline_date_from(
+            auth_record,
+            "appeal_deadline",
+        ),
+        "event_time": "",
+        "outcome": outcome or "Pending",
+        "notes": _appeal_timeline_notes(auth_record),
+        "requested_days": 0,
+        "approved_days": 0,
+        "auth_start_date": "",
+        "auth_end_date": "",
+        "review_due_date": str(auth_record.get("appeal_deadline") or ""),
+    }
+
+
+def _retro_timeline_payload(
+    auth_record: dict[str, Any],
+) -> dict[str, Any]:
+    outcome = str(auth_record.get("retro_outcome") or "").strip()
+
+    return {
+        "event_type": RETRO_TIMELINE_EVENT_TYPE,
+        "event_date": _timeline_date_from(
+            auth_record,
+            "retro_deadline",
+        ),
+        "event_time": "",
+        "outcome": outcome or "Pending",
+        "notes": _retro_timeline_notes(auth_record),
+        "requested_days": 0,
+        "approved_days": 0,
+        "auth_start_date": "",
+        "auth_end_date": "",
+        "review_due_date": str(auth_record.get("retro_deadline") or ""),
+    }
+
+
+def _sync_single_timeline_event(
+    auth_id: int,
+    event_type: str,
+    event_payload: dict[str, Any],
+) -> None:
     events = list_auth_events(auth_id)
 
     if events is None:
         return
 
-    payload = _denial_timeline_payload(auth_record)
-
     existing_event = next(
-        (
-            event
-            for event in events
-            if event["event_type"] == DENIAL_TIMELINE_EVENT_TYPE
-            and event["outcome"] == DENIAL_TIMELINE_OUTCOME
-        ),
+        (event for event in events if event["event_type"] == event_type),
         None,
     )
 
     if existing_event is None:
-        create_auth_event(auth_id, payload)
+        create_auth_event(auth_id, event_payload)
         return
 
-    update_auth_event(auth_id, existing_event["id"], payload)
+    update_auth_event(auth_id, existing_event["id"], event_payload)
+
+
+def _sync_denial_timeline_event(auth_id: int, auth_record: dict[str, Any]) -> None:
+    _sync_single_timeline_event(
+        auth_id,
+        DENIAL_TIMELINE_EVENT_TYPE,
+        _denial_timeline_payload(auth_record),
+    )
+
+
+def _sync_p2p_timeline_event(auth_id: int, auth_record: dict[str, Any]) -> None:
+    _sync_single_timeline_event(
+        auth_id,
+        P2P_TIMELINE_EVENT_TYPE,
+        _p2p_timeline_payload(auth_record),
+    )
+
+
+def _sync_appeal_timeline_event(auth_id: int, auth_record: dict[str, Any]) -> None:
+    _sync_single_timeline_event(
+        auth_id,
+        APPEAL_TIMELINE_EVENT_TYPE,
+        _appeal_timeline_payload(auth_record),
+    )
+
+
+def _sync_retro_timeline_event(auth_id: int, auth_record: dict[str, Any]) -> None:
+    _sync_single_timeline_event(
+        auth_id,
+        RETRO_TIMELINE_EVENT_TYPE,
+        _retro_timeline_payload(auth_record),
+    )
 
 
 def create_auth(payload: dict[str, Any]) -> dict[str, Any]:
@@ -291,7 +525,7 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
     old_status = str(existing_auth.get("status") or "").strip()
     new_status = str(updated_auth.get("status") or "").strip() if updated_auth else ""
 
-    if old_status == "Pending" and new_status == "Approved":
+    if old_status != "Approved" and new_status == "Approved":
         create_auth_event(
             auth_id,
             {
@@ -312,6 +546,15 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
 
     if _should_sync_denial_timeline_event(payload, updated_auth):
         _sync_denial_timeline_event(auth_id, updated_auth)
+
+    if _should_sync_p2p_timeline_event(payload, updated_auth):
+        _sync_p2p_timeline_event(auth_id, updated_auth)
+
+    if _should_sync_appeal_timeline_event(payload, updated_auth):
+        _sync_appeal_timeline_event(auth_id, updated_auth)
+
+    if _should_sync_retro_timeline_event(payload, updated_auth):
+        _sync_retro_timeline_event(auth_id, updated_auth)
 
     return get_auth(auth_id)
 

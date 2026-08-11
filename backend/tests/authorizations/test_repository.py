@@ -185,10 +185,22 @@ def test_update_auth_to_approved_preserves_approved_days():
     events = list_auth_events(created["id"])
 
     assert events is not None
-    assert events[-1]["event_type"] == "Payer Response"
-    assert events[-1]["outcome"] == "Approved"
-    assert events[-1]["approved_days"] == 5
-    assert events[-1]["requested_days"] == 7
+
+    approved_event = next(
+        (
+            event
+            for event in events
+            if event["event_type"] == "Payer Response"
+            and event["outcome"] == "Approved"
+        ),
+        None,
+    )
+
+    assert approved_event is not None
+    assert approved_event["approved_days"] == 5
+    assert approved_event["requested_days"] == 7
+    assert approved_event["auth_end_date"] == "2026-06-29"
+    assert approved_event["review_due_date"] == "2026-06-29"
 
 
 def test_update_auth_encrypts_updated_sensitive_fields():
@@ -258,7 +270,7 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
     )
 
     assert updated is not None
-    assert updated["status"] == "Denied"
+    assert updated["status"] == "Appealed"
     assert updated["denial_reason_category"] == "Medical Necessity"
     assert updated["denial_reason_notes"] == "Payer says RTC criteria not met."
     assert updated["denial_prevention_notes"] == "Document Dimension 3 risks earlier."
@@ -320,6 +332,47 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
     assert "Denied LOC: RTC." in denial_event["notes"]
     assert "Denied through: 2026-06-30." in denial_event["notes"]
     assert "Reason notes: Payer says RTC criteria not met." in denial_event["notes"]
+
+    p2p_event = next(
+        (event for event in events if event["event_type"] == "Peer Review"),
+        None,
+    )
+
+    assert p2p_event is not None
+    assert p2p_event["event_date"] == "2026-06-28"
+    assert p2p_event["outcome"] == "Pending"
+    assert p2p_event["review_due_date"] == "2026-06-28"
+    assert "P2P details recorded." in p2p_event["notes"]
+    assert "Scheduled at: 2026-06-28T10:30." in p2p_event["notes"]
+    assert "Deadline: 2026-06-28." in p2p_event["notes"]
+    assert "Reviewer: Medical Director." in p2p_event["notes"]
+    assert "Notes: P2P requested by facility UR." in p2p_event["notes"]
+
+    appeal_event = next(
+        (event for event in events if event["event_type"] == "Appeal"),
+        None,
+    )
+
+    assert appeal_event is not None
+    assert appeal_event["event_date"] == "2026-07-02"
+    assert appeal_event["outcome"] == "Pending"
+    assert appeal_event["review_due_date"] == "2026-07-02"
+    assert "Appeal details recorded." in appeal_event["notes"]
+    assert "Deadline: 2026-07-02." in appeal_event["notes"]
+    assert "Notes: Expedited appeal planned." in appeal_event["notes"]
+
+    retro_event = next(
+        (event for event in events if event["event_type"] == "Retro Auth"),
+        None,
+    )
+
+    assert retro_event is not None
+    assert retro_event["event_date"] == "2026-07-05"
+    assert retro_event["outcome"] == "Pending"
+    assert retro_event["review_due_date"] == "2026-07-05"
+    assert "Retro auth details recorded." in retro_event["notes"]
+    assert "Deadline: 2026-07-05." in retro_event["notes"]
+    assert "Notes: Retro auth needed for gap days." in retro_event["notes"]
 
 
 def test_update_auth_returns_none_for_missing_record():
