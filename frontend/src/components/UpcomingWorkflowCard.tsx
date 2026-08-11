@@ -10,6 +10,10 @@ import {
 
 import { AuthRequest } from "../types/auth";
 import { cn } from "../utils/cn";
+import {
+  DatedWorkflowItems,
+  type DatedWorkflowItem,
+} from "./upcomingWorkflow/DatedWorkflowItems";
 
 interface UpcomingWorkflowCardProps {
   data: AuthRequest[];
@@ -41,15 +45,6 @@ interface WorkflowItem {
     | "complete"
     | "due"
     | "overdue";
-}
-
-interface DatedWorkflowItem {
-  filterKey: WorkflowFilterKey;
-  auth: AuthRequest;
-  label: string;
-  dateLabel: string;
-  daysUntil: number;
-  tone: "due" | "overdue";
 }
 
 const DEFAULT_WORKFLOW_FILTER_SETTINGS: WorkflowFilterSettings = {
@@ -146,24 +141,6 @@ function formatDate(value?: string) {
 
 function isActiveWorkflowStatus(item: AuthRequest) {
   return !["Completed", "Discharged", "No PA Required"].includes(item.status);
-}
-
-function getDatePhrase(daysUntil: number) {
-  if (daysUntil < 0) {
-    return `${Math.abs(daysUntil)} day${
-      Math.abs(daysUntil) === 1 ? "" : "s"
-    } overdue`;
-  }
-
-  if (daysUntil === 0) {
-    return "Due today";
-  }
-
-  if (daysUntil === 1) {
-    return "Due tomorrow";
-  }
-
-  return `Due in ${daysUntil} days`;
 }
 
 function getDatedWorkflowItems(
@@ -459,46 +436,11 @@ export function UpcomingWorkflowCard({
         </button>
       </details>
 
-      {datedWorkflowItems.length > 0 && (
-        <div className="space-y-2">
-          <p
-            className={cn(
-              "text-xs font-semibold uppercase tracking-wide",
-              darkMode ? "text-gray-400" : "text-gray-500"
-            )}
-          >
-            Next date-based items
-          </p>
-
-          {datedWorkflowItems.map((item) => (
-            <div
-              key={`${item.auth.id}-${item.filterKey}-${item.dateLabel}`}
-              className={cn(
-                "rounded-xl border px-4 py-3 text-sm",
-                getToneClasses(item.tone, darkMode)
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold">
-                    {item.label}: {item.auth.patientId}
-                  </p>
-                  <p className="mt-1 text-xs opacity-80">
-                    {item.auth.facility} • {item.auth.loc} • {item.auth.payer}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-xs font-semibold">{item.dateLabel}</p>
-                  <p className="mt-1 text-xs opacity-80">
-                    {getDatePhrase(item.daysUntil)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <DatedWorkflowItems
+        items={datedWorkflowItems}
+        darkMode={darkMode}
+        getToneClasses={getToneClasses}
+      />
 
       <div className="space-y-3">
         {workflowItems.map((item) => {
