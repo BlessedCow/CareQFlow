@@ -87,6 +87,12 @@ class AdminPasswordResetResponse(BaseModel):
     must_change_password: bool
 
 
+class AdminMfaResetResponse(BaseModel):
+    mfa_reset: bool
+    sessions_revoked: int
+    mfa_enabled: bool
+
+
 class UserResponse(BaseModel):
     id: int
     username: str
@@ -95,6 +101,7 @@ class UserResponse(BaseModel):
     last_login_at: str | None = None
     password_changed_at: str
     must_change_password: bool
+    mfa_enabled: bool
 
 
 class AdminUserCreateResponse(BaseModel):

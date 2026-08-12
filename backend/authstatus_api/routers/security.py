@@ -26,6 +26,7 @@ from authstatus_api.security.dependencies import (
 )
 from authstatus_api.security.mfa import (
     build_totp_provisioning_uri,
+    clear_user_mfa,
     enable_user_mfa,
     generate_totp_secret,
     get_user_mfa_secret,
@@ -43,6 +44,7 @@ from authstatus_api.security.password_policy import (
     validate_password_policy,
 )
 from authstatus_api.security.schemas import (
+    AdminMfaResetResponse,
     AdminPasswordResetResponse,
     AdminUserCreateResponse,
     AuditEventListResponse,
@@ -135,6 +137,7 @@ def _user_response(user: dict) -> UserResponse:
         last_login_at=user["last_login_at"],
         password_changed_at=user["password_changed_at"],
         must_change_password=user["must_change_password"],
+        mfa_enabled=user["mfa_enabled"],
     )
 
 
@@ -563,6 +566,53 @@ def reset_managed_user_password(
         temporary_password=temporary_password,
         sessions_revoked=sessions_revoked,
         must_change_password=True,
+    )
+
+
+@router.post(
+    "/users/{user_id}/reset-mfa",
+    response_model=AdminMfaResetResponse,
+)
+def reset_managed_user_mfa(
+    user_id: int,
+    request: Request,
+    current_user: dict = AdminUserDependency,
+) -> AdminMfaResetResponse:
+    if user_id == current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Admins cannot reset their own MFA from user management.",
+        )
+
+    target_user = get_user_by_id(user_id)
+
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    if not clear_user_mfa(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    sessions_revoked = revoke_user_sessions(user_id)
+
+    record_audit_event(
+        action="user.mfa_reset",
+        resource_type="user",
+        resource_id=user_id,
+        user=current_user,
+        metadata={"sessions_revoked": sessions_revoked},
+        request=request,
+    )
+
+    return AdminMfaResetResponse(
+        mfa_reset=True,
+        sessions_revoked=sessions_revoked,
+        mfa_enabled=False,
     )
 
 

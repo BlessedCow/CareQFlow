@@ -8,6 +8,7 @@ export interface CurrentUser {
   last_login_at: string | null;
   password_changed_at: string;
   must_change_password: boolean;
+  mfa_enabled: boolean;
 }
 
 export interface SessionInfo {
@@ -19,8 +20,22 @@ export interface AuthSession {
   session: SessionInfo;
 }
 
-type LoginResponse = AuthSession;
+export interface MfaLoginChallenge {
+  mfa_required: true;
+  mfa_challenge_token: string;
+  expires_at: string;
+}
+
+export type LoginResult = AuthSession | MfaLoginChallenge;
+
+type LoginResponse = LoginResult;
 type CurrentUserResponse = AuthSession;
+
+export function isMfaLoginChallenge(
+  result: LoginResult
+): result is MfaLoginChallenge {
+  return "mfa_required" in result && result.mfa_required === true;
+}
 
 interface UserListResponse {
   users: CurrentUser[];
@@ -102,6 +117,117 @@ export async function resetUserPassword(
   return (await response.json()) as AdminPasswordResetResponse;
 }
 
+export async function resetUserMfa(
+  userId: number
+): Promise<AdminMfaResetResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/users/${userId}/reset-mfa`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Unable to reset MFA.";
+
+    try {
+      const data = (await response.json()) as { detail?: string };
+
+      if (data.detail) {
+        message = data.detail;
+      }
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as AdminMfaResetResponse;
+}
+
+export async function fetchMfaStatus(): Promise<MfaStatusResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/mfa/status`
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to load MFA status.");
+  }
+
+  return (await response.json()) as MfaStatusResponse;
+}
+
+export async function startMfaEnrollment(
+  currentPassword: string
+): Promise<MfaEnrollmentStartResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/mfa/enroll`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Unable to start MFA enrollment.";
+
+    try {
+      const data = (await response.json()) as { detail?: string };
+
+      if (data.detail) {
+        message = data.detail;
+      }
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as MfaEnrollmentStartResponse;
+}
+
+export async function confirmMfaEnrollment(
+  code: string
+): Promise<MfaEnrollmentConfirmResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/mfa/enroll/confirm`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        code,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Unable to confirm MFA enrollment.";
+
+    try {
+      const data = (await response.json()) as { detail?: string };
+
+      if (data.detail) {
+        message = data.detail;
+      }
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as MfaEnrollmentConfirmResponse;
+}
+
 export interface PasswordUpdateResponse {
   password_changed: boolean;
   sessions_revoked: number;
@@ -112,6 +238,26 @@ export interface AdminPasswordResetResponse {
   temporary_password: string;
   sessions_revoked: number;
   must_change_password: boolean;
+}
+
+export interface AdminMfaResetResponse {
+  mfa_reset: boolean;
+  sessions_revoked: number;
+  mfa_enabled: boolean;
+}
+
+export interface MfaStatusResponse {
+  enabled: boolean;
+  enrollment_pending: boolean;
+}
+
+export interface MfaEnrollmentStartResponse {
+  secret: string;
+  provisioning_uri: string;
+}
+
+export interface MfaEnrollmentConfirmResponse {
+  enabled: boolean;
 }
 
 export interface AdminUserCreateResponse {
@@ -149,7 +295,7 @@ interface FetchAuditEventsOptions {
 export async function loginUser(
   username: string,
   password: string
-): Promise<AuthSession> {
+): Promise<LoginResult> {
   const response = await fetch(`${API_BASE_URL}/api/security/login`, {
     method: "POST",
     credentials: "include",
@@ -166,6 +312,44 @@ export async function loginUser(
   const data = (await response.json()) as LoginResponse;
 
   return data;
+}
+
+export async function verifyMfaLogin(
+  challengeToken: string,
+  code: string
+): Promise<AuthSession> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/security/login/mfa/verify`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        challenge_token: challengeToken,
+        code,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Invalid authentication code.";
+
+    try {
+      const data = (await response.json()) as { detail?: string };
+
+      if (data.detail) {
+        message = data.detail;
+      }
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as AuthSession;
 }
 
 export async function fetchCurrentUser(): Promise<AuthSession> {

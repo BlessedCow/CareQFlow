@@ -3,6 +3,8 @@ import { cn } from "../utils/cn";
 import type { WorkflowViewMode } from "../hooks/useWorkflowViewMode";
 import { ChangePasswordCard } from "../components/security/ChangePasswordCard";
 import type { RegisteredOptionCategory } from "../api/registeredOptions";
+import type { CurrentUser } from "../api/security";
+import { MfaEnrollmentCard } from "../components/security/MfaEnrollmentCard";
 
 type DashboardCardKey =
   | "kpis"
@@ -452,6 +454,8 @@ function SessionDisplaySettingsCard({
 
 interface SettingsPageProps {
   darkMode: boolean;
+  currentUser: CurrentUser;
+  onMfaEnabledChange: (enabled: boolean) => void;
 
   newFacilityName: string;
   setNewFacilityName: (value: string) => void;
@@ -496,6 +500,8 @@ interface SettingsPageProps {
 
 export function SettingsPage({
   darkMode,
+  currentUser,
+  onMfaEnabledChange,
   newFacilityName,
   setNewFacilityName,
   registeredFacilities,
@@ -646,7 +652,7 @@ export function SettingsPage({
                 darkMode ? "text-gray-400" : "text-gray-600"
               )}
             >
-              Change your CareQueue password and sign out of active sessions.
+              Manage MFA, change your CareQueue password, and sign out of active sessions.
             </p>
           </div>
 
@@ -663,10 +669,16 @@ export function SettingsPage({
         {isPasswordChangeOpen && (
           <div
             className={cn(
-              "border-t p-5",
+              "space-y-5 border-t p-5",
               darkMode ? "border-gray-800" : "border-gray-200"
             )}
           >
+            <MfaEnrollmentCard
+              darkMode={darkMode}
+              mfaEnabled={currentUser.mfa_enabled}
+              onMfaEnabledChange={onMfaEnabledChange}
+            />
+
             <ChangePasswordCard
               darkMode={darkMode}
               onPasswordChanged={onPasswordChanged}

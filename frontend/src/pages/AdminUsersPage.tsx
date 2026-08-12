@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   createUser,
   fetchUsers,
+  resetUserMfa,
   resetUserPassword,
   updateUser,
   type CurrentUser,
@@ -32,6 +33,9 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<number | null>(null);
   const [resettingUserId, setResettingUserId] = useState<number | null>(null);
+  const [resettingMfaUserId, setResettingMfaUserId] = useState<number | null>(
+    null
+  );
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
     null
   );
@@ -156,6 +160,40 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
       );
     } finally {
       setResettingUserId(null);
+    }
+  };
+
+  const handleResetMfa = async (user: CurrentUser) => {
+    const confirmed = window.confirm(
+      `Reset MFA for ${user.username}? This will remove their authenticator setup and immediately revoke all of their active sessions. They will need to enroll MFA again.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setResettingMfaUserId(user.id);
+    setUsersError(null);
+
+    try {
+      const result = await resetUserMfa(user.id);
+
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUserItem) =>
+          currentUserItem.id === user.id
+            ? {
+                ...currentUserItem,
+                mfa_enabled: result.mfa_enabled,
+              }
+            : currentUserItem
+        )
+      );
+    } catch (error) {
+      setUsersError(
+        error instanceof Error ? error.message : "Unable to reset MFA."
+      );
+    } finally {
+      setResettingMfaUserId(null);
     }
   };
 
@@ -395,7 +433,7 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                 <tr>
                   <th className="px-6 py-3 font-medium">Username</th>
                   <th className="px-6 py-3 font-medium">Role</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
+                  <th className="px-6 py-3 font-medium">Status / MFA</th>
                   <th className="px-6 py-3 font-medium">Last login</th>
                   <th className="px-6 py-3 font-medium">Actions</th>
                 </tr>
@@ -478,6 +516,23 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                               Password change required
                             </span>
                           )}
+
+                          <span
+                            className={cn(
+                              "rounded-full px-2.5 py-1 text-xs font-medium",
+                              user.mfa_enabled
+                                ? darkMode
+                                  ? "bg-blue-950 text-blue-300"
+                                  : "bg-blue-100 text-blue-700"
+                                : darkMode
+                                ? "bg-gray-800 text-gray-400"
+                                : "bg-gray-100 text-gray-600"
+                            )}
+                          >
+                            {user.mfa_enabled
+                              ? "MFA enabled"
+                              : "MFA not enabled"}
+                          </span>
                         </div>
                       </td>
                       <td
@@ -517,6 +572,7 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                             disabled={
                               isUpdating ||
                               resettingUserId !== null ||
+                              resettingMfaUserId !== null ||
                               isCurrentUser ||
                               !user.is_active
                             }
@@ -528,6 +584,7 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                                 : "border-gray-300 text-gray-700 hover:bg-gray-100",
                               (isUpdating ||
                                 resettingUserId !== null ||
+                                resettingMfaUserId !== null ||
                                 isCurrentUser ||
                                 !user.is_active) &&
                                 "cursor-not-allowed opacity-50"
@@ -536,6 +593,36 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                             {resettingUserId === user.id
                               ? "Resetting..."
                               : "Reset password"}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={
+                              isUpdating ||
+                              resettingUserId !== null ||
+                              resettingMfaUserId !== null ||
+                              isCurrentUser ||
+                              !user.is_active ||
+                              !user.mfa_enabled
+                            }
+                            onClick={() => void handleResetMfa(user)}
+                            className={cn(
+                              "rounded-lg border px-3 py-2 text-sm font-medium",
+                              darkMode
+                                ? "border-gray-700 text-gray-200 hover:bg-gray-800"
+                                : "border-gray-300 text-gray-700 hover:bg-gray-100",
+                              (isUpdating ||
+                                resettingUserId !== null ||
+                                resettingMfaUserId !== null ||
+                                isCurrentUser ||
+                                !user.is_active ||
+                                !user.mfa_enabled) &&
+                                "cursor-not-allowed opacity-50"
+                            )}
+                          >
+                            {resettingMfaUserId === user.id
+                              ? "Resetting MFA..."
+                              : "Reset MFA"}
                           </button>
                         </div>
                       </td>

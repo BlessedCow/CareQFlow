@@ -377,6 +377,17 @@ function App() {
     clearAuthenticatedState();
   }, [clearAuthenticatedState]);
 
+  const handleMfaEnabledChange = useCallback((enabled: boolean) => {
+    setCurrentUser((currentValue) =>
+      currentValue
+        ? {
+            ...currentValue,
+            mfa_enabled: enabled,
+          }
+        : currentValue
+    );
+  }, []);
+
   if (isCheckingSession) {
     return (
       <div
@@ -606,6 +617,8 @@ function App() {
         {activePage === "settings" && (
           <SettingsPage
             darkMode={darkMode}
+            currentUser={currentUser}
+            onMfaEnabledChange={handleMfaEnabledChange}
             showSessionTimer={showSessionTimer}
             onShowSessionTimerChange={setShowSessionTimer}
             newFacilityName={newFacilityName}

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
+from authstatus_api.security.mfa import enable_user_mfa, store_user_mfa_secret
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
@@ -90,6 +91,7 @@ def test_login_returns_user_without_session_token(client):
             "last_login_at": data["user"]["last_login_at"],
             "password_changed_at": data["user"]["password_changed_at"],
             "must_change_password": False,
+            "mfa_enabled": False,
         },
         "session": {
             "expires_at": data["session"]["expires_at"],
@@ -1673,6 +1675,194 @@ def test_password_reset_audit_event_does_not_store_temporary_password(client):
     assert temporary_password not in row["metadata"]
 
 
+def test_admin_can_reset_user_mfa(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    secret = pyotp.random_base32()
+
+    assert store_user_mfa_secret(user["id"], secret) is True
+    assert enable_user_mfa(user["id"]) is True
+
+    response = client.post(
+        f"/api/security/users/{user['id']}/reset-mfa",
+        headers=auth_headers_for(
+            client,
+            admin["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "mfa_reset": True,
+        "sessions_revoked": 0,
+        "mfa_enabled": False,
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT mfa_enabled, mfa_secret
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["mfa_enabled"] == 0
+    assert row["mfa_secret"] is None
+
+
+def test_admin_mfa_reset_revokes_target_user_sessions(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    user_headers = auth_headers_for(
+        client,
+        user["username"],
+        "correct horse battery staple",
+    )
+
+    assert user_headers
+
+    admin_headers = auth_headers_for(
+        client,
+        admin["username"],
+        "correct horse battery staple",
+    )
+
+    response = client.post(
+        f"/api/security/users/{user['id']}/reset-mfa",
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["sessions_revoked"] == 1
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM sessions
+            WHERE user_id = ?
+            AND revoked_at IS NOT NULL
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["count"] == 1
+
+
+def test_admin_cannot_reset_own_mfa_from_user_management(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    response = client.post(
+        f"/api/security/users/{admin['id']}/reset-mfa",
+        headers=auth_headers_for(
+            client,
+            admin["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "Admins cannot reset their own MFA from user management.",
+    }
+
+
+def test_reset_user_mfa_requires_admin(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+    target_user = create_user(
+        "target@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.post(
+        f"/api/security/users/{target_user['id']}/reset-mfa",
+        headers=auth_headers_for(
+            client,
+            user["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Operation not permitted for this role.",
+    }
+
+
+def test_reset_user_mfa_writes_safe_audit_event(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    secret = pyotp.random_base32()
+
+    assert store_user_mfa_secret(user["id"], secret) is True
+    assert enable_user_mfa(user["id"]) is True
+
+    response = client.post(
+        f"/api/security/users/{user['id']}/reset-mfa",
+        headers=auth_headers_for(
+            client,
+            admin["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT action, metadata
+            FROM audit_events
+            WHERE action = 'user.mfa_reset'
+            """).fetchone()
+
+    assert row is not None
+    assert row["action"] == "user.mfa_reset"
+    assert secret not in row["metadata"]
+    assert "user@example.com" not in row["metadata"]
+    assert "sessions_revoked" in row["metadata"]
+
+
 def test_login_and_logout_write_audit_events(client):
     create_user("user@example.com", "correct horse battery staple", role="UR")
 
@@ -2047,6 +2237,7 @@ def test_setup_initial_admin_creates_admin_when_no_users_exist(client):
     assert data["user"]["role"] == "Admin"
     assert data["user"]["is_active"] is True
     assert data["user"]["must_change_password"] is False
+    assert data["user"]["mfa_enabled"] is False
 
     login_response = client.post(
         "/api/security/login",
