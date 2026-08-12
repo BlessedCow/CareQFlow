@@ -32,6 +32,11 @@ from authstatus_api.security.mfa import (
     store_user_mfa_secret,
     verify_totp_code,
 )
+from authstatus_api.security.mfa_challenges import (
+    consume_mfa_login_challenge,
+    create_mfa_login_challenge,
+    get_active_mfa_login_challenge_by_token,
+)
 from authstatus_api.security.password_hashing import verify_password
 from authstatus_api.security.password_policy import (
     PasswordPolicyError,
@@ -54,6 +59,7 @@ from authstatus_api.security.schemas import (
     MfaEnrollmentConfirmResponse,
     MfaEnrollmentStartRequest,
     MfaEnrollmentStartResponse,
+    MfaLoginVerifyRequest,
     MfaStatusResponse,
     PasswordUpdateResponse,
     SessionResponse,
@@ -560,7 +566,12 @@ def reset_managed_user_password(
     )
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    response_model_exclude_defaults=True,
+    response_model_exclude_none=True,
+)
 def login(
     payload: LoginRequest,
     request: Request,
@@ -596,6 +607,58 @@ def login(
             detail="Invalid username or password.",
         )
 
+    if user["mfa_enabled"]:
+        created_challenge = create_mfa_login_challenge(
+            user["id"],
+            ip_address=_client_ip(request),
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        challenge = created_challenge["challenge"]
+        settings = get_settings()
+
+        response.delete_cookie(
+            key=settings.session_cookie_name,
+            path="/api",
+            httponly=True,
+            secure=settings.session_cookie_secure,
+            samesite="lax",
+        )
+
+        response.delete_cookie(
+            key=settings.csrf_cookie_name,
+            path="/",
+            httponly=False,
+            secure=settings.session_cookie_secure,
+            samesite="lax",
+        )
+
+        record_audit_event(
+            action="security.login_mfa_required",
+            resource_type="mfa_login_challenge",
+            resource_id=challenge["id"],
+            user=user,
+            request=request,
+        )
+
+        return LoginResponse(
+            mfa_required=True,
+            mfa_challenge_token=created_challenge["token"],
+            expires_at=challenge["expires_at"],
+        )
+
+    return _create_authenticated_session_response(
+        user=user,
+        request=request,
+        response=response,
+    )
+
+
+def _create_authenticated_session_response(
+    *,
+    user: dict,
+    request: Request,
+    response: Response,
+) -> LoginResponse:
     created_session = create_user_session(
         user["id"],
         ip_address=_client_ip(request),
@@ -639,6 +702,78 @@ def login(
         session=SessionResponse(
             expires_at=session["expires_at"],
         ),
+    )
+
+
+@router.post(
+    "/login/mfa/verify",
+    response_model=LoginResponse,
+    response_model_exclude_defaults=True,
+    response_model_exclude_none=True,
+)
+def verify_mfa_login(
+    payload: MfaLoginVerifyRequest,
+    request: Request,
+    response: Response,
+) -> LoginResponse:
+    challenge = get_active_mfa_login_challenge_by_token(
+        payload.challenge_token,
+    )
+
+    if challenge is None:
+        record_audit_event(
+            action="security.login_mfa_challenge_invalid",
+            resource_type="mfa_login_challenge",
+            request=request,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    user = get_user_by_id(challenge["user_id"])
+
+    if user is None or not user["is_active"] or not user["mfa_enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    secret = get_user_mfa_secret(user["id"])
+
+    if secret is None or not verify_totp_code(secret, payload.code):
+        record_audit_event(
+            action="security.login_mfa_failed",
+            resource_type="mfa_login_challenge",
+            resource_id=challenge["id"],
+            user=user,
+            request=request,
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication code.",
+        )
+
+    if not consume_mfa_login_challenge(payload.challenge_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge.",
+        )
+
+    record_audit_event(
+        action="security.login_mfa_verified",
+        resource_type="mfa_login_challenge",
+        resource_id=challenge["id"],
+        user=user,
+        request=request,
+    )
+
+    return _create_authenticated_session_response(
+        user=user,
+        request=request,
+        response=response,
     )
 
 

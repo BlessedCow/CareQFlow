@@ -68,6 +68,13 @@ class MfaStatusResponse(BaseModel):
     enrollment_pending: bool
 
 
+class MfaLoginVerifyRequest(BaseModel):
+    challenge_token: str
+    code: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PasswordUpdateResponse(BaseModel):
     password_changed: bool
     sessions_revoked: int
@@ -113,8 +120,11 @@ class SessionResponse(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    user: UserResponse
-    session: SessionResponse
+    user: UserResponse | None = None
+    session: SessionResponse | None = None
+    mfa_required: bool = False
+    mfa_challenge_token: str | None = None
+    expires_at: str | None = None
 
 
 class CurrentUserResponse(BaseModel):

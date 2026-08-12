@@ -44,6 +44,20 @@ def initialize_security_tables(conn: Any) -> None:
         )
         """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mfa_login_challenges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            consumed_at TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+        """)
+
     ensure_column(
         conn,
         "users",
