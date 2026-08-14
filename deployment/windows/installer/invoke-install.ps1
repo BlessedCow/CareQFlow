@@ -54,6 +54,110 @@ function Test-Administrator {
     )
 }
 
+function Ensure-CareQueueLocalHostname {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ApplicationOrigin
+    )
+
+    try {
+        $applicationUri = [Uri]$ApplicationOrigin
+    }
+    catch {
+        throw (
+            "The CareQueue application origin is not a valid URI: " +
+            $ApplicationOrigin
+        )
+    }
+
+    $hostname = $applicationUri.DnsSafeHost
+
+    if ($hostname -ne "carequeue.local") {
+        return
+    }
+
+    $hostsPath = Join-Path `
+        $env:SystemRoot `
+        "System32\drivers\etc\hosts"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $hostsPath `
+                -PathType Leaf
+        )
+    ) {
+        throw "The Windows hosts file was not found: $hostsPath"
+    }
+
+    $existingLines = @(
+        Get-Content `
+            -LiteralPath $hostsPath `
+            -ErrorAction Stop
+    )
+
+    foreach ($line in $existingLines) {
+        $content = (
+            $line.Split("#", 2)[0]
+        ).Trim()
+
+        if ([string]::IsNullOrWhiteSpace($content)) {
+            continue
+        }
+
+        $parts = @(
+            $content -split "\s+" |
+            Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_)
+            }
+        )
+
+        if ($parts.Count -lt 2) {
+            continue
+        }
+
+        $address = $parts[0]
+        $hostnames = @($parts[1..($parts.Count - 1)])
+
+        if (
+            -not (
+                $hostnames |
+                Where-Object {
+                    $_ -ieq $hostname
+                }
+            )
+        ) {
+            continue
+        }
+
+        if (
+            $address -eq "127.0.0.1" `
+                -or $address -eq "::1"
+        ) {
+            return
+        }
+
+        throw (
+            "The Windows hosts file already maps $hostname to " +
+            "$address. CareQueue will not overwrite an existing " +
+            "non-loopback hostname mapping."
+        )
+    }
+
+    Write-Output (
+        "Registering $hostname as a local CareQueue hostname..."
+    )
+
+    Add-Content `
+        -LiteralPath $hostsPath `
+        -Value "127.0.0.1`t$hostname # CareQueue" `
+        -Encoding ASCII `
+        -ErrorAction Stop
+
+    Clear-DnsClientCache `
+        -ErrorAction Stop
+}
+
 function Test-CareQueueInstallation {
     param(
         [Parameter(Mandatory)]
@@ -95,6 +199,143 @@ function Test-CareQueueInstallation {
     }
 
     return $true
+}
+
+function Ensure-CareQueueCaddyRootCertificate {
+    param(
+        [Parameter(Mandatory)]
+        [string]$DataDirectory,
+
+        [ValidateRange(1, 60)]
+        [int]$MaximumAttempts = 30,
+
+        [ValidateRange(1, 10)]
+        [int]$RetryDelaySeconds = 1
+    )
+
+    $rootCertificatePath = Join-Path `
+        $DataDirectory `
+        "Caddy\Data\caddy\pki\authorities\local\root.crt"
+
+    Write-Output (
+        "Waiting for the CareQueue HTTPS root certificate: " +
+        $rootCertificatePath
+    )
+
+    $certificateAvailable = $false
+
+    for (
+        $attempt = 1
+        $attempt -le $MaximumAttempts
+        $attempt++
+    ) {
+        if (
+            Test-Path `
+                -LiteralPath $rootCertificatePath `
+                -PathType Leaf
+        ) {
+            $certificateAvailable = $true
+            break
+        }
+
+        if ($attempt -lt $MaximumAttempts) {
+            Start-Sleep `
+                -Seconds $RetryDelaySeconds
+        }
+    }
+
+    if (-not $certificateAvailable) {
+        throw (
+            "CareQueue HTTPS certificate trust could not be configured " +
+            "because Caddy did not create its root certificate after " +
+            "$MaximumAttempts attempts. Expected certificate: " +
+            $rootCertificatePath
+        )
+    }
+
+    try {
+        $rootCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $rootCertificatePath
+        )
+    }
+    catch {
+        throw (
+            "CareQueue HTTPS certificate trust could not be configured " +
+            "because the generated Caddy root certificate could not be " +
+            "read. Certificate: $rootCertificatePath. Error: " +
+            $_.Exception.Message
+        )
+    }
+
+    $certificateThumbprint = $rootCertificate.Thumbprint
+
+    if ([string]::IsNullOrWhiteSpace($certificateThumbprint)) {
+        throw (
+            "CareQueue HTTPS certificate trust could not be configured " +
+            "because the generated root certificate has no thumbprint."
+        )
+    }
+
+    $existingCertificate = Get-ChildItem `
+        -Path "Cert:\LocalMachine\Root" `
+        -ErrorAction Stop |
+    Where-Object {
+        $_.Thumbprint -eq $certificateThumbprint
+    } |
+    Select-Object -First 1
+
+    if ($existingCertificate) {
+        Write-Output (
+            "CareQueue HTTPS root certificate is already trusted. " +
+            "Thumbprint: $certificateThumbprint"
+        )
+
+        return
+    }
+
+    Write-Output (
+        "Trusting the CareQueue HTTPS root certificate. " +
+        "Thumbprint: $certificateThumbprint"
+    )
+
+    try {
+        $importedCertificate = Import-Certificate `
+            -FilePath $rootCertificatePath `
+            -CertStoreLocation "Cert:\LocalMachine\Root" `
+            -ErrorAction Stop
+
+        if (-not $importedCertificate) {
+            throw "Import-Certificate returned no certificate."
+        }
+    }
+    catch {
+        throw (
+            "CareQueue HTTPS root certificate could not be imported " +
+            "into the Windows Local Machine trusted root store. " +
+            "Error: $($_.Exception.Message)"
+        )
+    }
+
+    $trustedCertificate = Get-ChildItem `
+        -Path "Cert:\LocalMachine\Root" `
+        -ErrorAction Stop |
+    Where-Object {
+        $_.Thumbprint -eq $certificateThumbprint
+    } |
+    Select-Object -First 1
+
+    if (-not $trustedCertificate) {
+        throw (
+            "CareQueue imported the HTTPS root certificate, but " +
+            "verification of the Windows trusted root store failed. " +
+            "Thumbprint: $certificateThumbprint"
+        )
+    }
+
+    Write-Output (
+        "CareQueue HTTPS root certificate trusted successfully. " +
+        "Thumbprint: $certificateThumbprint"
+    )
 }
 
 function Assert-PostInstallationHealth {
@@ -243,7 +484,67 @@ function Assert-PostInstallationHealth {
         }
     }
 
+    Ensure-CareQueueCaddyRootCertificate `
+        -DataDirectory $DataDirectory
+
     $normalizedApplicationOrigin = $ApplicationOrigin.TrimEnd("/")
+
+    try {
+        $applicationUri = [Uri]$normalizedApplicationOrigin
+        $applicationHostname = $applicationUri.Host
+    }
+    catch {
+        throw (
+            "Post-installation validation could not parse the " +
+            "CareQueue application origin: $normalizedApplicationOrigin. " +
+            "Error: $($_.Exception.Message)"
+        )
+    }
+    
+    try {
+        $resolvedAddresses = @(
+            [System.Net.Dns]::GetHostAddresses($applicationHostname)
+        )
+    }
+    catch {
+        throw (
+            "Post-installation validation failed because the CareQueue " +
+            "hostname '$applicationHostname' could not be resolved. " +
+            "Expected a local loopback mapping for CareQueue. " +
+            "Error: $($_.Exception.Message)"
+        )
+    }
+    
+    if ($resolvedAddresses.Count -eq 0) {
+        throw (
+            "Post-installation validation failed because the CareQueue " +
+            "hostname '$applicationHostname' resolved to no addresses."
+        )
+    }
+    
+    $loopbackResolved = $false
+    
+    foreach ($resolvedAddress in $resolvedAddresses) {
+        if ([System.Net.IPAddress]::IsLoopback($resolvedAddress)) {
+            $loopbackResolved = $true
+            break
+        }
+    }
+    
+    if (-not $loopbackResolved) {
+        $resolvedAddressText = (
+            $resolvedAddresses |
+            ForEach-Object {
+                $_.IPAddressToString
+            }
+        ) -join ", "
+    
+        throw (
+            "Post-installation validation failed because the CareQueue " +
+            "hostname '$applicationHostname' did not resolve to a local " +
+            "loopback address. Resolved addresses: $resolvedAddressText"
+        )
+    }
 
     $validationEndpoints = @(
         [ordered]@{
@@ -273,7 +574,7 @@ function Assert-PostInstallationHealth {
                 $response = Invoke-WebRequest `
                     -Uri $validationEndpoint.Uri `
                     -UseBasicParsing `
-                    -TimeoutSec 10 `
+                    -TimeoutSec 5 `
                     -ErrorAction Stop
 
                 if (
@@ -291,7 +592,15 @@ function Assert-PostInstallationHealth {
             catch {
                 $lastFailureMessage = $_.Exception.Message
             }
-
+            
+            Write-Output (
+                "Post-installation health check failed for " +
+                "$($validationEndpoint.Name) at " +
+                "$($validationEndpoint.Uri) " +
+                "(attempt $attempt of $MaximumAttempts): " +
+                $lastFailureMessage
+            )
+            
             if ($attempt -lt $MaximumAttempts) {
                 Start-Sleep `
                     -Seconds $RetryDelaySeconds
@@ -545,6 +854,22 @@ if (
         -Message (
         "ApplicationOrigin is required for Install, Upgrade, " +
         "and Repair operations."
+    )
+
+    exit $exitCodeInvalidInstallState
+}
+
+try {
+    Ensure-CareQueueLocalHostname `
+        -ApplicationOrigin $ApplicationOrigin
+}
+catch {
+    Write-InstallerResult `
+        -Status "failed" `
+        -ExitCode $exitCodeInvalidInstallState `
+        -Message (
+        "Unable to configure the CareQueue local hostname: " +
+        $_.Exception.Message
     )
 
     exit $exitCodeInvalidInstallState

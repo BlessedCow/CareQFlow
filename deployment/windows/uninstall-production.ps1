@@ -26,6 +26,57 @@ function Test-Administrator {
     )
 }
 
+function Remove-CareQueueLocalHostname {
+    $hostsPath = Join-Path `
+        $env:SystemRoot `
+        "System32\drivers\etc\hosts"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $hostsPath `
+                -PathType Leaf
+        )
+    ) {
+        throw "The Windows hosts file was not found: $hostsPath"
+    }
+
+    $originalLines = @(
+        Get-Content `
+            -LiteralPath $hostsPath `
+            -ErrorAction Stop
+    )
+
+    $filteredLines = @(
+        $originalLines |
+        Where-Object {
+            $_ -notmatch (
+                "^\s*127\.0\.0\.1\s+carequeue\.local" +
+                "\s+#\s*CareQueue\s*$"
+            )
+        }
+    )
+
+    if ($filteredLines.Count -eq $originalLines.Count) {
+        Write-Output (
+            "No CareQueue-managed local hostname entry was found."
+        )
+
+        return
+    }
+
+    Write-Output "Removing the CareQueue local hostname entry..."
+
+    Set-Content `
+        -LiteralPath $hostsPath `
+        -Value $filteredLines `
+        -Encoding ASCII `
+        -ErrorAction Stop
+
+    Clear-DnsClientCache `
+        -ErrorAction Stop
+}
+
 function Invoke-RemovalScript {
     param(
         [Parameter(Mandatory)]
@@ -95,6 +146,8 @@ Write-Output "Removing the CareQueue backup task..."
 
 Invoke-RemovalScript `
     -ScriptPath $removeBackupTaskScript
+
+Remove-CareQueueLocalHostname
 
 if (
     Test-Path `
