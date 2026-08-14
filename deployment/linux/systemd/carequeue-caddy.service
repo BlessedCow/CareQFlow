@@ -1,0 +1,37 @@
+[Unit]
+Description=CareQueue HTTPS
+Documentation=https://caddyserver.com/docs/
+After=network.target carequeue-api.service
+Requires=carequeue-api.service
+
+[Service]
+Type=notify
+User=carequeue
+Group=carequeue
+
+Environment=XDG_DATA_HOME=/var/lib/carequeue/caddy/data
+Environment=XDG_CONFIG_HOME=/var/lib/carequeue/caddy/config
+
+ExecStart=/usr/bin/caddy run \
+    --environ \
+    --config /etc/carequeue/Caddyfile \
+    --adapter caddyfile
+
+ExecReload=/usr/bin/caddy reload \
+    --config /etc/carequeue/Caddyfile \
+    --adapter caddyfile
+
+TimeoutStopSec=5s
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+ReadWritePaths=/var/lib/carequeue/caddy
+
+[Install]
+WantedBy=multi-user.target

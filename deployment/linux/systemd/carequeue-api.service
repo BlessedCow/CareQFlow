@@ -1,0 +1,42 @@
+[Unit]
+Description=CareQueue API
+Documentation=file:/opt/carequeue/docs/deployment/linux.md
+After=network.target local-fs.target
+RequiresMountsFor=/var/lib/carequeue/data
+
+[Service]
+Type=simple
+User=carequeue
+Group=carequeue
+
+WorkingDirectory=/opt/carequeue/backend
+
+EnvironmentFile=/etc/carequeue/carequeue.env
+Environment=AUTHSTATUS_APP_ENVIRONMENT=production
+
+ExecStart=/opt/carequeue/backend/.venv/bin/python \
+    -m uvicorn \
+    authstatus_api.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1 \
+    --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1 \
+    --no-access-log
+
+Restart=on-failure
+RestartSec=5
+
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+ReadWritePaths=
+ReadWritePaths=/var/lib/carequeue
+ReadWritePaths=/var/log/carequeue
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,6 @@
-# Replace carequeue.example.com with the production hostname.
-carequeue.example.com {
+carequeue.local {
+    tls internal
+	
 	encode zstd gzip
 
 	header {
