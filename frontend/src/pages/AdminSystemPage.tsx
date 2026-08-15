@@ -690,6 +690,12 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                       <td className="px-3 py-4 capitalize">
                         {endpoint.access === "admin"
                           ? "Admin"
+                          : endpoint.access === "admin_ur"
+                          ? "Admin + UR"
+                          : endpoint.access === "authenticated"
+                          ? "Admin + UR + Read Only"
+                          : endpoint.access === "initial_setup"
+                          ? "Initial setup"
                           : endpoint.access}
                       </td>
 

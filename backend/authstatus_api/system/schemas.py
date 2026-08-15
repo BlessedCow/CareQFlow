@@ -6,7 +6,9 @@ from pydantic import BaseModel
 
 EndpointAccess = Literal[
     "public",
+    "initial_setup",
     "authenticated",
+    "admin_ur",
     "admin",
 ]
 

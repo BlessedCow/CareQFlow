@@ -95,6 +95,30 @@ describe("AdminSystemPage", () => {
         probeable: true,
       },
       {
+        path: "/api/security/setup-initial-admin",
+        methods: ["POST"],
+        group: "security",
+        access: "initial_setup",
+        status: "registered",
+        probeable: false,
+      },
+      {
+        path: "/api/auths",
+        methods: ["POST"],
+        group: "authorizations",
+        access: "admin_ur",
+        status: "registered",
+        probeable: false,
+      },
+      {
+        path: "/api/auths",
+        methods: ["GET"],
+        group: "authorizations",
+        access: "authenticated",
+        status: "registered",
+        probeable: false,
+      },
+      {
         path: "/api/admin/system/backups",
         methods: ["POST"],
         group: "admin-system-backups",
@@ -257,6 +281,11 @@ describe("AdminSystemPage", () => {
     expect(await screen.findByText("/api/health/live")).toBeInTheDocument();
 
     expect(screen.getByText("/api/admin/system/backups")).toBeInTheDocument();
+
+    expect(screen.getByText("Initial setup")).toBeInTheDocument();
+    expect(screen.getByText("Admin + UR")).toBeInTheDocument();
+
+    expect(screen.getByText("Admin + UR + Read Only")).toBeInTheDocument();
 
     expect(mockedFetchApiEndpoints).toHaveBeenCalledTimes(1);
   });

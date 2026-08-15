@@ -10,7 +10,12 @@ export interface DatabaseReadiness {
   status: "ok" | "unavailable";
 }
 
-export type EndpointAccess = "public" | "authenticated" | "admin";
+export type EndpointAccess =
+  | "public"
+  | "initial_setup"
+  | "authenticated"
+  | "admin_ur"
+  | "admin";
 
 export type EndpointStatus = "operational" | "unavailable" | "registered";
 

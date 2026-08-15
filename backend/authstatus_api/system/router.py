@@ -19,10 +19,46 @@ router = APIRouter(
 AdminUserDependency = Depends(require_role("Admin"))
 
 PUBLIC_ENDPOINTS = {
-    "/api/health",
-    "/api/health/live",
-    "/api/health/ready",
-    "/api/security/login",
+    ("GET", "/api/health"),
+    ("GET", "/api/health/live"),
+    ("GET", "/api/health/ready"),
+    ("POST", "/api/security/login"),
+    ("POST", "/api/security/login/mfa/verify"),
+}
+
+INITIAL_SETUP_ENDPOINTS = {
+    ("GET", "/api/security/setup-initial-admin/status"),
+    ("POST", "/api/security/setup-initial-admin"),
+}
+
+ADMIN_UR_ENDPOINTS = {
+    ("DELETE", "/api/auths/{auth_id}"),
+    ("DELETE", "/api/auths/{auth_id}/documents/{document_id}"),
+    ("DELETE", "/api/auths/{auth_id}/events/{event_id}"),
+    ("PATCH", "/api/auths/{auth_id}"),
+    ("PATCH", "/api/auths/{auth_id}/events/{event_id}"),
+    ("POST", "/api/auths"),
+    ("POST", "/api/auths/{auth_id}/documents"),
+    ("POST", "/api/auths/{auth_id}/events"),
+    ("POST", "/api/pdf-intake/preview"),
+}
+
+ADMIN_ENDPOINTS = {
+    ("DELETE", "/api/admin/system/backups/recovery"),
+    ("DELETE", "/api/registered-options/{option_id}"),
+    ("GET", "/api/admin/system/backups"),
+    ("GET", "/api/admin/system/backups/recovery"),
+    ("GET", "/api/admin/system/endpoints"),
+    ("GET", "/api/security/audit-events"),
+    ("GET", "/api/security/users"),
+    ("PATCH", "/api/security/users/{user_id}"),
+    ("POST", "/api/admin/system/backups"),
+    ("POST", "/api/admin/system/backups/recovery/stage"),
+    ("POST", "/api/admin/system/backups/verify"),
+    ("POST", "/api/registered-options"),
+    ("POST", "/api/security/users"),
+    ("POST", "/api/security/users/{user_id}/reset-mfa"),
+    ("POST", "/api/security/users/{user_id}/reset-password"),
 }
 
 PROBEABLE_ENDPOINTS = {
@@ -32,11 +68,23 @@ PROBEABLE_ENDPOINTS = {
 }
 
 
-def _endpoint_access(path: str) -> EndpointAccess:
-    if path in PUBLIC_ENDPOINTS:
+def _endpoint_access(
+    *,
+    method: str,
+    path: str,
+) -> EndpointAccess:
+    endpoint = (method, path)
+
+    if endpoint in PUBLIC_ENDPOINTS:
         return "public"
 
-    if path.startswith("/api/admin/"):
+    if endpoint in INITIAL_SETUP_ENDPOINTS:
+        return "initial_setup"
+
+    if endpoint in ADMIN_UR_ENDPOINTS:
+        return "admin_ur"
+
+    if endpoint in ADMIN_ENDPOINTS:
         return "admin"
 
     return "authenticated"
@@ -105,7 +153,10 @@ def list_api_endpoints(
                     path=path,
                     methods=[normalized_method],
                     group=(str(tags[0]) if tags else "ungrouped"),
-                    access=_endpoint_access(path),
+                    access=_endpoint_access(
+                        method=normalized_method,
+                        path=path,
+                    ),
                     status=_endpoint_status(
                         path=path,
                         database_ready=database_ready,
