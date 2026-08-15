@@ -10,6 +10,7 @@ from authstatus_api.security.sessions import (
     get_active_session_by_token,
     hash_session_token,
     renew_session,
+    replace_user_session,
     revoke_session,
     revoke_user_sessions,
     touch_session,
@@ -42,6 +43,33 @@ def test_revoke_user_sessions_revokes_all_active_sessions():
     assert revoked_count == 2
     assert get_active_session_by_token(first_session["token"]) is None
     assert get_active_session_by_token(second_session["token"]) is None
+
+
+def test_replace_user_session_revokes_existing_sessions_and_creates_one_active():
+    user = create_user(
+        "replace-session@example.com",
+        "password value",
+        role="UR",
+    )
+    first_session = create_user_session(user["id"])
+    second_session = create_user_session(user["id"])
+
+    replacement = replace_user_session(
+        user["id"],
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+    )
+
+    assert replacement["sessions_revoked"] == 2
+    assert get_active_session_by_token(first_session["token"]) is None
+    assert get_active_session_by_token(second_session["token"]) is None
+
+    active_session = get_active_session_by_token(replacement["token"])
+
+    assert active_session is not None
+    assert active_session["id"] == replacement["session"]["id"]
+    assert active_session["ip_address"] == "127.0.0.1"
+    assert active_session["user_agent"] == "pytest"
 
 
 def test_create_user_session_returns_raw_token_once_and_stores_hash():

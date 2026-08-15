@@ -89,6 +89,72 @@ def create_user_session(
     }
 
 
+def replace_user_session(
+    user_id: int,
+    *,
+    minutes: int = DEFAULT_SESSION_MINUTES,
+    ip_address: str = "",
+    user_agent: str = "",
+) -> dict[str, Any]:
+    init_db()
+
+    token = generate_session_token()
+    token_hash = hash_session_token(token)
+    now = format_datetime(utc_now())
+    expires_at = format_datetime(session_expiration(minutes=minutes))
+
+    with get_conn() as conn:
+        revoked_cursor = conn.execute(
+            """
+            UPDATE sessions
+            SET revoked_at = ?
+            WHERE user_id = ?
+              AND revoked_at IS NULL
+            """,
+            (
+                now,
+                user_id,
+            ),
+        )
+
+        cursor = conn.execute(
+            """
+            INSERT INTO sessions (
+                user_id,
+                token_hash,
+                created_at,
+                last_seen_at,
+                expires_at,
+                ip_address,
+                user_agent
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                token_hash,
+                now,
+                now,
+                expires_at,
+                ip_address,
+                user_agent,
+            ),
+        )
+
+        session_id = cursor.lastrowid
+        sessions_revoked = revoked_cursor.rowcount
+
+    session = get_session_by_id(int(session_id))
+    if session is None:
+        raise RuntimeError("Unable to create session.")
+
+    return {
+        "token": token,
+        "session": session,
+        "sessions_revoked": sessions_revoked,
+    }
+
+
 def get_session_by_id(session_id: int) -> dict[str, Any] | None:
     init_db()
 

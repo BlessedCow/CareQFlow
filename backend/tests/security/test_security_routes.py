@@ -102,6 +102,127 @@ def test_login_returns_user_without_session_token(client):
     assert "password_hash" not in data["user"]
 
 
+def test_second_login_revokes_first_active_session(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    first_login = client.post(
+        "/api/security/login",
+        json={
+            "username": user["username"],
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert first_login.status_code == 200
+
+    first_token = client.cookies.get("carequeue_session")
+
+    assert first_token
+
+    with TestClient(
+        create_app(),
+        client=("127.0.0.1", 50001),
+    ) as second_client:
+        second_login = second_client.post(
+            "/api/security/login",
+            json={
+                "username": user["username"],
+                "password": "correct horse battery staple",
+            },
+        )
+
+        assert second_login.status_code == 200
+
+        second_token = second_client.cookies.get("carequeue_session")
+
+        assert second_token
+        assert second_token != first_token
+
+        first_me = client.get("/api/security/me")
+        second_me = second_client.get("/api/security/me")
+
+    assert first_me.status_code == 401
+    assert second_me.status_code == 200
+    assert second_me.json()["user"]["username"] == user["username"]
+
+
+def test_second_mfa_login_revokes_first_active_session(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+    secret = pyotp.random_base32()
+
+    assert store_user_mfa_secret(user["id"], secret) is True
+    assert enable_user_mfa(user["id"]) is True
+
+    first_login = client.post(
+        "/api/security/login",
+        json={
+            "username": user["username"],
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert first_login.status_code == 200
+    assert first_login.json()["mfa_required"] is True
+
+    first_verify = client.post(
+        "/api/security/login/mfa/verify",
+        json={
+            "challenge_token": first_login.json()["mfa_challenge_token"],
+            "code": pyotp.TOTP(secret).now(),
+        },
+    )
+
+    assert first_verify.status_code == 200
+
+    first_token = client.cookies.get("carequeue_session")
+
+    assert first_token
+
+    with TestClient(
+        create_app(),
+        client=("127.0.0.1", 50001),
+    ) as second_client:
+        second_login = second_client.post(
+            "/api/security/login",
+            json={
+                "username": user["username"],
+                "password": "correct horse battery staple",
+            },
+        )
+
+        assert second_login.status_code == 200
+        assert second_login.json()["mfa_required"] is True
+
+        second_verify = second_client.post(
+            "/api/security/login/mfa/verify",
+            json={
+                "challenge_token": second_login.json()["mfa_challenge_token"],
+                "code": pyotp.TOTP(secret).now(),
+            },
+        )
+
+        assert second_verify.status_code == 200
+
+        second_token = second_client.cookies.get("carequeue_session")
+
+        assert second_token
+        assert second_token != first_token
+
+        first_me = client.get("/api/security/me")
+        second_me = second_client.get("/api/security/me")
+
+    assert first_me.status_code == 401
+    assert second_me.status_code == 200
+
+
 def test_login_rejects_wrong_password(client):
     create_user("user@example.com", "correct horse battery staple", role="UR")
 
@@ -1413,14 +1534,14 @@ def test_change_password_clears_forced_change_state(client):
     assert login_response.json()["user"]["must_change_password"] is False
 
 
-def test_change_password_revokes_all_existing_sessions(client):
+def test_change_password_revokes_current_session(client):
     user = create_user(
         "user@example.com",
         "old password value",
         role="UR",
     )
 
-    first_login = client.post(
+    login_response = client.post(
         "/api/security/login",
         json={
             "username": user["username"],
@@ -1428,41 +1549,15 @@ def test_change_password_revokes_all_existing_sessions(client):
         },
     )
 
-    assert first_login.status_code == 200
+    assert login_response.status_code == 200
 
-    first_token = client.cookies.get("carequeue_session")
+    session_token = client.cookies.get("carequeue_session")
 
-    assert first_token
+    assert session_token
 
-    first_csrf_token = client.cookies.get("carequeue_csrf")
+    csrf_token = client.cookies.get("carequeue_csrf")
 
-    assert first_csrf_token
-
-    second_login = client.post(
-        "/api/security/login",
-        json={
-            "username": user["username"],
-            "password": "old password value",
-        },
-    )
-
-    assert second_login.status_code == 200
-
-    second_token = client.cookies.get("carequeue_session")
-
-    assert second_token
-
-    client.cookies.set(
-        "carequeue_session",
-        first_token,
-        path="/api",
-    )
-
-    client.cookies.set(
-        "carequeue_csrf",
-        first_csrf_token,
-        path="/",
-    )
+    assert csrf_token
 
     response = client.post(
         "/api/security/change-password",
@@ -1471,7 +1566,7 @@ def test_change_password_revokes_all_existing_sessions(client):
             "new_password": "new password value",
         },
         headers={
-            "X-CSRF-Token": first_csrf_token,
+            "X-CSRF-Token": csrf_token,
         },
     )
 
@@ -1479,20 +1574,13 @@ def test_change_password_revokes_all_existing_sessions(client):
 
     client.cookies.set(
         "carequeue_session",
-        first_token,
+        session_token,
         path="/api",
     )
-    first_me = client.get("/api/security/me")
 
-    client.cookies.set(
-        "carequeue_session",
-        second_token,
-        path="/api",
-    )
-    second_me = client.get("/api/security/me")
+    me_response = client.get("/api/security/me")
 
-    assert first_me.status_code == 401
-    assert second_me.status_code == 401
+    assert me_response.status_code == 401
 
 
 def test_admin_reset_returns_temporary_password_once(client):

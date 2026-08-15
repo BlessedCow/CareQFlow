@@ -72,9 +72,9 @@ from authstatus_api.security.schemas import (
 )
 from authstatus_api.security.sessions import (
     DEFAULT_SESSION_MINUTES,
-    create_user_session,
     get_active_session_by_token,
     renew_session,
+    replace_user_session,
     revoke_session,
     revoke_user_sessions,
 )
@@ -709,7 +709,7 @@ def _create_authenticated_session_response(
     request: Request,
     response: Response,
 ) -> LoginResponse:
-    created_session = create_user_session(
+    created_session = replace_user_session(
         user["id"],
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent", ""),
@@ -744,6 +744,9 @@ def _create_authenticated_session_response(
         resource_type="session",
         resource_id=session["id"],
         user=user,
+        metadata={
+            "sessions_revoked": created_session["sessions_revoked"],
+        },
         request=request,
     )
 
