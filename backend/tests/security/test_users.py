@@ -34,9 +34,13 @@ def configure_test_settings(tmp_path, monkeypatch):
 
 
 def test_create_user_hashes_password_and_normalizes_username():
-    user = create_user(" TestUser ", "correct horse battery staple", role="Admin")
+    user = create_user(
+        " TestUser@Example.com ",
+        "correct horse battery staple",
+        role="Admin",
+    )
 
-    assert user["username"] == "testuser"
+    assert user["username"] == "testuser@example.com"
     assert user["role"] == "Admin"
     assert user["is_active"] is True
     assert user["password_hash"] != "correct horse battery staple"

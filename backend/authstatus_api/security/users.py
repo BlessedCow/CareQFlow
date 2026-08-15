@@ -18,6 +18,7 @@ from authstatus_api.security.sessions import (
     touch_session,
     utc_now,
 )
+from authstatus_api.security.username_policy import normalize_username
 
 FAILED_LOGIN_LOCK_THRESHOLD = 5
 FAILED_LOGIN_LOCK_MINUTES = 15
@@ -38,7 +39,7 @@ def create_user(
 
     validate_password_policy(password)
 
-    normalized_username = username.strip().lower()
+    normalized_username = normalize_username(username)
     now = format_datetime(utc_now())
     password_hash = hash_password(password)
 

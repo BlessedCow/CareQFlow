@@ -1,25 +1,49 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import hmac
 import secrets
 from datetime import timedelta
 from typing import Any
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 from authstatus_api.security.mappings import format_datetime, parse_datetime
 from authstatus_api.security.sessions import utc_now
+from authstatus_api.settings import get_settings
 
 MFA_CHALLENGE_TOKEN_BYTES = 32
 DEFAULT_MFA_CHALLENGE_MINUTES = 5
+
+_MFA_CHALLENGE_HMAC_INFO = b"carequeue:mfa-challenge-token:v1"
 
 
 def generate_mfa_challenge_token() -> str:
     return secrets.token_urlsafe(MFA_CHALLENGE_TOKEN_BYTES)
 
 
+def _mfa_challenge_hmac_key() -> bytes:
+    encryption_key = get_settings().encryption_key.strip()
+    raw_key = base64.urlsafe_b64decode(encryption_key.encode("ascii"))
+
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=_MFA_CHALLENGE_HMAC_INFO,
+    ).derive(raw_key)
+
+
 def hash_mfa_challenge_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return hmac.new(
+        _mfa_challenge_hmac_key(),
+        token.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def create_mfa_login_challenge(

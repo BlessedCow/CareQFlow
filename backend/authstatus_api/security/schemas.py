@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 UserRole = Literal["Admin", "UR", "Read Only"]
 
@@ -15,7 +15,7 @@ class LoginRequest(BaseModel):
 
 
 class UserCreateRequest(BaseModel):
-    username: str
+    username: EmailStr
     role: UserRole = "UR"
 
     model_config = ConfigDict(extra="forbid")
@@ -29,7 +29,7 @@ class UserUpdateRequest(BaseModel):
 
 
 class InitialAdminSetupRequest(BaseModel):
-    username: str
+    username: EmailStr
     password: str
 
     model_config = ConfigDict(extra="forbid")

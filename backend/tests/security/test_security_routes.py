@@ -1099,6 +1099,87 @@ def test_admin_can_create_user_with_generated_temporary_password(client):
     assert login_response.json()["user"]["must_change_password"] is True
 
 
+@pytest.mark.parametrize(
+    "username",
+    [
+        "new-user",
+        "new-user@example",
+        "@example.com",
+        "new-user@example..com",
+        "' OR 1=1 --",
+        "new-user@example.com'; DROP TABLE users; --",
+    ],
+)
+def test_admin_cannot_create_user_with_invalid_username(client, username):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    response = client.post(
+        "/api/security/users",
+        json={
+            "username": username,
+            "role": "UR",
+        },
+        headers=auth_headers_for(
+            client,
+            "admin@example.com",
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 422
+
+
+def test_invalid_managed_user_username_does_not_affect_existing_users(client):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "admin@example.com",
+        "correct horse battery staple",
+    )
+
+    invalid_response = client.post(
+        "/api/security/users",
+        json={
+            "username": "user@example.com'; DROP TABLE users; --",
+            "role": "UR",
+        },
+        headers=headers,
+    )
+
+    assert invalid_response.status_code == 422
+
+    users_response = client.get(
+        "/api/security/users",
+        headers=headers,
+    )
+
+    assert users_response.status_code == 200
+    assert [user["username"] for user in users_response.json()["users"]] == [
+        "admin@example.com",
+    ]
+
+    valid_response = client.post(
+        "/api/security/users",
+        json={
+            "username": "valid-user@example.com",
+            "role": "UR",
+        },
+        headers=headers,
+    )
+
+    assert valid_response.status_code == 201
+    assert valid_response.json()["user"]["username"] == "valid-user@example.com"
+
+
 def test_create_user_writes_safe_audit_event(client):
     create_user("admin@example.com", "correct horse battery staple", role="Admin")
 
@@ -2336,6 +2417,61 @@ def test_setup_initial_admin_creates_admin_when_no_users_exist(client):
     )
 
     assert login_response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "username",
+    [
+        "admin",
+        "admin@example",
+        "@example.com",
+        "admin@example..com",
+        "' OR 1=1 --",
+        "admin@example.com'; DROP TABLE users; --",
+    ],
+)
+def test_setup_initial_admin_rejects_invalid_username(client, username):
+    response = client.post(
+        "/api/security/setup-initial-admin",
+        json={
+            "username": username,
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_failed_initial_admin_username_validation_does_not_consume_setup(client):
+    invalid_response = client.post(
+        "/api/security/setup-initial-admin",
+        json={
+            "username": "admin@example.com'; DROP TABLE users; --",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert invalid_response.status_code == 422
+
+    status_response = client.get(
+        "/api/security/setup-initial-admin/status",
+    )
+
+    assert status_response.status_code == 200
+    assert status_response.json() == {
+        "setup_available": True,
+    }
+
+    valid_response = client.post(
+        "/api/security/setup-initial-admin",
+        json={
+            "username": "admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert valid_response.status_code == 201
+    assert valid_response.json()["user"]["username"] == "admin@example.com"
 
 
 def test_setup_initial_admin_is_disabled_after_user_exists(client):
