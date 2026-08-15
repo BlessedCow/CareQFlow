@@ -10,6 +10,7 @@ interface DenialsPipelinePageProps {
   data: AuthRequest[];
   darkMode: boolean;
   selectedAuthId: string | null;
+  canManageAuthorizations: boolean;
   onSelectAuth: (auth: AuthRequest) => void;
   onClearSelectedAuth: () => void;
   onAuthUpdated: (auth: AuthRequest) => void;
@@ -19,6 +20,7 @@ export function DenialsPipelinePage({
   data,
   darkMode,
   selectedAuthId,
+  canManageAuthorizations,
   onSelectAuth,
   onClearSelectedAuth,
   onAuthUpdated,
@@ -87,6 +89,7 @@ export function DenialsPipelinePage({
       <FollowUpFormSections
         selectedAuth={selectedAuth}
         darkMode={darkMode}
+        canManageAuthorizations={canManageAuthorizations}
         denialForm={denialForm}
         denialError={denialError}
         isSavingDenial={isSavingDenial}

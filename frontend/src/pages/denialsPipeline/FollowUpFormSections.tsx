@@ -4,7 +4,6 @@ import {
   APPEAL_OUTCOME_OPTIONS,
   DENIAL_LEVEL_OF_CARE_OPTIONS,
   DENIAL_REASON_OPTIONS,
-  DENIAL_SOURCE_OPTIONS,
   P2P_OUTCOME_OPTIONS,
   RETRO_OUTCOME_OPTIONS,
   type AppealFormState,
@@ -16,6 +15,7 @@ import {
 interface FollowUpFormSectionsProps {
   selectedAuth: AuthRequest | null;
   darkMode: boolean;
+  canManageAuthorizations: boolean;
   denialForm: DenialFormState | null;
   denialError: string | null;
   isSavingDenial: boolean;
@@ -55,6 +55,7 @@ interface FollowUpFormSectionsProps {
 export function FollowUpFormSections({
   selectedAuth,
   darkMode,
+  canManageAuthorizations,
   denialForm,
   denialError,
   isSavingDenial,
@@ -83,6 +84,20 @@ export function FollowUpFormSections({
 }: FollowUpFormSectionsProps) {
   return (
     <>
+      {selectedAuth && !canManageAuthorizations && (
+        <div
+          className={cn(
+            "mb-6 rounded-lg border p-3 text-sm",
+            darkMode
+              ? "border-gray-700 bg-gray-900 text-gray-300"
+              : "border-gray-200 bg-gray-50 text-gray-700"
+          )}
+        >
+          Read Only access: denial, P2P, appeal, and retro authorization details
+          can be viewed but not changed.
+        </div>
+      )}
+
       {selectedAuth && denialForm && (
         <section
           className={cn(
@@ -128,6 +143,7 @@ export function FollowUpFormSections({
               </span>
               <select
                 value={denialForm.denialReasonCategory}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onDenialFieldChange(
                     "denialReasonCategory",
@@ -135,7 +151,7 @@ export function FollowUpFormSections({
                   )
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -156,11 +172,12 @@ export function FollowUpFormSections({
               <input
                 type="date"
                 value={denialForm.denialDate}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onDenialFieldChange("denialDate", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -175,11 +192,12 @@ export function FollowUpFormSections({
               <input
                 type="date"
                 value={denialForm.denialThroughDate}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onDenialFieldChange("denialThroughDate", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -202,11 +220,12 @@ export function FollowUpFormSections({
               </span>
               <select
                 value={denialForm.denialLevelOfCare}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onDenialFieldChange("denialLevelOfCare", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -226,13 +245,14 @@ export function FollowUpFormSections({
               </span>
               <textarea
                 value={denialForm.denialReasonNotes}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onDenialFieldChange("denialReasonNotes", event.target.value)
                 }
                 rows={3}
                 placeholder="What reason did the payer give for the denial?"
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
                     : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
@@ -246,6 +266,7 @@ export function FollowUpFormSections({
               </span>
               <textarea
                 value={denialForm.denialPreventionNotes}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onDenialFieldChange(
                     "denialPreventionNotes",
@@ -255,7 +276,7 @@ export function FollowUpFormSections({
                 rows={3}
                 placeholder="What documentation or workflow change could help avoid this denial later?"
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
                     : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
@@ -265,21 +286,23 @@ export function FollowUpFormSections({
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void onClearDenial();
-              }}
-              disabled={isSavingDenial}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium",
-                darkMode
-                  ? "bg-red-950 text-red-200 hover:bg-red-900"
-                  : "bg-red-50 text-red-700 hover:bg-red-100"
-              )}
-            >
-              Delete Denial Details
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onClearDenial();
+                }}
+                disabled={isSavingDenial}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium",
+                  darkMode
+                    ? "bg-red-950 text-red-200 hover:bg-red-900"
+                    : "bg-red-50 text-red-700 hover:bg-red-100"
+                )}
+              >
+                Delete Denial Details
+              </button>
+            )}
             <button
               type="button"
               onClick={onClearSelectedAuth}
@@ -293,21 +316,23 @@ export function FollowUpFormSections({
               Back to Dashboard
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                void onSaveDenial();
-              }}
-              disabled={isSavingDenial}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium text-white",
-                isSavingDenial
-                  ? "cursor-not-allowed bg-blue-400"
-                  : "bg-blue-600 hover:bg-blue-700"
-              )}
-            >
-              {isSavingDenial ? "Saving..." : "Save Denial Details"}
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onSaveDenial();
+                }}
+                disabled={isSavingDenial}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium text-white",
+                  isSavingDenial
+                    ? "cursor-not-allowed bg-blue-400"
+                    : "bg-blue-600 hover:bg-blue-700"
+                )}
+              >
+                {isSavingDenial ? "Saving..." : "Save Denial Details"}
+              </button>
+            )}
           </div>
         </section>
       )}
@@ -355,6 +380,7 @@ export function FollowUpFormSections({
               <input
                 type="checkbox"
                 checked={p2pForm.p2pRequested}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onP2PFieldChange("p2pRequested", event.target.checked)
                 }
@@ -372,11 +398,12 @@ export function FollowUpFormSections({
               <input
                 type="datetime-local"
                 value={p2pForm.p2pScheduledAt}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onP2PFieldChange("p2pScheduledAt", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -391,11 +418,12 @@ export function FollowUpFormSections({
               <input
                 type="date"
                 value={p2pForm.p2pDeadline}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onP2PFieldChange("p2pDeadline", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -418,11 +446,12 @@ export function FollowUpFormSections({
               </span>
               <select
                 value={p2pForm.p2pOutcome}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onP2PFieldChange("p2pOutcome", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -443,12 +472,13 @@ export function FollowUpFormSections({
               <input
                 type="text"
                 value={p2pForm.p2pReviewer}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onP2PFieldChange("p2pReviewer", event.target.value)
                 }
                 placeholder="Medical director or payer reviewer"
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
                     : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
@@ -462,13 +492,14 @@ export function FollowUpFormSections({
               </span>
               <textarea
                 value={p2pForm.p2pNotes}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onP2PFieldChange("p2pNotes", event.target.value)
                 }
                 rows={3}
                 placeholder="Add peer review details, call notes, or payer instructions."
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
                     : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
@@ -478,21 +509,23 @@ export function FollowUpFormSections({
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void onClearP2P();
-              }}
-              disabled={isSavingP2P}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium",
-                darkMode
-                  ? "bg-red-950 text-red-200 hover:bg-red-900"
-                  : "bg-red-50 text-red-700 hover:bg-red-100"
-              )}
-            >
-              Delete P2P Details
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onClearP2P();
+                }}
+                disabled={isSavingP2P}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium",
+                  darkMode
+                    ? "bg-red-950 text-red-200 hover:bg-red-900"
+                    : "bg-red-50 text-red-700 hover:bg-red-100"
+                )}
+              >
+                Delete P2P Details
+              </button>
+            )}
             <button
               type="button"
               onClick={onClearSelectedAuth}
@@ -506,21 +539,23 @@ export function FollowUpFormSections({
               Back to Dashboard
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                void onSaveP2P();
-              }}
-              disabled={isSavingP2P}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium text-white",
-                isSavingP2P
-                  ? "cursor-not-allowed bg-blue-400"
-                  : "bg-blue-600 hover:bg-blue-700"
-              )}
-            >
-              {isSavingP2P ? "Saving..." : "Save P2P Details"}
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onSaveP2P();
+                }}
+                disabled={isSavingP2P}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium text-white",
+                  isSavingP2P
+                    ? "cursor-not-allowed bg-blue-400"
+                    : "bg-blue-600 hover:bg-blue-700"
+                )}
+              >
+                {isSavingP2P ? "Saving..." : "Save P2P Details"}
+              </button>
+            )}
           </div>
         </section>
       )}
@@ -568,6 +603,7 @@ export function FollowUpFormSections({
               <input
                 type="checkbox"
                 checked={appealForm.appealSubmitted}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onAppealFieldChange("appealSubmitted", event.target.checked)
                 }
@@ -585,11 +621,12 @@ export function FollowUpFormSections({
               <input
                 type="date"
                 value={appealForm.appealDeadline}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onAppealFieldChange("appealDeadline", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -603,11 +640,12 @@ export function FollowUpFormSections({
               </span>
               <select
                 value={appealForm.appealOutcome}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onAppealFieldChange("appealOutcome", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -627,13 +665,14 @@ export function FollowUpFormSections({
               </span>
               <textarea
                 value={appealForm.appealNotes}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onAppealFieldChange("appealNotes", event.target.value)
                 }
                 rows={3}
                 placeholder="Add appeal submission details, documents sent, payer instructions, or outcome notes."
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
                     : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
@@ -643,21 +682,23 @@ export function FollowUpFormSections({
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void onClearAppeal();
-              }}
-              disabled={isSavingAppeal}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium",
-                darkMode
-                  ? "bg-red-950 text-red-200 hover:bg-red-900"
-                  : "bg-red-50 text-red-700 hover:bg-red-100"
-              )}
-            >
-              Clear Appeal Details
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onClearAppeal();
+                }}
+                disabled={isSavingAppeal}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium",
+                  darkMode
+                    ? "bg-red-950 text-red-200 hover:bg-red-900"
+                    : "bg-red-50 text-red-700 hover:bg-red-100"
+                )}
+              >
+                Clear Appeal Details
+              </button>
+            )}
 
             <button
               type="button"
@@ -672,21 +713,23 @@ export function FollowUpFormSections({
               Back to Dashboard
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                void onSaveAppeal();
-              }}
-              disabled={isSavingAppeal}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium text-white",
-                isSavingAppeal
-                  ? "cursor-not-allowed bg-blue-400"
-                  : "bg-blue-600 hover:bg-blue-700"
-              )}
-            >
-              {isSavingAppeal ? "Saving..." : "Save Appeal Details"}
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onSaveAppeal();
+                }}
+                disabled={isSavingAppeal}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium text-white",
+                  isSavingAppeal
+                    ? "cursor-not-allowed bg-blue-400"
+                    : "bg-blue-600 hover:bg-blue-700"
+                )}
+              >
+                {isSavingAppeal ? "Saving..." : "Save Appeal Details"}
+              </button>
+            )}
           </div>
         </section>
       )}
@@ -734,6 +777,7 @@ export function FollowUpFormSections({
               <input
                 type="checkbox"
                 checked={retroForm.retroRequested}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onRetroFieldChange("retroRequested", event.target.checked)
                 }
@@ -751,11 +795,12 @@ export function FollowUpFormSections({
               <input
                 type="date"
                 value={retroForm.retroDeadline}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onRetroFieldChange("retroDeadline", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -778,11 +823,12 @@ export function FollowUpFormSections({
               </span>
               <select
                 value={retroForm.retroOutcome}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onRetroFieldChange("retroOutcome", event.target.value)
                 }
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100"
                     : "border-gray-300 bg-white text-gray-900"
@@ -802,13 +848,14 @@ export function FollowUpFormSections({
               </span>
               <textarea
                 value={retroForm.retroNotes}
+                disabled={!canManageAuthorizations}
                 onChange={(event) =>
                   onRetroFieldChange("retroNotes", event.target.value)
                 }
                 rows={3}
                 placeholder="Add retro auth details, dates submitted, payer instructions, or outcome notes."
                 className={cn(
-                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+                  "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60",
                   darkMode
                     ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
                     : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
@@ -818,21 +865,23 @@ export function FollowUpFormSections({
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void onClearRetro();
-              }}
-              disabled={isSavingRetro}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium",
-                darkMode
-                  ? "bg-red-950 text-red-200 hover:bg-red-900"
-                  : "bg-red-50 text-red-700 hover:bg-red-100"
-              )}
-            >
-              Delete Retro Auth Details
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onClearRetro();
+                }}
+                disabled={isSavingRetro}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium",
+                  darkMode
+                    ? "bg-red-950 text-red-200 hover:bg-red-900"
+                    : "bg-red-50 text-red-700 hover:bg-red-100"
+                )}
+              >
+                Delete Retro Auth Details
+              </button>
+            )}
 
             <button
               type="button"
@@ -847,21 +896,23 @@ export function FollowUpFormSections({
               Back to Dashboard
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                void onSaveRetro();
-              }}
-              disabled={isSavingRetro}
-              className={cn(
-                "rounded-lg px-4 py-2 text-sm font-medium text-white",
-                isSavingRetro
-                  ? "cursor-not-allowed bg-blue-400"
-                  : "bg-blue-600 hover:bg-blue-700"
-              )}
-            >
-              {isSavingRetro ? "Saving..." : "Save Retro Auth Details"}
-            </button>
+            {canManageAuthorizations && (
+              <button
+                type="button"
+                onClick={() => {
+                  void onSaveRetro();
+                }}
+                disabled={isSavingRetro}
+                className={cn(
+                  "rounded-lg px-4 py-2 text-sm font-medium text-white",
+                  isSavingRetro
+                    ? "cursor-not-allowed bg-blue-400"
+                    : "bg-blue-600 hover:bg-blue-700"
+                )}
+              >
+                {isSavingRetro ? "Saving..." : "Save Retro Auth Details"}
+              </button>
+            )}
           </div>
         </section>
       )}

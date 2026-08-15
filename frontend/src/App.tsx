@@ -597,6 +597,7 @@ function App() {
             data={authRequests}
             darkMode={darkMode}
             selectedAuthId={selectedDenialFollowUpAuthId}
+            canManageAuthorizations={canManageAuthorizations}
             onSelectAuth={(auth) => {
               setSelectedDenialFollowUpAuthId(auth.id);
             }}

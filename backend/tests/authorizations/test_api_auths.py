@@ -578,6 +578,113 @@ def test_read_only_user_cannot_create_auth(client):
     assert response.json() == {"detail": "Operation not permitted for this role."}
 
 
+def test_read_only_user_cannot_update_auth(client, auth_headers):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    client.post("/api/security/logout", headers=auth_headers)
+
+    create_user(
+        "readonly@example.com",
+        "correct horse battery staple",
+        role="Read Only",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "readonly@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    csrf_token = client.cookies.get("carequeue_csrf")
+
+    assert csrf_token
+
+    response = client.patch(
+        "/api/auths/1",
+        json={
+            "denial_reason_category": "Medical Necessity",
+            "p2p_requested": True,
+            "retro_requested": True,
+        },
+        headers={
+            "X-CSRF-Token": csrf_token,
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Operation not permitted for this role.",
+    }
+
+    read_response = client.get("/api/auths/1")
+
+    assert read_response.status_code == 200
+
+    auth = read_response.json()
+
+    assert auth["denial_reason_category"] != "Medical Necessity"
+    assert auth["p2p_requested"] is False
+    assert auth["retro_requested"] is False
+
+
+def test_read_only_user_cannot_delete_auth(client, auth_headers):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    client.post("/api/security/logout", headers=auth_headers)
+
+    create_user(
+        "readonly@example.com",
+        "correct horse battery staple",
+        role="Read Only",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "readonly@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    csrf_token = client.cookies.get("carequeue_csrf")
+
+    assert csrf_token
+
+    response = client.delete(
+        "/api/auths/1",
+        headers={
+            "X-CSRF-Token": csrf_token,
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Operation not permitted for this role.",
+    }
+
+    read_response = client.get("/api/auths/1")
+
+    assert read_response.status_code == 200
+
+
 def make_event_payload() -> dict:
     return {
         "event_type": "Initial Review",
