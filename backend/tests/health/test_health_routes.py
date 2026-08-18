@@ -38,7 +38,7 @@ def test_health_endpoint_remains_available(client):
     assert response.json() == {
         "status": "ok",
         "app": "AuthStatus API",
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
 
 
@@ -49,7 +49,7 @@ def test_liveness_endpoint_reports_running_application(client):
     assert response.json() == {
         "status": "ok",
         "app": "AuthStatus API",
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
 
 
