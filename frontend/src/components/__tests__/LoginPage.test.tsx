@@ -155,10 +155,66 @@ describe("LoginPage", () => {
     await waitFor(() => {
       expect(mockedVerifyMfaLogin).toHaveBeenCalledWith(
         "challenge-token",
-        "123456"
+        "123456",
+        false
       );
     });
 
+    expect(onLogin).toHaveBeenCalledWith(authSession);
+  });
+
+  it("can remember the device after successful MFA verification", async () => {
+    const onLogin = vi.fn();
+  
+    mockedLoginUser.mockResolvedValue({
+      mfa_required: true,
+      mfa_challenge_token: "challenge-token",
+      expires_at: "2026-08-12T01:00:00+00:00",
+    });
+    mockedIsMfaLoginChallenge.mockReturnValue(true);
+    mockedVerifyMfaLogin.mockResolvedValue(authSession);
+  
+    render(<LoginPage darkMode={false} onLogin={onLogin} />);
+  
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "user@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct horse battery staple" },
+    });
+  
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Sign in",
+      })
+    );
+  
+    await screen.findByLabelText("Authentication code");
+  
+    fireEvent.change(screen.getByLabelText("Authentication code"), {
+      target: { value: "123456" },
+    });
+  
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Remember this device for 30 days",
+      })
+    );
+  
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Verify code",
+      })
+    );
+  
+    await waitFor(() => {
+      expect(mockedVerifyMfaLogin).toHaveBeenCalledWith(
+        "challenge-token",
+        "123456",
+        true
+      );
+    });
+  
     expect(onLogin).toHaveBeenCalledWith(authSession);
   });
 

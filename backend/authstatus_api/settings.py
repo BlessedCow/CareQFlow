@@ -128,6 +128,10 @@ class Settings(BaseSettings):
         default="carequeue_csrf",
         validation_alias="AUTHSTATUS_CSRF_COOKIE_NAME",
     )
+    trusted_device_cookie_name: str = Field(
+        default="carequeue_trusted_device",
+        validation_alias="AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME",
+    )
     csrf_header_name: str = Field(
         default="X-CSRF-Token",
         validation_alias="AUTHSTATUS_CSRF_HEADER_NAME",

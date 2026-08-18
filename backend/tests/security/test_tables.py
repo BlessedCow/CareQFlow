@@ -142,6 +142,22 @@ def test_init_db_creates_sessions_table():
     }.issubset(table_columns("sessions"))
 
 
+def test_init_db_creates_trusted_devices_table():
+    init_db()
+
+    assert {
+        "id",
+        "user_id",
+        "token_hash",
+        "created_at",
+        "last_used_at",
+        "expires_at",
+        "revoked_at",
+        "ip_address",
+        "user_agent",
+    }.issubset(table_columns("trusted_devices"))
+
+
 def test_user_role_constraint_rejects_unknown_role():
     init_db()
 
@@ -222,3 +238,59 @@ def test_deleting_user_removes_sessions():
         session_count = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
 
     assert session_count == 0
+
+
+def test_deleting_user_removes_trusted_devices():
+    init_db()
+
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO users (
+                username,
+                password_hash,
+                role,
+                password_changed_at,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "trusted-device-user",
+                "$argon2id$placeholder",
+                "UR",
+                "2026-01-01T00:00:00",
+                "2026-01-01T00:00:00",
+                "2026-01-01T00:00:00",
+            ),
+        )
+        user_id = cursor.lastrowid
+
+        conn.execute(
+            """
+            INSERT INTO trusted_devices (
+                user_id,
+                token_hash,
+                created_at,
+                last_used_at,
+                expires_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                "hashed-trusted-device-token",
+                "2026-01-01T00:00:00",
+                "2026-01-01T00:00:00",
+                "2026-02-01T00:00:00",
+            ),
+        )
+
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+        trusted_device_count = conn.execute(
+            "SELECT COUNT(*) FROM trusted_devices"
+        ).fetchone()[0]
+
+    assert trusted_device_count == 0

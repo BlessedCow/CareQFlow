@@ -158,6 +158,33 @@ export async function fetchMfaStatus(): Promise<MfaStatusResponse> {
   return (await response.json()) as MfaStatusResponse;
 }
 
+export async function revokeTrustedDevices(): Promise<TrustedDeviceRevokeResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/mfa/trusted-devices`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Unable to revoke remembered devices.";
+
+    try {
+      const data = (await response.json()) as { detail?: string };
+
+      if (data.detail) {
+        message = data.detail;
+      }
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as TrustedDeviceRevokeResponse;
+}
+
 export async function startMfaEnrollment(
   currentPassword: string
 ): Promise<MfaEnrollmentStartResponse> {
@@ -251,6 +278,10 @@ export interface MfaStatusResponse {
   enrollment_pending: boolean;
 }
 
+export interface TrustedDeviceRevokeResponse {
+  trusted_devices_revoked: number;
+}
+
 export interface MfaEnrollmentStartResponse {
   secret: string;
   provisioning_uri: string;
@@ -316,7 +347,8 @@ export async function loginUser(
 
 export async function verifyMfaLogin(
   challengeToken: string,
-  code: string
+  code: string,
+  rememberDevice: boolean
 ): Promise<AuthSession> {
   const response = await fetch(
     `${API_BASE_URL}/api/security/login/mfa/verify`,
@@ -329,6 +361,7 @@ export async function verifyMfaLogin(
       body: JSON.stringify({
         challenge_token: challengeToken,
         code,
+        remember_device: rememberDevice,
       }),
     }
   );

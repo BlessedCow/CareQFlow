@@ -17,6 +17,7 @@ export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(
     null
   );
@@ -30,7 +31,11 @@ export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
 
     try {
       if (mfaChallengeToken) {
-        const authSession = await verifyMfaLogin(mfaChallengeToken, mfaCode);
+        const authSession = await verifyMfaLogin(
+          mfaChallengeToken,
+          mfaCode,
+          rememberDevice
+        );
         onLogin(authSession);
         return;
       }
@@ -58,6 +63,7 @@ export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
     setMfaChallengeToken(null);
     setMfaCode("");
     setLoginError(null);
+    setRememberDevice(false);
   };
 
   return (
@@ -146,32 +152,43 @@ export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
           )}
 
           {mfaChallengeToken && (
-            <div>
-              <label
-                className="mb-1 block text-sm font-medium"
-                htmlFor="mfa-code"
-              >
-                Authentication code
-              </label>
-              <input
-                id="mfa-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={mfaCode}
-                onChange={(event) => setMfaCode(event.target.value)}
-                className={cn(
-                  "w-full rounded-lg border px-3 py-2 outline-none transition-colors",
-                  darkMode
-                    ? "border-gray-700 bg-gray-950 text-gray-100 focus:border-blue-500"
-                    : "border-gray-300 bg-white text-gray-900 focus:border-blue-500"
-                )}
-                required
-                maxLength={6}
-              />
-            </div>
-          )}
+            <>
+              <div>
+                <label
+                  className="mb-1 block text-sm font-medium"
+                  htmlFor="mfa-code"
+                >
+                  Authentication code
+                </label>
+                <input
+                  id="mfa-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={mfaCode}
+                  onChange={(event) => setMfaCode(event.target.value)}
+                  className={cn(
+                    "w-full rounded-lg border px-3 py-2 outline-none transition-colors",
+                    darkMode
+                      ? "border-gray-700 bg-gray-950 text-gray-100 focus:border-blue-500"
+                      : "border-gray-300 bg-white text-gray-900 focus:border-blue-500"
+                  )}
+                  required
+                  maxLength={6}
+                />
+              </div>
 
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(event) => setRememberDevice(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                />
+                <span>Remember this device for 30 days</span>
+              </label>
+            </>
+          )}
           {loginError && (
             <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-500">
               {loginError}

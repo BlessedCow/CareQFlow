@@ -65,6 +65,7 @@ from authstatus_api.security.schemas import (
     MfaStatusResponse,
     PasswordUpdateResponse,
     SessionResponse,
+    TrustedDeviceRevokeResponse,
     UserCreateRequest,
     UserListResponse,
     UserResponse,
@@ -80,6 +81,13 @@ from authstatus_api.security.sessions import (
 )
 from authstatus_api.security.temporary_passwords import (
     generate_temporary_password,
+)
+from authstatus_api.security.trusted_devices import (
+    DEFAULT_TRUSTED_DEVICE_DAYS,
+    create_trusted_device,
+    get_active_trusted_device_by_token,
+    revoke_user_trusted_devices,
+    touch_trusted_device,
 )
 from authstatus_api.security.users import (
     UserLockedError,
@@ -283,6 +291,13 @@ def update_managed_user(
     current_user: dict = AdminUserDependency,
 ) -> UserResponse:
     payload_data = payload.model_dump(exclude_unset=True)
+    target_user = get_user_by_id(user_id)
+
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
 
     if not payload_data:
         user = update_user(user_id)
@@ -301,18 +316,26 @@ def update_managed_user(
             is_active=payload_data.get("is_active"),
         )
 
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
-        )
+    role_changed = user["role"] != target_user["role"]
+    account_disabled = target_user["is_active"] and not user["is_active"]
+
+    sessions_revoked = 0
+    trusted_devices_revoked = 0
+
+    if role_changed or account_disabled:
+        sessions_revoked = revoke_user_sessions(user_id)
+        trusted_devices_revoked = revoke_user_trusted_devices(user_id)
 
     record_audit_event(
         action="user.update",
         resource_type="user",
         resource_id=user_id,
         user=current_user,
-        metadata={"fields": sorted(payload_data.keys())},
+        metadata={
+            "fields": sorted(payload_data.keys()),
+            "sessions_revoked": sessions_revoked,
+            "trusted_devices_revoked": trusted_devices_revoked,
+        },
         request=request,
     )
 
@@ -364,13 +387,17 @@ def change_password(
         )
 
     sessions_revoked = revoke_user_sessions(current_user["id"])
+    trusted_devices_revoked = revoke_user_trusted_devices(current_user["id"])
 
     record_audit_event(
         action="security.password_change",
         resource_type="user",
         resource_id=current_user["id"],
         user=current_user,
-        metadata={"sessions_revoked": sessions_revoked},
+        metadata={
+            "sessions_revoked": sessions_revoked,
+            "trusted_devices_revoked": trusted_devices_revoked,
+        },
         request=request,
     )
 
@@ -392,6 +419,42 @@ def get_mfa_status(
     return MfaStatusResponse(
         enabled=current_user["mfa_enabled"],
         enrollment_pending=bool(secret) and not current_user["mfa_enabled"],
+    )
+
+
+@router.delete(
+    "/mfa/trusted-devices",
+    response_model=TrustedDeviceRevokeResponse,
+)
+def revoke_current_user_trusted_devices(
+    request: Request,
+    response: Response,
+    current_user: dict = CurrentUserDependency,
+) -> TrustedDeviceRevokeResponse:
+    trusted_devices_revoked = revoke_user_trusted_devices(current_user["id"])
+    settings = get_settings()
+
+    response.delete_cookie(
+        key=settings.trusted_device_cookie_name,
+        path="/api/security/login",
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+    )
+
+    record_audit_event(
+        action="security.trusted_devices_revoked",
+        resource_type="user",
+        resource_id=current_user["id"],
+        user=current_user,
+        metadata={
+            "trusted_devices_revoked": trusted_devices_revoked,
+        },
+        request=request,
+    )
+
+    return TrustedDeviceRevokeResponse(
+        trusted_devices_revoked=trusted_devices_revoked,
     )
 
 
@@ -548,6 +611,7 @@ def reset_managed_user_password(
         )
 
     sessions_revoked = revoke_user_sessions(user_id)
+    trusted_devices_revoked = revoke_user_trusted_devices(user_id)
 
     record_audit_event(
         action="user.password_reset",
@@ -556,6 +620,7 @@ def reset_managed_user_password(
         user=current_user,
         metadata={
             "sessions_revoked": sessions_revoked,
+            "trusted_devices_revoked": trusted_devices_revoked,
             "must_change_password": REQUIRE_CREDENTIAL_ROTATION,
         },
         request=request,
@@ -599,13 +664,17 @@ def reset_managed_user_mfa(
         )
 
     sessions_revoked = revoke_user_sessions(user_id)
+    trusted_devices_revoked = revoke_user_trusted_devices(user_id)
 
     record_audit_event(
         action="user.mfa_reset",
         resource_type="user",
         resource_id=user_id,
         user=current_user,
-        metadata={"sessions_revoked": sessions_revoked},
+        metadata={
+            "sessions_revoked": sessions_revoked,
+            "trusted_devices_revoked": trusted_devices_revoked,
+        },
         request=request,
     )
 
@@ -658,13 +727,40 @@ def login(
         )
 
     if user["mfa_enabled"]:
+        settings = get_settings()
+        trusted_device_token = request.cookies.get(settings.trusted_device_cookie_name)
+
+        if trusted_device_token:
+            trusted_device = get_active_trusted_device_by_token(trusted_device_token)
+
+            if (
+                trusted_device is not None
+                and trusted_device["user_id"] == user["id"]
+                and touch_trusted_device(trusted_device_token)
+            ):
+                record_audit_event(
+                    action="security.login_trusted_device",
+                    resource_type="trusted_device",
+                    resource_id=trusted_device["id"],
+                    user=user,
+                    metadata={
+                        "expires_at": trusted_device["expires_at"],
+                    },
+                    request=request,
+                )
+
+                return _create_authenticated_session_response(
+                    user=user,
+                    request=request,
+                    response=response,
+                )
+
         created_challenge = create_mfa_login_challenge(
             user["id"],
             ip_address=_client_ip(request),
             user_agent=request.headers.get("user-agent", ""),
         )
         challenge = created_challenge["challenge"]
-        settings = get_settings()
 
         response.delete_cookie(
             key=settings.session_cookie_name,
@@ -822,6 +918,36 @@ def verify_mfa_login(
         user=user,
         request=request,
     )
+
+    if payload.remember_device:
+        trusted_device = create_trusted_device(
+            user["id"],
+            days=DEFAULT_TRUSTED_DEVICE_DAYS,
+            ip_address=_client_ip(request),
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        settings = get_settings()
+
+        response.set_cookie(
+            key=settings.trusted_device_cookie_name,
+            value=trusted_device["token"],
+            max_age=DEFAULT_TRUSTED_DEVICE_DAYS * 24 * 60 * 60,
+            httponly=True,
+            secure=settings.session_cookie_secure,
+            samesite="lax",
+            path="/api/security/login",
+        )
+
+        record_audit_event(
+            action="security.trusted_device_created",
+            resource_type="trusted_device",
+            resource_id=trusted_device["trusted_device"]["id"],
+            user=user,
+            metadata={
+                "expires_at": trusted_device["trusted_device"]["expires_at"],
+            },
+            request=request,
+        )
 
     return _create_authenticated_session_response(
         user=user,

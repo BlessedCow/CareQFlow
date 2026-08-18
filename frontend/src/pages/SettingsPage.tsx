@@ -5,6 +5,7 @@ import { ChangePasswordCard } from "../components/security/ChangePasswordCard";
 import type { RegisteredOptionCategory } from "../api/registeredOptions";
 import type { CurrentUser } from "../api/security";
 import { MfaEnrollmentCard } from "../components/security/MfaEnrollmentCard";
+import { TrustedDevicesCard } from "../components/security/TrustedDevicesCard";
 
 type DashboardCardKey =
   | "kpis"
@@ -652,7 +653,8 @@ export function SettingsPage({
                 darkMode ? "text-gray-400" : "text-gray-600"
               )}
             >
-              Manage MFA, change your CareQueue password, and sign out of active sessions.
+              Manage MFA, change your CareQueue password, and sign out of active
+              sessions.
             </p>
           </div>
 
@@ -678,6 +680,8 @@ export function SettingsPage({
               mfaEnabled={currentUser.mfa_enabled}
               onMfaEnabledChange={onMfaEnabledChange}
             />
+
+            <TrustedDevicesCard darkMode={darkMode} />
 
             <ChangePasswordCard
               darkMode={darkMode}

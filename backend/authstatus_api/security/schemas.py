@@ -68,9 +68,14 @@ class MfaStatusResponse(BaseModel):
     enrollment_pending: bool
 
 
+class TrustedDeviceRevokeResponse(BaseModel):
+    trusted_devices_revoked: int
+
+
 class MfaLoginVerifyRequest(BaseModel):
     challenge_token: str
     code: str
+    remember_device: bool = False
 
     model_config = ConfigDict(extra="forbid")
 

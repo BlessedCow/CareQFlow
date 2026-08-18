@@ -58,6 +58,21 @@ def initialize_security_tables(conn: Any) -> None:
         )
         """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS trusted_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            last_used_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            revoked_at TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+        """)
+
     ensure_column(
         conn,
         "users",

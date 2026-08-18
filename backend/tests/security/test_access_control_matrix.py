@@ -14,6 +14,7 @@ EXPECTED_API_ENDPOINTS = {
     ("DELETE", "/api/auths/{auth_id}/documents/{document_id}"),
     ("DELETE", "/api/auths/{auth_id}/events/{event_id}"),
     ("DELETE", "/api/registered-options/{option_id}"),
+    ("DELETE", "/api/security/mfa/trusted-devices"),
     ("GET", "/api/admin/system/backups"),
     ("GET", "/api/admin/system/backups/recovery"),
     ("GET", "/api/admin/system/endpoints"),
@@ -67,6 +68,7 @@ PUBLIC_ENDPOINTS = {
 }
 
 AUTHENTICATED_ENDPOINTS = {
+    ("DELETE", "/api/security/mfa/trusted-devices"),
     ("GET", "/api/analytics/summary"),
     ("GET", "/api/auths"),
     ("GET", "/api/auths/{auth_id}"),
