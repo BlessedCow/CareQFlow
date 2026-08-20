@@ -1216,6 +1216,179 @@ def test_create_user_writes_safe_audit_event(client):
     assert "must_change_password" in row["metadata"]
 
 
+def test_admin_can_verify_audit_integrity(client):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    csrf_token = client.cookies.get("carequeue_csrf")
+
+    assert csrf_token
+
+    response = client.post(
+        "/api/security/audit-events/verify-integrity",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["valid"] is True
+    assert result["status"] == "valid"
+    assert result["failed_event_id"] is None
+
+
+def test_audit_integrity_verification_is_audited(client):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    csrf_token = client.cookies.get("carequeue_csrf")
+
+    assert csrf_token
+
+    response = client.post(
+        "/api/security/audit-events/verify-integrity",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 200
+
+    audit_response = client.get(
+        "/api/security/audit-events?action=security.audit_integrity_verified"
+    )
+
+    assert audit_response.status_code == 200
+
+    events = audit_response.json()["events"]
+
+    assert len(events) == 1
+    assert events[0]["action"] == "security.audit_integrity_verified"
+    assert events[0]["resource_type"] == "audit_log"
+
+
+def test_audit_integrity_endpoint_reports_modified_event(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    headers = auth_headers_for(
+        client,
+        admin["username"],
+        "correct horse battery staple",
+    )
+
+    with get_conn() as conn:
+        event = conn.execute("""
+            SELECT id
+            FROM audit_events
+            WHERE event_hash IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 1
+            """).fetchone()
+
+        assert event is not None
+
+        conn.execute(
+            """
+            UPDATE audit_events
+            SET action = ?
+            WHERE id = ?
+            """,
+            (
+                "tampered.action",
+                event["id"],
+            ),
+        )
+
+    response = client.post(
+        "/api/security/audit-events/verify-integrity",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["valid"] is False
+    assert result["status"] == "invalid"
+    assert result["failed_event_id"] == event["id"]
+    assert result["reason"] == "Audit event integrity check failed."
+
+
+def test_audit_integrity_endpoint_reports_failure_when_audit_writer_refuses(
+    client,
+):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    headers = auth_headers_for(
+        client,
+        admin["username"],
+        "correct horse battery staple",
+    )
+
+    with get_conn() as conn:
+        chain_state = conn.execute("""
+            SELECT head_event_id
+            FROM audit_chain_state
+            WHERE id = 1
+            """).fetchone()
+
+        assert chain_state is not None
+
+        conn.execute(
+            """
+            DELETE FROM audit_events
+            WHERE id = ?
+            """,
+            (chain_state["head_event_id"],),
+        )
+
+    response = client.post(
+        "/api/security/audit-events/verify-integrity",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["valid"] is False
+    assert result["status"] == "invalid"
+    assert result["reason"] == "Audit chain state exists without chained audit events."
+
+
 def test_create_user_rejects_admin_supplied_password(client):
     create_user("admin@example.com", "correct horse battery staple", role="Admin")
 

@@ -14,6 +14,7 @@ from fastapi import (
 )
 
 from authstatus_api.audit.service import list_audit_events, record_audit_event
+from authstatus_api.audit.verification import verify_audit_chain
 from authstatus_api.security.csrf import (
     generate_csrf_token,
     validate_csrf_request,
@@ -49,6 +50,7 @@ from authstatus_api.security.schemas import (
     AdminUserCreateResponse,
     AuditEventListResponse,
     AuditEventResponse,
+    AuditIntegrityResponse,
     ChangePasswordRequest,
     CurrentUserResponse,
     InitialAdminSetupRequest,
@@ -244,6 +246,36 @@ def read_audit_events(
         page_size=result["page_size"],
         total=result["total"],
     )
+
+
+@router.post(
+    "/audit-events/verify-integrity",
+    response_model=AuditIntegrityResponse,
+)
+def verify_audit_integrity(
+    request: Request,
+    current_user: dict = AdminUserDependency,
+) -> AuditIntegrityResponse:
+    result = verify_audit_chain()
+
+    try:
+        record_audit_event(
+            action="security.audit_integrity_verified",
+            resource_type="audit_log",
+            user=current_user,
+            metadata={
+                "valid": result["valid"],
+                "status": result["status"],
+                "checked_events": result["checked_events"],
+                "legacy_events": result["legacy_events"],
+                "failed_event_id": result["failed_event_id"],
+            },
+            request=request,
+        )
+    except RuntimeError:
+        pass
+
+    return AuditIntegrityResponse(**result)
 
 
 @router.post(

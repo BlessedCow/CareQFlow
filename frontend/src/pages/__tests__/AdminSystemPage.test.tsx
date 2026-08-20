@@ -16,6 +16,7 @@ import {
   fetchRecoveryStatus,
   fetchRestorePoints,
   stageDatabaseRecovery,
+  verifyAuditIntegrity,
   verifyRestorePoint,
 } from "../../api/system";
 import { AdminSystemPage } from "../AdminSystemPage";
@@ -29,6 +30,7 @@ vi.mock("../../api/system", () => ({
   fetchRecoveryStatus: vi.fn(),
   fetchRestorePoints: vi.fn(),
   stageDatabaseRecovery: vi.fn(),
+  verifyAuditIntegrity: vi.fn(),
   verifyRestorePoint: vi.fn(),
 }));
 
@@ -41,6 +43,7 @@ const mockedFetchApiEndpoints = vi.mocked(fetchApiEndpoints);
 const mockedFetchRecoveryStatus = vi.mocked(fetchRecoveryStatus);
 const mockedStageDatabaseRecovery = vi.mocked(stageDatabaseRecovery);
 const mockedCancelDatabaseRecovery = vi.mocked(cancelDatabaseRecovery);
+const mockedVerifyAuditIntegrity = vi.mocked(verifyAuditIntegrity);
 
 const existingBackup = {
   filename: "auth_tracker_20260728.db.enc",
@@ -67,6 +70,7 @@ describe("AdminSystemPage", () => {
     mockedFetchRecoveryStatus.mockReset();
     mockedStageDatabaseRecovery.mockReset();
     mockedCancelDatabaseRecovery.mockReset();
+    mockedVerifyAuditIntegrity.mockReset();
 
     mockedFetchApplicationHealth.mockResolvedValue({
       status: "ok",
@@ -127,6 +131,109 @@ describe("AdminSystemPage", () => {
         probeable: false,
       },
     ]);
+  });
+
+  it("shows a successful audit integrity verification", async () => {
+    mockedVerifyAuditIntegrity.mockResolvedValue({
+      valid: true,
+      status: "valid",
+      checked_events: 42,
+      legacy_events: 3,
+      failed_event_id: null,
+      reason: null,
+    });
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Verify Integrity",
+      })
+    );
+  
+    expect(await screen.findByText("Integrity verified")).toBeInTheDocument();
+  
+    expect(screen.getByText("42")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+  
+    expect(mockedVerifyAuditIntegrity).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an audit integrity failure", async () => {
+    mockedVerifyAuditIntegrity.mockResolvedValue({
+      valid: false,
+      status: "invalid",
+      checked_events: 7,
+      legacy_events: 2,
+      failed_event_id: 8,
+      reason: "Audit event integrity check failed.",
+    });
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Verify Integrity",
+      })
+    );
+  
+    expect(
+      await screen.findByText("Integrity failure detected")
+    ).toBeInTheDocument();
+  
+    expect(
+      screen.getByText("Audit event integrity check failed.")
+    ).toBeInTheDocument();
+  
+    expect(screen.getByText(/Failed event ID:/)).toBeInTheDocument();
+    expect(screen.getByText(/Failed event ID:/)).toHaveTextContent("8");
+  });
+
+  it("shows when the protected audit chain is not initialized", async () => {
+    mockedVerifyAuditIntegrity.mockResolvedValue({
+      valid: true,
+      status: "not_initialized",
+      checked_events: 0,
+      legacy_events: 5,
+      failed_event_id: null,
+      reason: null,
+    });
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Verify Integrity",
+      })
+    );
+  
+    expect(
+      await screen.findByText("Protected audit chain not initialized")
+    ).toBeInTheDocument();
+  
+    expect(screen.getByText("5")).toBeInTheDocument();
+  });
+
+  it("shows an error when audit integrity verification cannot run", async () => {
+    mockedVerifyAuditIntegrity.mockRejectedValue(
+      new Error("Unable to verify audit log integrity.")
+    );
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Verify Integrity",
+      })
+    );
+  
+    expect(
+      await screen.findByRole("alert")
+    ).toHaveTextContent("Unable to verify audit log integrity.");
+  
+    expect(
+      screen.queryByText("Integrity verified")
+    ).not.toBeInTheDocument();
   });
 
   it("shows that no recovery is currently staged", async () => {

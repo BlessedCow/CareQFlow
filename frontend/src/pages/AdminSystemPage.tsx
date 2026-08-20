@@ -21,9 +21,11 @@ import {
   fetchRecoveryStatus,
   fetchRestorePoints,
   stageDatabaseRecovery,
+  verifyAuditIntegrity,
   verifyRestorePoint,
   type ApiEndpointStatus,
   type ApplicationHealth,
+  type AuditIntegrityResponse,
   type BackupFile,
   type BackupRetentionResult,
   type DatabaseReadiness,
@@ -95,6 +97,14 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
   const [isCancelingRecovery, setIsCancelingRecovery] = useState(false);
   const [recoveryConfirmationFilename, setRecoveryConfirmationFilename] =
     useState<string | null>(null);
+
+  const [auditIntegrity, setAuditIntegrity] =
+    useState<AuditIntegrityResponse | null>(null);
+  const [isVerifyingAuditIntegrity, setIsVerifyingAuditIntegrity] =
+    useState(false);
+  const [auditIntegrityError, setAuditIntegrityError] = useState<string | null>(
+    null
+  );
 
   const loadSystemData = useCallback(async () => {
     setIsLoading(true);
@@ -259,6 +269,24 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
       );
     } finally {
       setIsCancelingRecovery(false);
+    }
+  };
+
+  const handleVerifyAuditIntegrity = async () => {
+    setIsVerifyingAuditIntegrity(true);
+    setAuditIntegrityError(null);
+
+    try {
+      const result = await verifyAuditIntegrity();
+      setAuditIntegrity(result);
+    } catch (verifyError) {
+      setAuditIntegrityError(
+        verifyError instanceof Error
+          ? verifyError.message
+          : "Unable to verify audit log integrity."
+      );
+    } finally {
+      setIsVerifyingAuditIntegrity(false);
     }
   };
 
@@ -566,6 +594,168 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
             )}
           </div>
         </div>
+      </section>
+
+      <section className={cardClass} aria-labelledby="audit-integrity-heading">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-6 w-6 text-blue-500" />
+
+              <div>
+                <h2
+                  id="audit-integrity-heading"
+                  className="text-lg font-semibold"
+                >
+                  Audit Log Integrity
+                </h2>
+
+                <p
+                  className={cn(
+                    "text-sm",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Verify the cryptographic integrity of protected audit events.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void handleVerifyAuditIntegrity()}
+            disabled={isVerifyingAuditIntegrity}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              darkMode
+                ? "border-gray-700 hover:bg-gray-800"
+                : "border-gray-300 hover:bg-gray-100"
+            )}
+          >
+            <RefreshCw
+              className={cn(
+                "h-4 w-4",
+                isVerifyingAuditIntegrity && "animate-spin"
+              )}
+            />
+
+            {isVerifyingAuditIntegrity ? "Verifying..." : "Verify Integrity"}
+          </button>
+        </div>
+
+        {auditIntegrityError && (
+          <div
+            role="alert"
+            className={cn(
+              "mt-4 rounded-lg border px-4 py-3 text-sm",
+              darkMode
+                ? "border-red-900 bg-red-950/40 text-red-200"
+                : "border-red-200 bg-red-50 text-red-800"
+            )}
+          >
+            {auditIntegrityError}
+          </div>
+        )}
+
+        {auditIntegrity && (
+          <div className="mt-5">
+            <div className="flex items-center gap-2">
+              {auditIntegrity.status === "valid" ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <span className="font-medium">Integrity verified</span>
+                </>
+              ) : auditIntegrity.status === "not_initialized" ? (
+                <>
+                  <CircleAlert className="h-5 w-5 text-amber-500" />
+                  <span className="font-medium">
+                    Protected audit chain not initialized
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CircleAlert className="h-5 w-5 text-red-500" />
+                  <span className="font-medium">
+                    Integrity failure detected
+                  </span>
+                </>
+              )}
+            </div>
+
+            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Protected events checked
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {auditIntegrity.checked_events}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Legacy events
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {auditIntegrity.legacy_events}
+                </dd>
+              </div>
+            </dl>
+
+            {auditIntegrity.reason && (
+              <p
+                className={cn(
+                  "mt-4 text-sm",
+                  auditIntegrity.valid
+                    ? darkMode
+                      ? "text-gray-400"
+                      : "text-gray-600"
+                    : darkMode
+                    ? "text-red-300"
+                    : "text-red-700"
+                )}
+              >
+                {auditIntegrity.reason}
+              </p>
+            )}
+
+            {auditIntegrity.failed_event_id !== null && (
+              <p
+                className={cn(
+                  "mt-2 text-sm",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}
+              >
+                Failed event ID:{" "}
+                <span className="font-mono">
+                  {auditIntegrity.failed_event_id}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {!auditIntegrity && !auditIntegrityError && (
+          <p
+            className={cn(
+              "mt-4 text-sm",
+              darkMode ? "text-gray-400" : "text-gray-600"
+            )}
+          >
+            Integrity has not been checked during this session.
+          </p>
+        )}
       </section>
 
       {isEndpointInventoryOpen && (

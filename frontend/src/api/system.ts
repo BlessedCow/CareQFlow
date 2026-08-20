@@ -82,6 +82,15 @@ export interface RecoveryCancelResponse {
   canceled: boolean;
 }
 
+export interface AuditIntegrityResponse {
+  valid: boolean;
+  status: "valid" | "invalid" | "not_initialized";
+  checked_events: number;
+  legacy_events: number;
+  failed_event_id: number | null;
+  reason: string | null;
+}
+
 async function getErrorMessage(
   response: Response,
   fallbackMessage: string
@@ -137,6 +146,26 @@ export async function fetchApiEndpoints(): Promise<ApiEndpointStatus[]> {
   const data = (await response.json()) as EndpointListResponse;
 
   return data.endpoints;
+}
+
+export async function verifyAuditIntegrity(): Promise<AuditIntegrityResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/audit-events/verify-integrity`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(
+        response,
+        "Unable to verify audit log integrity."
+      )
+    );
+  }
+
+  return (await response.json()) as AuditIntegrityResponse;
 }
 
 export async function fetchRestorePoints(): Promise<BackupFile[]> {

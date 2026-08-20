@@ -166,3 +166,12 @@ class AuditEventListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class AuditIntegrityResponse(BaseModel):
+    valid: bool
+    status: Literal["valid", "invalid", "not_initialized"]
+    checked_events: int
+    legacy_events: int
+    failed_event_id: int | None = None
+    reason: str | None = None

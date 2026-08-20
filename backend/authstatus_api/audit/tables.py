@@ -18,6 +18,8 @@ def initialize_audit_tables(conn: Any) -> None:
             ip_address TEXT,
             user_agent TEXT,
             created_at TEXT NOT NULL,
+            previous_hash TEXT,
+            event_hash TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
         )
         """)
@@ -32,3 +34,13 @@ def initialize_audit_tables(conn: Any) -> None:
     )
     ensure_column(conn, "audit_events", "ip_address", "TEXT")
     ensure_column(conn, "audit_events", "user_agent", "TEXT")
+    ensure_column(conn, "audit_events", "previous_hash", "TEXT")
+    ensure_column(conn, "audit_events", "event_hash", "TEXT")
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS audit_chain_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        head_event_id INTEGER,
+        head_event_hash TEXT,
+        state_hash TEXT
+    )
+    """)

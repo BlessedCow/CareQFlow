@@ -7,6 +7,7 @@ import {
   fetchRecoveryStatus,
   fetchRestorePoints,
   stageDatabaseRecovery,
+  verifyAuditIntegrity,
   verifyRestorePoint,
 } from "../system";
 import { authenticatedFetch } from "../client";
@@ -30,7 +31,7 @@ describe("system API", () => {
         JSON.stringify({
           status: "ok",
           app: "AuthStatus API",
-          version: "0.1.0",
+          version: "0.2.0",
         }),
         {
           status: 200,
@@ -44,7 +45,7 @@ describe("system API", () => {
     await expect(fetchApplicationHealth()).resolves.toEqual({
       status: "ok",
       app: "AuthStatus API",
-      version: "0.1.0",
+      version: "0.2.0",
     });
 
     expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
@@ -191,6 +192,55 @@ describe("system API", () => {
 
     await expect(cancelDatabaseRecovery()).rejects.toThrow(
       "Unable to cancel the staged database recovery."
+    );
+  });
+
+  it("verifies audit log integrity", async () => {
+    const result = {
+      valid: true,
+      status: "valid",
+      checked_events: 42,
+      legacy_events: 3,
+      failed_event_id: null,
+      reason: null,
+    };
+
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+    );
+
+    await expect(verifyAuditIntegrity()).resolves.toEqual(result);
+
+    expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/security/audit-events/verify-integrity",
+      {
+        method: "POST",
+      }
+    );
+  });
+
+  it("returns the backend detail when audit integrity verification fails", async () => {
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: "Audit integrity verification is unavailable.",
+        }),
+        {
+          status: 503,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    );
+  
+    await expect(verifyAuditIntegrity()).rejects.toThrow(
+      "Audit integrity verification is unavailable."
     );
   });
 
