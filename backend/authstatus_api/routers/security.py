@@ -39,6 +39,7 @@ from authstatus_api.security.mfa_challenges import (
     create_mfa_login_challenge,
     get_active_mfa_login_challenge_by_token,
 )
+from authstatus_api.security.monitoring import get_security_monitoring_summary
 from authstatus_api.security.password_hashing import verify_password
 from authstatus_api.security.password_policy import (
     PasswordPolicyError,
@@ -66,6 +67,7 @@ from authstatus_api.security.schemas import (
     MfaLoginVerifyRequest,
     MfaStatusResponse,
     PasswordUpdateResponse,
+    SecurityMonitoringSummaryResponse,
     SessionResponse,
     TrustedDeviceRevokeResponse,
     UserCreateRequest,
@@ -276,6 +278,21 @@ def verify_audit_integrity(
         pass
 
     return AuditIntegrityResponse(**result)
+
+
+@router.get(
+    "/monitoring/summary",
+    response_model=SecurityMonitoringSummaryResponse,
+)
+def read_security_monitoring_summary(
+    hours: int = Query(default=24, ge=1, le=168),
+    current_user: dict = AdminUserDependency,
+) -> SecurityMonitoringSummaryResponse:
+    del current_user
+
+    result = get_security_monitoring_summary(hours=hours)
+
+    return SecurityMonitoringSummaryResponse(**result)
 
 
 @router.post(

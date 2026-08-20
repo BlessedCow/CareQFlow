@@ -15,6 +15,7 @@ import {
   fetchDatabaseReadiness,
   fetchRecoveryStatus,
   fetchRestorePoints,
+  fetchSecurityMonitoringSummary,
   stageDatabaseRecovery,
   verifyAuditIntegrity,
   verifyRestorePoint,
@@ -29,6 +30,7 @@ vi.mock("../../api/system", () => ({
   fetchDatabaseReadiness: vi.fn(),
   fetchRecoveryStatus: vi.fn(),
   fetchRestorePoints: vi.fn(),
+  fetchSecurityMonitoringSummary: vi.fn(),
   stageDatabaseRecovery: vi.fn(),
   verifyAuditIntegrity: vi.fn(),
   verifyRestorePoint: vi.fn(),
@@ -37,6 +39,9 @@ vi.mock("../../api/system", () => ({
 const mockedFetchApplicationHealth = vi.mocked(fetchApplicationHealth);
 const mockedFetchDatabaseReadiness = vi.mocked(fetchDatabaseReadiness);
 const mockedFetchRestorePoints = vi.mocked(fetchRestorePoints);
+const mockedFetchSecurityMonitoringSummary = vi.mocked(
+  fetchSecurityMonitoringSummary
+);
 const mockedCreateRestorePoint = vi.mocked(createRestorePoint);
 const mockedVerifyRestorePoint = vi.mocked(verifyRestorePoint);
 const mockedFetchApiEndpoints = vi.mocked(fetchApiEndpoints);
@@ -68,6 +73,7 @@ describe("AdminSystemPage", () => {
     mockedVerifyRestorePoint.mockReset();
     mockedFetchApiEndpoints.mockReset();
     mockedFetchRecoveryStatus.mockReset();
+    mockedFetchSecurityMonitoringSummary.mockReset();
     mockedStageDatabaseRecovery.mockReset();
     mockedCancelDatabaseRecovery.mockReset();
     mockedVerifyAuditIntegrity.mockReset();
@@ -187,6 +193,120 @@ describe("AdminSystemPage", () => {
   
     expect(screen.getByText(/Failed event ID:/)).toBeInTheDocument();
     expect(screen.getByText(/Failed event ID:/)).toHaveTextContent("8");
+  });
+
+  it("shows normal security monitoring activity", async () => {
+    mockedFetchSecurityMonitoringSummary.mockResolvedValue({
+      window_hours: 24,
+      failed_logins: 1,
+      locked_logins: 0,
+      failed_mfa: 1,
+      total_failures: 2,
+      distinct_failure_ips: 1,
+      distinct_failure_usernames: 1,
+      max_failures_single_username: 1,
+      max_failures_single_ip: 2,
+      severity: "normal",
+    });
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Refresh Monitoring",
+      })
+    );
+  
+    expect(
+      await screen.findByText("Security activity normal")
+    ).toBeInTheDocument();
+  
+    expect(screen.getByText("Last 24 hours")).toBeInTheDocument();
+    expect(screen.getByText("Total failures")).toBeInTheDocument();
+  });
+
+  it("shows elevated security monitoring activity", async () => {
+    mockedFetchSecurityMonitoringSummary.mockResolvedValue({
+      window_hours: 24,
+      failed_logins: 2,
+      locked_logins: 0,
+      failed_mfa: 5,
+      total_failures: 7,
+      distinct_failure_ips: 2,
+      distinct_failure_usernames: 5,
+      max_failures_single_username: 1,
+      max_failures_single_ip: 5,
+      severity: "elevated",
+    });
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Refresh Monitoring",
+      })
+    );
+  
+    expect(
+      await screen.findByText("Elevated security activity")
+    ).toBeInTheDocument();
+  
+    expect(
+      screen.getByText(/Highest failures from one IP:/)
+    ).toHaveTextContent("5");
+  });
+
+  it("shows high security monitoring activity", async () => {
+    mockedFetchSecurityMonitoringSummary.mockResolvedValue({
+      window_hours: 24,
+      failed_logins: 5,
+      locked_logins: 1,
+      failed_mfa: 0,
+      total_failures: 6,
+      distinct_failure_ips: 1,
+      distinct_failure_usernames: 1,
+      max_failures_single_username: 5,
+      max_failures_single_ip: 5,
+      severity: "high",
+    });
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Refresh Monitoring",
+      })
+    );
+  
+    expect(
+      await screen.findByText("High security activity")
+    ).toBeInTheDocument();
+  
+    expect(
+      screen.getByText(/Highest failures for one username:/)
+    ).toHaveTextContent("5");
+  });
+
+  it("shows an error when security monitoring cannot load", async () => {
+    mockedFetchSecurityMonitoringSummary.mockRejectedValue(
+      new Error("Security monitoring is unavailable.")
+    );
+  
+    render(<AdminSystemPage darkMode={false} />);
+  
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Refresh Monitoring",
+      })
+    );
+  
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Security monitoring is unavailable."
+    );
+  
+    expect(
+      screen.queryByText("Security activity normal")
+    ).not.toBeInTheDocument();
   });
 
   it("shows when the protected audit chain is not initialized", async () => {

@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   Server,
+  ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -20,6 +21,7 @@ import {
   fetchDatabaseReadiness,
   fetchRecoveryStatus,
   fetchRestorePoints,
+  fetchSecurityMonitoringSummary,
   stageDatabaseRecovery,
   verifyAuditIntegrity,
   verifyRestorePoint,
@@ -29,6 +31,7 @@ import {
   type BackupFile,
   type BackupRetentionResult,
   type DatabaseReadiness,
+  type SecurityMonitoringSummaryResponse,
   type StagedRecovery,
 } from "../api/system";
 import { cn } from "../utils/cn";
@@ -105,6 +108,14 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
   const [auditIntegrityError, setAuditIntegrityError] = useState<string | null>(
     null
   );
+
+  const [securityMonitoring, setSecurityMonitoring] =
+    useState<SecurityMonitoringSummaryResponse | null>(null);
+  const [isLoadingSecurityMonitoring, setIsLoadingSecurityMonitoring] =
+    useState(false);
+  const [securityMonitoringError, setSecurityMonitoringError] = useState<
+    string | null
+  >(null);
 
   const loadSystemData = useCallback(async () => {
     setIsLoading(true);
@@ -287,6 +298,24 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
       );
     } finally {
       setIsVerifyingAuditIntegrity(false);
+    }
+  };
+
+  const handleLoadSecurityMonitoring = async () => {
+    setIsLoadingSecurityMonitoring(true);
+    setSecurityMonitoringError(null);
+
+    try {
+      const result = await fetchSecurityMonitoringSummary();
+      setSecurityMonitoring(result);
+    } catch (monitoringError) {
+      setSecurityMonitoringError(
+        monitoringError instanceof Error
+          ? monitoringError.message
+          : "Unable to load security monitoring summary."
+      );
+    } finally {
+      setIsLoadingSecurityMonitoring(false);
     }
   };
 
@@ -754,6 +783,225 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
             )}
           >
             Integrity has not been checked during this session.
+          </p>
+        )}
+      </section>
+
+      <section
+        className={cardClass}
+        aria-labelledby="security-monitoring-heading"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <ShieldAlert className="h-6 w-6 text-amber-500" />
+
+              <div>
+                <h2
+                  id="security-monitoring-heading"
+                  className="text-lg font-semibold"
+                >
+                  Security Monitoring
+                </h2>
+
+                <p
+                  className={cn(
+                    "text-sm",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Review recent authentication and MFA failure activity.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void handleLoadSecurityMonitoring()}
+            disabled={isLoadingSecurityMonitoring}
+            className={cn(
+              "inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              darkMode
+                ? "border-gray-700 hover:bg-gray-800"
+                : "border-gray-300 hover:bg-gray-100"
+            )}
+          >
+            <RefreshCw
+              className={cn(
+                "h-4 w-4",
+                isLoadingSecurityMonitoring && "animate-spin"
+              )}
+            />
+
+            {isLoadingSecurityMonitoring ? "Loading..." : "Refresh Monitoring"}
+          </button>
+        </div>
+
+        {securityMonitoringError && (
+          <div
+            role="alert"
+            className={cn(
+              "mt-4 rounded-lg border px-4 py-3 text-sm",
+              darkMode
+                ? "border-red-900 bg-red-950/40 text-red-200"
+                : "border-red-200 bg-red-50 text-red-800"
+            )}
+          >
+            {securityMonitoringError}
+          </div>
+        )}
+
+        {securityMonitoring && (
+          <div className="mt-5">
+            <div className="flex items-center gap-2">
+              {securityMonitoring.severity === "high" ? (
+                <>
+                  <CircleAlert className="h-5 w-5 text-red-500" />
+                  <span className="font-medium">High security activity</span>
+                </>
+              ) : securityMonitoring.severity === "elevated" ? (
+                <>
+                  <CircleAlert className="h-5 w-5 text-amber-500" />
+                  <span className="font-medium">
+                    Elevated security activity
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <span className="font-medium">Security activity normal</span>
+                </>
+              )}
+            </div>
+
+            <p
+              className={cn(
+                "mt-2 text-sm",
+                darkMode ? "text-gray-400" : "text-gray-600"
+              )}
+            >
+              Last {securityMonitoring.window_hours} hours
+            </p>
+
+            <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Failed logins
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.failed_logins}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Account lockouts
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.locked_logins}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  MFA failures
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.failed_mfa}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Distinct usernames
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.distinct_failure_usernames}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Distinct IPs
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.distinct_failure_ips}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Total failures
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.total_failures}
+                </dd>
+              </div>
+            </dl>
+
+            <div
+              className={cn(
+                "mt-4 rounded-lg border px-4 py-3 text-sm",
+                darkMode
+                  ? "border-gray-800 bg-gray-900/50 text-gray-300"
+                  : "border-gray-200 bg-gray-50 text-gray-700"
+              )}
+            >
+              <p>
+                Highest failures for one username:{" "}
+                <span className="font-semibold">
+                  {securityMonitoring.max_failures_single_username}
+                </span>
+              </p>
+              <p className="mt-1">
+                Highest failures from one IP:{" "}
+                <span className="font-semibold">
+                  {securityMonitoring.max_failures_single_ip}
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!securityMonitoring && !securityMonitoringError && (
+          <p
+            className={cn(
+              "mt-4 text-sm",
+              darkMode ? "text-gray-400" : "text-gray-600"
+            )}
+          >
+            Security monitoring has not been refreshed during this session.
           </p>
         )}
       </section>

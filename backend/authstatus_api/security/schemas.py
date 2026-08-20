@@ -175,3 +175,16 @@ class AuditIntegrityResponse(BaseModel):
     legacy_events: int
     failed_event_id: int | None = None
     reason: str | None = None
+
+
+class SecurityMonitoringSummaryResponse(BaseModel):
+    window_hours: int
+    failed_logins: int
+    locked_logins: int
+    failed_mfa: int
+    total_failures: int
+    distinct_failure_ips: int
+    distinct_failure_usernames: int
+    max_failures_single_username: int
+    max_failures_single_ip: int
+    severity: Literal["normal", "elevated", "high"]

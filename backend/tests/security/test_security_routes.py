@@ -4,6 +4,7 @@ import pyotp
 import pytest
 from fastapi.testclient import TestClient
 
+from authstatus_api.audit.service import record_audit_event
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
@@ -1512,6 +1513,95 @@ def test_admin_can_list_audit_events(client):
     assert data["page_size"] == 10
     assert data["total"] >= 1
     assert isinstance(data["events"], list)
+
+
+def test_admin_can_read_security_monitoring_summary(client):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "admin@example.com",
+        "correct horse battery staple",
+    )
+
+    response = client.get(
+        "/api/security/monitoring/summary",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["window_hours"] == 24
+    assert result["failed_logins"] == 0
+    assert result["locked_logins"] == 0
+    assert result["failed_mfa"] == 0
+    assert result["total_failures"] == 0
+    assert result["distinct_failure_ips"] == 0
+    assert result["distinct_failure_usernames"] == 0
+    assert result["max_failures_single_username"] == 0
+    assert result["max_failures_single_ip"] == 0
+    assert result["severity"] == "normal"
+
+
+def test_admin_can_select_security_monitoring_window(client):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    headers = auth_headers_for(
+        client,
+        "admin@example.com",
+        "correct horse battery staple",
+    )
+
+    response = client.get(
+        "/api/security/monitoring/summary?hours=72",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["window_hours"] == 72
+
+
+def test_security_monitoring_summary_exposes_high_severity(client):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    for _ in range(5):
+        record_audit_event(
+            action="security.login_failed",
+            resource_type="security",
+            username="target@example.com",
+        )
+
+    headers = auth_headers_for(
+        client,
+        "admin@example.com",
+        "correct horse battery staple",
+    )
+
+    response = client.get(
+        "/api/security/monitoring/summary",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    result = response.json()
+
+    assert result["max_failures_single_username"] == 5
+    assert result["severity"] == "high"
 
 
 def test_ur_user_cannot_list_audit_events(client):

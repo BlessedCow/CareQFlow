@@ -91,6 +91,19 @@ export interface AuditIntegrityResponse {
   reason: string | null;
 }
 
+export interface SecurityMonitoringSummaryResponse {
+  window_hours: number;
+  failed_logins: number;
+  locked_logins: number;
+  failed_mfa: number;
+  total_failures: number;
+  distinct_failure_ips: number;
+  distinct_failure_usernames: number;
+  max_failures_single_username: number;
+  max_failures_single_ip: number;
+  severity: "normal" | "elevated" | "high";
+}
+
 async function getErrorMessage(
   response: Response,
   fallbackMessage: string
@@ -166,6 +179,25 @@ export async function verifyAuditIntegrity(): Promise<AuditIntegrityResponse> {
   }
 
   return (await response.json()) as AuditIntegrityResponse;
+}
+
+export async function fetchSecurityMonitoringSummary(
+  hours = 24
+): Promise<SecurityMonitoringSummaryResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/monitoring/summary?hours=${hours}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(
+        response,
+        "Unable to load security monitoring summary."
+      )
+    );
+  }
+
+  return (await response.json()) as SecurityMonitoringSummaryResponse;
 }
 
 export async function fetchRestorePoints(): Promise<BackupFile[]> {

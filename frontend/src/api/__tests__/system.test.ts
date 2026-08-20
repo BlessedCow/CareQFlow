@@ -6,6 +6,7 @@ import {
   fetchDatabaseReadiness,
   fetchRecoveryStatus,
   fetchRestorePoints,
+  fetchSecurityMonitoringSummary,
   stageDatabaseRecovery,
   verifyAuditIntegrity,
   verifyRestorePoint,
@@ -241,6 +242,86 @@ describe("system API", () => {
   
     await expect(verifyAuditIntegrity()).rejects.toThrow(
       "Audit integrity verification is unavailable."
+    );
+  });
+
+  it("loads the security monitoring summary", async () => {
+    const result = {
+      window_hours: 24,
+      failed_logins: 4,
+      locked_logins: 1,
+      failed_mfa: 2,
+      total_failures: 7,
+      distinct_failure_ips: 3,
+      distinct_failure_usernames: 2,
+      max_failures_single_username: 5,
+      max_failures_single_ip: 4,
+      severity: "high" as const,
+    };
+  
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+    );
+  
+    await expect(fetchSecurityMonitoringSummary()).resolves.toEqual(result);
+  
+    expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/security/monitoring/summary?hours=24"
+    );
+  });
+
+  it("loads a custom security monitoring window", async () => {
+    const result = {
+      window_hours: 72,
+      failed_logins: 0,
+      locked_logins: 0,
+      failed_mfa: 0,
+      total_failures: 0,
+      distinct_failure_ips: 0,
+      distinct_failure_usernames: 0,
+      max_failures_single_username: 0,
+      max_failures_single_ip: 0,
+      severity: "normal" as const,
+    };
+  
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+    );
+  
+    await expect(fetchSecurityMonitoringSummary(72)).resolves.toEqual(result);
+  
+    expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/security/monitoring/summary?hours=72"
+    );
+  });
+
+  it("returns the backend detail when security monitoring fails", async () => {
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: "Security monitoring is unavailable.",
+        }),
+        {
+          status: 503,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    );
+  
+    await expect(fetchSecurityMonitoringSummary()).rejects.toThrow(
+      "Security monitoring is unavailable."
     );
   });
 
