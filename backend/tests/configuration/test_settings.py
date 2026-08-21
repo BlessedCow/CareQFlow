@@ -7,7 +7,7 @@ import pytest
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
 
-from authstatus_api.settings import PROJECT_ROOT, Settings
+from authstatus_api.settings import Settings
 
 
 def encryption_key() -> str:
@@ -238,6 +238,114 @@ def test_production_requires_secure_session_cookie():
 
 
 @pytest.mark.parametrize(
+    "setting_name",
+    [
+        "AUTHSTATUS_SESSION_COOKIE_NAME",
+        "AUTHSTATUS_CSRF_COOKIE_NAME",
+        "AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME",
+    ],
+)
+def test_production_rejects_empty_cookie_names(setting_name):
+    with pytest.raises(
+        ValidationError,
+        match="Production cookie names cannot be empty",
+    ):
+        valid_production_settings(
+            **{
+                setting_name: "   ",
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {
+            "AUTHSTATUS_SESSION_COOKIE_NAME": "carequeue_cookie",
+            "AUTHSTATUS_CSRF_COOKIE_NAME": "carequeue_cookie",
+        },
+        {
+            "AUTHSTATUS_SESSION_COOKIE_NAME": "carequeue_cookie",
+            "AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME": "carequeue_cookie",
+        },
+        {
+            "AUTHSTATUS_CSRF_COOKIE_NAME": "carequeue_cookie",
+            "AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME": "carequeue_cookie",
+        },
+    ],
+)
+def test_production_rejects_duplicate_cookie_names(overrides):
+    with pytest.raises(
+        ValidationError,
+        match="cookie names must be different",
+    ):
+        valid_production_settings(**overrides)
+
+
+@pytest.mark.parametrize(
+    "setting_name",
+    [
+        "AUTHSTATUS_SESSION_COOKIE_NAME",
+        "AUTHSTATUS_CSRF_COOKIE_NAME",
+        "AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME",
+    ],
+)
+@pytest.mark.parametrize(
+    "cookie_name",
+    [
+        "carequeue cookie",
+        "carequeue;cookie",
+        "carequeue,cookie",
+        "carequeue/cookie",
+        "carequeue(cookie)",
+    ],
+)
+def test_production_rejects_invalid_cookie_names(
+    setting_name,
+    cookie_name,
+):
+    with pytest.raises(
+        ValidationError,
+        match="valid HTTP cookie token characters",
+    ):
+        valid_production_settings(
+            **{
+                setting_name: cookie_name,
+            },
+        )
+
+
+def test_production_rejects_empty_csrf_header_name():
+    with pytest.raises(
+        ValidationError,
+        match="CSRF header name cannot be empty",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_CSRF_HEADER_NAME="   ",
+        )
+
+
+@pytest.mark.parametrize(
+    "header_name",
+    [
+        "X CSRF Token",
+        "X-CSRF-Token:",
+        "X-CSRF-Token\r\nInjected",
+    ],
+)
+def test_production_rejects_invalid_csrf_header_name(
+    header_name,
+):
+    with pytest.raises(
+        ValidationError,
+        match="CSRF header name must use valid HTTP header token",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_CSRF_HEADER_NAME=header_name,
+        )
+
+
+@pytest.mark.parametrize(
     "origin",
     [
         "*",
@@ -386,91 +494,99 @@ def test_production_requires_separate_encryption_keys():
         )
 
 
-def test_production_rejects_database_path_outside_data_directory():
+def test_production_rejects_database_path_outside_data_root():
     with pytest.raises(
         ValidationError,
-        match="database paths must resolve under backend/data",
+        match="database paths must resolve under AUTHSTATUS_PRODUCTION_DATA_ROOT",
     ):
         valid_production_settings(
             AUTHSTATUS_DATABASE_PATH=Path("production/auth_tracker.sqlcipher.db"),
         )
 
 
-def test_production_allows_explicit_external_database_path():
-    database_path = PROJECT_ROOT / "production" / "auth_tracker.sqlcipher.db"
-
-    settings = valid_production_settings(
-        AUTHSTATUS_DATABASE_PATH=database_path,
-        AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=True,
-    )
-
-    assert settings.database_path == database_path
-
-
-def test_production_rejects_external_backup_directory():
+def test_production_rejects_unsafe_database_path_override():
     with pytest.raises(
         ValidationError,
-        match="backup directories must resolve under backend/backups",
+        match="Production cannot enable AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=True,
+        )
+
+
+def test_production_rejects_backup_directory_outside_data_root():
+    with pytest.raises(
+        ValidationError,
+        match="backup directories must resolve under AUTHSTATUS_PRODUCTION_DATA_ROOT",
     ):
         valid_production_settings(
             AUTHSTATUS_BACKUP_DIRECTORY=Path("production/backups"),
         )
 
 
-def test_production_rejects_external_restore_directory():
+def test_production_rejects_restore_directory_outside_data_root():
     with pytest.raises(
         ValidationError,
-        match="restore directories must resolve under backend/restores",
+        match="restore directories must resolve under AUTHSTATUS_PRODUCTION_DATA_ROOT",
     ):
         valid_production_settings(
             AUTHSTATUS_RESTORE_DIRECTORY=Path("production/restores"),
         )
 
 
-def test_production_allows_explicit_external_storage_directories():
-    backup_directory = PROJECT_ROOT / "production" / "backups"
-    restore_directory = PROJECT_ROOT / "production" / "restores"
-
+def test_production_accepts_paths_under_custom_data_root():
     settings = valid_production_settings(
-        AUTHSTATUS_BACKUP_DIRECTORY=backup_directory,
-        AUTHSTATUS_RESTORE_DIRECTORY=restore_directory,
-        AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=True,
+        AUTHSTATUS_PRODUCTION_DATA_ROOT=Path("production/carequeue"),
+        AUTHSTATUS_DATABASE_PATH=Path(
+            "production/carequeue/data/auth_tracker.sqlcipher.db"
+        ),
+        AUTHSTATUS_BACKUP_DIRECTORY=Path("production/carequeue/backups"),
+        AUTHSTATUS_RESTORE_DIRECTORY=Path("production/carequeue/restores"),
     )
 
-    assert settings.backup_directory == backup_directory
-    assert settings.restore_directory == restore_directory
+    assert settings.production_data_root == Path("production/carequeue")
 
 
-def test_production_rejects_shared_backup_and_restore_directory():
+def test_production_custom_data_root_rejects_path_escape():
     with pytest.raises(
         ValidationError,
-        match="backup and restore directories must be different",
+        match="database paths must resolve under AUTHSTATUS_PRODUCTION_DATA_ROOT",
     ):
         valid_production_settings(
-            AUTHSTATUS_RESTORE_DIRECTORY=Path("backend/backups"),
+            AUTHSTATUS_PRODUCTION_DATA_ROOT=Path("production/carequeue"),
+            AUTHSTATUS_DATABASE_PATH=Path(
+                "production/outside/auth_tracker.sqlcipher.db"
+            ),
+            AUTHSTATUS_BACKUP_DIRECTORY=Path("production/carequeue/backups"),
+            AUTHSTATUS_RESTORE_DIRECTORY=Path("production/carequeue/restores"),
+        )
+
+
+def test_production_rejects_unsafe_storage_path_override():
+    with pytest.raises(
+        ValidationError,
+        match="Production cannot enable AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS",
+    ):
+        valid_production_settings(
             AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=True,
         )
 
 
-def test_production_rejects_overlapping_storage_directories():
+def test_production_rejects_debug_mode():
     with pytest.raises(
         ValidationError,
-        match="backup and restore directories cannot overlap",
+        match="Production cannot enable AUTHSTATUS_APP_DEBUG",
     ):
         valid_production_settings(
-            AUTHSTATUS_BACKUP_DIRECTORY=Path("backend/backups"),
-            AUTHSTATUS_RESTORE_DIRECTORY=Path("backend/backups/restores"),
-            AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=True,
+            AUTHSTATUS_APP_DEBUG=True,
         )
 
 
-def test_production_rejects_database_inside_backup_directory():
-    with pytest.raises(
-        ValidationError,
-        match="database files cannot be stored inside",
-    ):
-        valid_production_settings(
-            AUTHSTATUS_DATABASE_PATH=Path("backend/backups/auth_tracker.sqlcipher.db"),
-            AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=True,
-            AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=True,
-        )
+def test_development_allows_debug_mode():
+    settings = Settings(
+        _env_file=None,
+        AUTHSTATUS_APP_ENVIRONMENT="development",
+        AUTHSTATUS_APP_DEBUG=True,
+    )
+
+    assert settings.app_debug is True

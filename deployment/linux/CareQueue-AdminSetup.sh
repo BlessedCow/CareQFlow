@@ -5,6 +5,7 @@ set -Eeuo pipefail
 SETUP_STATUS_URL="${SETUP_STATUS_URL:-http://127.0.0.1:8000/api/security/setup-initial-admin/status}"
 SETUP_URL="${SETUP_URL:-http://127.0.0.1:8000/api/security/setup-initial-admin}"
 APPLICATION_ORIGIN="${APPLICATION_ORIGIN:-https://carequeue.local}"
+APPLICATION_HOST_HEADER=""
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -16,11 +17,52 @@ require_command() {
         || fail "Required command was not found: $1"
 }
 
+get_application_host_header() {
+    python3 - "${APPLICATION_ORIGIN}" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+origin = sys.argv[1].strip()
+
+try:
+    parsed = urlsplit(origin)
+    port = parsed.port
+except ValueError:
+    raise SystemExit(1)
+
+if parsed.scheme.lower() != "https":
+    raise SystemExit(1)
+
+if not parsed.hostname:
+    raise SystemExit(1)
+
+if parsed.username is not None or parsed.password is not None:
+    raise SystemExit(1)
+
+if parsed.path not in {"", "/"}:
+    raise SystemExit(1)
+
+if parsed.query or parsed.fragment:
+    raise SystemExit(1)
+
+host = parsed.hostname
+
+if ":" in host and not host.startswith("["):
+    host = f"[{host}]"
+
+if port is not None:
+    host = f"{host}:{port}"
+
+print(host)
+PY
+}
+
 get_setup_status() {
     curl \
         --silent \
         --show-error \
         --fail \
+        --header "Host: ${APPLICATION_HOST_HEADER}" \
         "${SETUP_STATUS_URL}"
 }
 
@@ -112,6 +154,7 @@ PY
             --output "${response_file}" \
             --write-out '%{http_code}' \
             --request POST \
+            --header "Host: ${APPLICATION_HOST_HEADER}" \
             --header 'Content-Type: application/json' \
             --data-binary "@${payload_file}" \
             "${SETUP_URL}"
@@ -154,6 +197,9 @@ PY
 main() {
     require_command curl
     require_command python3
+
+    APPLICATION_HOST_HEADER="$(get_application_host_header)" \
+        || fail "Application origin is not a valid HTTPS origin."
 
     if ! setup_is_available; then
         printf 'Initial admin setup is already complete.\n'

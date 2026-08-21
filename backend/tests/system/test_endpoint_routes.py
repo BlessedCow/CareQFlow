@@ -108,6 +108,27 @@ def test_admin_can_list_registered_api_endpoints(client):
     } in endpoints
 
 
+def test_admin_can_get_system_info(client):
+    create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    login_headers(
+        client,
+        username="admin@example.com",
+        password="correct horse battery staple",
+    )
+
+    response = client.get("/api/admin/system/info")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "app": "AuthStatus API",
+        "version": "0.2.0",
+    }
+
+
 def test_endpoint_inventory_includes_mutating_routes_without_calling_them(
     client,
 ):

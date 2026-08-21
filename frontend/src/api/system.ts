@@ -2,6 +2,9 @@ import { API_BASE_URL, authenticatedFetch } from "./client";
 
 export interface ApplicationHealth {
   status: "ok";
+}
+
+export interface SystemInfo {
   app: string;
   version: string;
 }
@@ -127,6 +130,23 @@ export async function fetchApplicationHealth(): Promise<ApplicationHealth> {
   }
 
   return (await response.json()) as ApplicationHealth;
+}
+
+export async function fetchSystemInfo(): Promise<SystemInfo> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/admin/system/info`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await getErrorMessage(
+        response,
+        "Unable to load system information."
+      )
+    );
+  }
+
+  return (await response.json()) as SystemInfo;
 }
 
 export async function fetchDatabaseReadiness(): Promise<DatabaseReadiness> {

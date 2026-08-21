@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from authstatus_api.backups.router import router as backups_router
 from authstatus_api.errors import register_exception_handlers
@@ -50,10 +52,16 @@ def create_app() -> FastAPI:
         environment=settings.app_environment,
     )
 
+    production = settings.app_environment == "production"
+
     api = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
         lifespan=lifespan,
+        debug=settings.app_debug,
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
     )
 
     api.add_middleware(
@@ -64,15 +72,27 @@ def create_app() -> FastAPI:
         allow_headers=CORS_ALLOWED_HEADERS,
     )
 
+    if settings.app_environment == "production":
+        trusted_hosts = sorted(
+            {
+                hostname
+                for origin in settings.cors_origins
+                if (hostname := urlsplit(origin).hostname) is not None
+            }
+        )
+
+        api.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=trusted_hosts,
+        )
+
     register_exception_handlers(api)
 
     @api.get("/api/health")
     @api.get("/api/health/live")
-    def health_check() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+    def health_check() -> dict[str, str]:
         return {
             "status": "ok",
-            "app": settings.app_name,
-            "version": settings.app_version,
         }
 
     @api.get("/api/health/ready")

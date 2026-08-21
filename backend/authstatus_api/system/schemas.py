@@ -30,3 +30,8 @@ class EndpointStatusResponse(BaseModel):
 
 class EndpointListResponse(BaseModel):
     endpoints: list[EndpointStatusResponse]
+
+
+class SystemInfoResponse(BaseModel):
+    app: str
+    version: str

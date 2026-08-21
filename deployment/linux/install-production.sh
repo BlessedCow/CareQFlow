@@ -33,6 +33,44 @@ require_root() {
     fi
 }
 
+validate_application_origin() {
+    if ! python3 - "${APPLICATION_ORIGIN}" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+origin = sys.argv[1].strip()
+
+try:
+    parsed = urlsplit(origin)
+    port = parsed.port
+except ValueError:
+    raise SystemExit(1)
+
+if parsed.scheme.lower() != "https":
+    raise SystemExit(1)
+
+if not parsed.hostname:
+    raise SystemExit(1)
+
+if parsed.username is not None or parsed.password is not None:
+    raise SystemExit(1)
+
+if parsed.path not in {"", "/"}:
+    raise SystemExit(1)
+
+if parsed.query or parsed.fragment:
+    raise SystemExit(1)
+
+if port is not None and not 1 <= port <= 65535:
+    raise SystemExit(1)
+PY
+    then
+        fail \
+            "Application origin must be an absolute HTTPS origin " \
+            "containing only a hostname and optional port."
+    fi
+}
+
 detect_distribution() {
     if [[ ! -f /etc/os-release ]]; then
         fail "Unable to identify the Linux distribution."
@@ -244,6 +282,8 @@ PY
 }
 
 create_environment_file() {
+    umask 0077
+
     local environment_file
     local database_path
     local backup_directory
@@ -263,8 +303,29 @@ create_environment_file() {
         printf '%s\n' \
             'Existing CareQueue production configuration found. Preserving it.'
 
+        local migrated_environment_file
+
+        migrated_environment_file="${environment_file}.tmp"
+
+        awk '
+            !/^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=/ &&
+            !/^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=/ &&
+            !/^AUTHSTATUS_PRODUCTION_DATA_ROOT=/
+        ' "${environment_file}" > "${migrated_environment_file}"
+
+        printf 'AUTHSTATUS_PRODUCTION_DATA_ROOT=%s\n' \
+            "${DATA_DIRECTORY}" \
+            >> "${migrated_environment_file}"
+
+        mv \
+            "${migrated_environment_file}" \
+            "${environment_file}"
+
         chown root:"${CAREQUEUE_GROUP}" "${environment_file}"
         chmod 0640 "${environment_file}"
+
+        printf '%s\n' \
+            'Production path configuration migrated to the trusted data root.'
 
         return
     fi
@@ -281,8 +342,6 @@ create_environment_file() {
 
     cors_origins="[\"${APPLICATION_ORIGIN}\"]"
 
-    umask 0077
-
     cat > "${environment_file}" <<EOF
 AUTHSTATUS_APP_ENVIRONMENT=production
 AUTHSTATUS_ENCRYPTION_KEY=${field_encryption_key}
@@ -290,8 +349,7 @@ AUTHSTATUS_SQLCIPHER_KEY=${sqlcipher_key}
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=${backup_encryption_key}
 AUTHSTATUS_DATABASE_PATH=${database_path}
 AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
-AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=true
-AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=true
+AUTHSTATUS_PRODUCTION_DATA_ROOT=${DATA_DIRECTORY}
 AUTHSTATUS_BACKUP_DIRECTORY=${backup_directory}
 AUTHSTATUS_BACKUP_RETENTION_DAYS=90
 AUTHSTATUS_BACKUP_MINIMUM_COUNT=5
@@ -418,7 +476,7 @@ install_caddy_configuration() {
     caddy validate \
         --config "${CONFIG_DIRECTORY}/Caddyfile" \
         --adapter caddyfile
-    }
+}
 
 configure_local_hostname() {
     local hosts_file
@@ -595,6 +653,7 @@ validate_source() {
 
 main() {
     require_root
+    validate_application_origin
     detect_distribution
     validate_source
     install_system_dependencies

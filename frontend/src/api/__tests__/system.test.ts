@@ -7,6 +7,7 @@ import {
   fetchRecoveryStatus,
   fetchRestorePoints,
   fetchSecurityMonitoringSummary,
+  fetchSystemInfo,
   stageDatabaseRecovery,
   verifyAuditIntegrity,
   verifyRestorePoint,
@@ -31,8 +32,6 @@ describe("system API", () => {
       new Response(
         JSON.stringify({
           status: "ok",
-          app: "AuthStatus API",
-          version: "0.2.0",
         }),
         {
           status: 200,
@@ -45,12 +44,56 @@ describe("system API", () => {
 
     await expect(fetchApplicationHealth()).resolves.toEqual({
       status: "ok",
+    });
+
+    expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/health/live"
+    );
+  });
+
+  it("loads authenticated system information", async () => {
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          app: "AuthStatus API",
+          version: "0.2.0",
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    );
+
+    await expect(fetchSystemInfo()).resolves.toEqual({
       app: "AuthStatus API",
       version: "0.2.0",
     });
 
     expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/health/live"
+      "http://localhost:8000/api/admin/system/info"
+    );
+  });
+
+  it("returns the backend detail when system information fails", async () => {
+    mockedAuthenticatedFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: "System information is unavailable.",
+        }),
+        {
+          status: 503,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      )
+    );
+
+    await expect(fetchSystemInfo()).rejects.toThrow(
+      "System information is unavailable."
     );
   });
 
@@ -239,7 +282,7 @@ describe("system API", () => {
         }
       )
     );
-  
+
     await expect(verifyAuditIntegrity()).rejects.toThrow(
       "Audit integrity verification is unavailable."
     );
@@ -258,7 +301,7 @@ describe("system API", () => {
       max_failures_single_ip: 4,
       severity: "high" as const,
     };
-  
+
     mockedAuthenticatedFetch.mockResolvedValue(
       new Response(JSON.stringify(result), {
         status: 200,
@@ -267,9 +310,9 @@ describe("system API", () => {
         },
       })
     );
-  
+
     await expect(fetchSecurityMonitoringSummary()).resolves.toEqual(result);
-  
+
     expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/security/monitoring/summary?hours=24"
     );
@@ -288,7 +331,7 @@ describe("system API", () => {
       max_failures_single_ip: 0,
       severity: "normal" as const,
     };
-  
+
     mockedAuthenticatedFetch.mockResolvedValue(
       new Response(JSON.stringify(result), {
         status: 200,
@@ -297,9 +340,9 @@ describe("system API", () => {
         },
       })
     );
-  
+
     await expect(fetchSecurityMonitoringSummary(72)).resolves.toEqual(result);
-  
+
     expect(mockedAuthenticatedFetch).toHaveBeenCalledWith(
       "http://localhost:8000/api/security/monitoring/summary?hours=72"
     );
@@ -319,7 +362,7 @@ describe("system API", () => {
         }
       )
     );
-  
+
     await expect(fetchSecurityMonitoringSummary()).rejects.toThrow(
       "Security monitoring is unavailable."
     );

@@ -9,6 +9,7 @@ from authstatus_api.system.schemas import (
     EndpointListResponse,
     EndpointStatus,
     EndpointStatusResponse,
+    SystemInfoResponse,
 )
 
 router = APIRouter(
@@ -49,6 +50,7 @@ ADMIN_ENDPOINTS = {
     ("GET", "/api/admin/system/backups"),
     ("GET", "/api/admin/system/backups/recovery"),
     ("GET", "/api/admin/system/endpoints"),
+    ("GET", "/api/admin/system/info"),
     ("GET", "/api/security/audit-events"),
     ("GET", "/api/security/users"),
     ("PATCH", "/api/security/users/{user_id}"),
@@ -113,6 +115,22 @@ def _endpoint_status(
         return "operational" if database_ready else "unavailable"
 
     return "registered"
+
+
+@router.get(
+    "/info",
+    response_model=SystemInfoResponse,
+)
+def get_system_info(
+    request: Request,
+    current_user: dict = AdminUserDependency,
+) -> SystemInfoResponse:
+    del current_user
+
+    return SystemInfoResponse(
+        app=request.app.title,
+        version=request.app.version,
+    )
 
 
 @router.get(

@@ -35,22 +35,14 @@ def test_health_endpoint_remains_available(client):
     response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "app": "AuthStatus API",
-        "version": "0.2.0",
-    }
+    assert response.json() == {"status": "ok"}
 
 
 def test_liveness_endpoint_reports_running_application(client):
     response = client.get("/api/health/live")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "app": "AuthStatus API",
-        "version": "0.2.0",
-    }
+    assert response.json() == {"status": "ok"}
 
 
 def test_readiness_endpoint_reports_available_database(client):

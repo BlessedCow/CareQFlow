@@ -16,6 +16,7 @@ import {
   fetchRecoveryStatus,
   fetchRestorePoints,
   fetchSecurityMonitoringSummary,
+  fetchSystemInfo,
   stageDatabaseRecovery,
   verifyAuditIntegrity,
   verifyRestorePoint,
@@ -31,6 +32,7 @@ vi.mock("../../api/system", () => ({
   fetchRecoveryStatus: vi.fn(),
   fetchRestorePoints: vi.fn(),
   fetchSecurityMonitoringSummary: vi.fn(),
+  fetchSystemInfo: vi.fn(),
   stageDatabaseRecovery: vi.fn(),
   verifyAuditIntegrity: vi.fn(),
   verifyRestorePoint: vi.fn(),
@@ -42,6 +44,7 @@ const mockedFetchRestorePoints = vi.mocked(fetchRestorePoints);
 const mockedFetchSecurityMonitoringSummary = vi.mocked(
   fetchSecurityMonitoringSummary
 );
+const mockedFetchSystemInfo = vi.mocked(fetchSystemInfo);
 const mockedCreateRestorePoint = vi.mocked(createRestorePoint);
 const mockedVerifyRestorePoint = vi.mocked(verifyRestorePoint);
 const mockedFetchApiEndpoints = vi.mocked(fetchApiEndpoints);
@@ -69,6 +72,7 @@ describe("AdminSystemPage", () => {
     mockedFetchApplicationHealth.mockReset();
     mockedFetchDatabaseReadiness.mockReset();
     mockedFetchRestorePoints.mockReset();
+    mockedFetchSystemInfo.mockReset();
     mockedCreateRestorePoint.mockReset();
     mockedVerifyRestorePoint.mockReset();
     mockedFetchApiEndpoints.mockReset();
@@ -80,8 +84,6 @@ describe("AdminSystemPage", () => {
 
     mockedFetchApplicationHealth.mockResolvedValue({
       status: "ok",
-      app: "AuthStatus API",
-      version: "0.2.0",
     });
 
     mockedFetchDatabaseReadiness.mockResolvedValue({
@@ -94,6 +96,11 @@ describe("AdminSystemPage", () => {
     });
 
     mockedFetchRestorePoints.mockResolvedValue([existingBackup]);
+
+    mockedFetchSystemInfo.mockResolvedValue({
+      app: "AuthStatus API",
+      version: "0.2.0",
+    });
 
     mockedFetchApiEndpoints.mockResolvedValue([
       {

@@ -11,6 +11,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($HostAddress -notin @("127.0.0.1", "::1", "localhost")) {
+    throw (
+        "CareQueue production API must bind only to loopback. " +
+        "Unsupported host address: $HostAddress"
+    )
+}
+
 $backendDirectory = Join-Path $InstallDirectory "backend"
 
 $privatePythonExecutable = Join-Path `

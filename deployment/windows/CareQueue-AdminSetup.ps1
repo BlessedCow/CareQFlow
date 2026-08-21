@@ -16,6 +16,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$applicationUri = [Uri]$ApplicationUrl
+$trustedHostHeader = $applicationUri.Authority
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
@@ -25,6 +27,9 @@ function Test-CareQueueApiReady {
     param(
         [Parameter(Mandatory)]
         [string]$Endpoint,
+
+        [Parameter(Mandatory)]
+        [string]$HostHeader,
 
         [Parameter(Mandatory)]
         [int]$Attempts,
@@ -38,6 +43,9 @@ function Test-CareQueueApiReady {
             Invoke-RestMethod `
                 -Method Get `
                 -Uri $Endpoint `
+                -Headers @{
+                    Host = $HostHeader
+                } `
                 -TimeoutSec 2 | Out-Null
 
             return $true
@@ -53,12 +61,18 @@ function Test-CareQueueApiReady {
 function Get-InitialAdminSetupAvailable {
     param(
         [Parameter(Mandatory)]
-        [string]$Endpoint
+        [string]$Endpoint,
+
+        [Parameter(Mandatory)]
+        [string]$HostHeader
     )
 
     $response = Invoke-RestMethod `
         -Method Get `
         -Uri $Endpoint `
+        -Headers @{
+            Host = $HostHeader
+        } `
         -TimeoutSec 10
 
     return [bool]$response.setup_available
@@ -265,15 +279,17 @@ function Start-SetupStatusCheck {
                     -not (
                         Test-CareQueueApiReady `
                             -Endpoint $HealthEndpoint `
+                            -HostHeader $trustedHostHeader `
                             -Attempts $HealthAttempts `
                             -DelaySeconds $HealthDelaySeconds
-                    )
+                                            )
                 ) {
                     throw "The local CareQueue API is not responding on 127.0.0.1:8000."
                 }
 
                 $setupAvailable = Get-InitialAdminSetupAvailable `
-                    -Endpoint $SetupStatusEndpoint
+                    -Endpoint $SetupStatusEndpoint `
+                    -HostHeader $trustedHostHeader
 
                 if (-not $setupAvailable) {
                     $script:setupAlreadyComplete = $true
@@ -372,6 +388,9 @@ $createButton.Add_Click({
             Invoke-RestMethod `
                 -Method Post `
                 -Uri $SetupEndpoint `
+                -Headers @{
+                    Host = $trustedHostHeader
+                } `
                 -Body $body `
                 -ContentType "application/json" `
                 -TimeoutSec 15 | Out-Null

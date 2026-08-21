@@ -996,6 +996,36 @@ try {
             "An existing production environment file was found. " +
             "Its secrets and settings will be preserved."
         )
+    
+        $existingEnvironmentLines = @(
+            Get-Content `
+                -LiteralPath $environmentFile
+        )
+    
+        $migratedEnvironmentLines = @(
+            $existingEnvironmentLines |
+                Where-Object {
+                    $_ -notmatch (
+                        '^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=' +
+                        '|^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=' +
+                        '|^AUTHSTATUS_PRODUCTION_DATA_ROOT='
+                    )
+                }
+        )
+    
+        $migratedEnvironmentLines += (
+            "AUTHSTATUS_PRODUCTION_DATA_ROOT=$DataDirectory"
+        )
+    
+        Set-Content `
+            -LiteralPath $environmentFile `
+            -Value $migratedEnvironmentLines `
+            -Encoding UTF8
+    
+        Write-Host (
+            "Production path configuration was migrated to the " +
+            "trusted data root."
+        )
     }
     else {
         Write-Host "Generating independent production encryption keys..."
@@ -1019,8 +1049,7 @@ AUTHSTATUS_SQLCIPHER_KEY=$sqlCipherKey
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=$backupEncryptionKey
 AUTHSTATUS_DATABASE_PATH=$databasePath
 AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
-AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=true
-AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=true
+AUTHSTATUS_PRODUCTION_DATA_ROOT=$DataDirectory
 AUTHSTATUS_BACKUP_DIRECTORY=$backupDirectory
 AUTHSTATUS_BACKUP_RETENTION_DAYS=90
 AUTHSTATUS_BACKUP_MINIMUM_COUNT=5

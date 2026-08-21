@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -21,6 +22,7 @@ ROOT_ENV_FILE = PROJECT_ROOT / ".env"
 EXPECTED_DATABASE_DIRECTORY = (PROJECT_ROOT / "backend" / "data").resolve()
 EXPECTED_BACKUP_DIRECTORY = (PROJECT_ROOT / "backend" / "backups").resolve()
 EXPECTED_RESTORE_DIRECTORY = (PROJECT_ROOT / "backend" / "restores").resolve()
+_HTTP_TOKEN_PATTERN = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 MINIMUM_SQLCIPHER_KEY_LENGTH = 32
 
@@ -89,7 +91,10 @@ class Settings(BaseSettings):
         default="development",
         validation_alias="AUTHSTATUS_APP_ENVIRONMENT",
     )
-
+    app_debug: bool = Field(
+        default=False,
+        validation_alias="AUTHSTATUS_APP_DEBUG",
+    )
     database_path: Path = Field(
         default=Path("backend/data/auth_tracker.db"),
         validation_alias="AUTHSTATUS_DATABASE_PATH",
@@ -97,6 +102,10 @@ class Settings(BaseSettings):
     database_encryption: str = Field(
         default="plaintext",
         validation_alias="AUTHSTATUS_DATABASE_ENCRYPTION",
+    )
+    production_data_root: Path = Field(
+        default=Path("backend"),
+        validation_alias="AUTHSTATUS_PRODUCTION_DATA_ROOT",
     )
     allow_unsafe_database_path: bool = Field(
         default=False,
@@ -277,40 +286,54 @@ class Settings(BaseSettings):
         if self.app_environment != "production":
             return self
 
+        if self.app_debug:
+            raise ValueError("Production cannot enable AUTHSTATUS_APP_DEBUG.")
+
+        if self.allow_unsafe_database_path:
+            raise ValueError(
+                "Production cannot enable AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH."
+            )
+
+        if self.allow_unsafe_storage_paths:
+            raise ValueError(
+                "Production cannot enable AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS."
+            )
+
+        production_data_root = resolve_project_path(self.production_data_root)
+
+        if production_data_root == production_data_root.parent:
+            raise ValueError("Production data root cannot be a filesystem root.")
+
         database_path = resolve_project_path(self.database_path)
         backup_directory = resolve_project_path(self.backup_directory)
         restore_directory = resolve_project_path(self.restore_directory)
 
-        if not self.allow_unsafe_database_path and not path_is_relative_to(
+        if not path_is_relative_to(
             database_path,
-            EXPECTED_DATABASE_DIRECTORY,
+            production_data_root,
         ):
             raise ValueError(
                 "Production database paths must resolve under "
-                "backend/data unless "
-                "AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH is enabled."
+                "AUTHSTATUS_PRODUCTION_DATA_ROOT."
             )
 
-        if not self.allow_unsafe_storage_paths:
-            if not path_is_relative_to(
-                backup_directory,
-                EXPECTED_BACKUP_DIRECTORY,
-            ):
-                raise ValueError(
-                    "Production backup directories must resolve under "
-                    "backend/backups unless "
-                    "AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS is enabled."
-                )
+        if not path_is_relative_to(
+            backup_directory,
+            production_data_root,
+        ):
+            raise ValueError(
+                "Production backup directories must resolve under "
+                "AUTHSTATUS_PRODUCTION_DATA_ROOT."
+            )
 
-            if not path_is_relative_to(
-                restore_directory,
-                EXPECTED_RESTORE_DIRECTORY,
-            ):
-                raise ValueError(
-                    "Production restore directories must resolve under "
-                    "backend/restores unless "
-                    "AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS is enabled."
-                )
+        if not path_is_relative_to(
+            restore_directory,
+            production_data_root,
+        ):
+            raise ValueError(
+                "Production restore directories must resolve under "
+                "AUTHSTATUS_PRODUCTION_DATA_ROOT."
+            )
 
         if backup_directory == restore_directory:
             raise ValueError(
@@ -382,6 +405,38 @@ class Settings(BaseSettings):
 
         if not self.session_cookie_secure:
             raise ValueError("Production requires secure session cookies.")
+
+        cookie_names = {
+            self.session_cookie_name.strip(),
+            self.csrf_cookie_name.strip(),
+            self.trusted_device_cookie_name.strip(),
+        }
+
+        if any(not cookie_name for cookie_name in cookie_names):
+            raise ValueError("Production cookie names cannot be empty.")
+
+        if len(cookie_names) != 3:
+            raise ValueError(
+                "Production session, CSRF, and trusted-device cookie names "
+                "must be different."
+            )
+
+        for cookie_name in cookie_names:
+            if not _HTTP_TOKEN_PATTERN.fullmatch(cookie_name):
+                raise ValueError(
+                    "Production cookie names must use valid HTTP cookie token characters."
+                )
+
+        csrf_header_name = self.csrf_header_name.strip()
+
+        if not csrf_header_name:
+            raise ValueError("Production CSRF header name cannot be empty.")
+
+        if not _HTTP_TOKEN_PATTERN.fullmatch(csrf_header_name):
+            raise ValueError(
+                "Production CSRF header name must use valid HTTP "
+                "header token characters."
+            )
 
         if not self.cors_origins:
             raise ValueError("Production requires at least one trusted CORS origin.")
