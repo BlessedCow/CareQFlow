@@ -412,6 +412,21 @@ export async function renewCurrentSession(): Promise<SessionInfo> {
   return (await response.json()) as SessionInfo;
 }
 
+export async function recordSessionActivity(): Promise<SessionInfo> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/session/activity`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to record session activity.");
+  }
+
+  return (await response.json()) as SessionInfo;
+}
+
 export async function fetchUsers(): Promise<CurrentUser[]> {
   const response = await authenticatedFetch(
     `${API_BASE_URL}/api/security/users`

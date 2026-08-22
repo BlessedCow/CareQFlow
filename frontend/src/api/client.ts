@@ -13,6 +13,103 @@ export const API_BASE_URL = normalizeApiBaseUrl(
 
 const CSRF_COOKIE_NAME = "carequeue_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
+const SESSION_EXPIRES_HEADER_NAME =
+  "X-CareQueue-Session-Expires-At";
+const SESSION_EXPIRATION_CHANNEL_NAME =
+  "carequeue-session-expiration";
+const SESSION_LOGOUT_CHANNEL_NAME =
+  "carequeue-session-logout";
+
+type SessionExpirationListener = (expiresAt: string) => void;
+
+type SessionLogoutListener = () => void;
+
+const sessionExpirationListeners = new Set<SessionExpirationListener>();
+
+const sessionLogoutListeners = new Set<SessionLogoutListener>();
+
+const sessionExpirationChannel =
+  typeof BroadcastChannel === "undefined"
+    ? null
+    : new BroadcastChannel(SESSION_EXPIRATION_CHANNEL_NAME);
+
+const sessionLogoutChannel =
+    typeof BroadcastChannel === "undefined"
+      ? null
+      : new BroadcastChannel(SESSION_LOGOUT_CHANNEL_NAME);
+
+export function subscribeToSessionExpiration(
+  listener: SessionExpirationListener
+): () => void {
+  sessionExpirationListeners.add(listener);
+
+  return () => {
+    sessionExpirationListeners.delete(listener);
+  };
+}
+
+export function subscribeToSessionLogout(
+  listener: SessionLogoutListener
+): () => void {
+  sessionLogoutListeners.add(listener);
+
+  return () => {
+    sessionLogoutListeners.delete(listener);
+  };
+}
+
+export function broadcastSessionLogout(): void {
+  sessionLogoutChannel?.postMessage("logout");
+}
+
+function notifySessionExpirationListeners(
+  expiresAt: string
+): void {
+  for (const listener of sessionExpirationListeners) {
+    listener(expiresAt);
+  }
+}
+
+function notifySessionLogoutListeners(): void {
+  for (const listener of sessionLogoutListeners) {
+    listener();
+  }
+}
+
+sessionExpirationChannel?.addEventListener(
+  "message",
+  (event: MessageEvent<unknown>) => {
+    if (typeof event.data !== "string") {
+      return;
+    }
+
+    notifySessionExpirationListeners(event.data);
+  }
+);
+
+sessionLogoutChannel?.addEventListener(
+  "message",
+  (event: MessageEvent<unknown>) => {
+    if (event.data !== "logout") {
+      return;
+    }
+
+    notifySessionLogoutListeners();
+  }
+);
+
+function notifySessionExpiration(response: Response): void {
+  const expiresAt = response.headers.get(
+    SESSION_EXPIRES_HEADER_NAME
+  );
+
+  if (!expiresAt) {
+    return;
+  }
+
+  notifySessionExpirationListeners(expiresAt);
+  sessionExpirationChannel?.postMessage(expiresAt);
+}
 const CSRF_PROTECTED_METHODS = new Set([
   "POST",
   "PUT",
@@ -70,9 +167,13 @@ export async function authenticatedFetch(
     }
   }
 
-  return fetch(input, {
+  const response = await fetch(input, {
     ...init,
     headers,
     credentials: "include",
   });
+
+  notifySessionExpiration(response);
+
+  return response;
 }

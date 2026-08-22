@@ -76,7 +76,6 @@ from authstatus_api.security.schemas import (
     UserUpdateRequest,
 )
 from authstatus_api.security.sessions import (
-    DEFAULT_SESSION_MINUTES,
     get_active_session_by_token,
     renew_session,
     replace_user_session,
@@ -867,7 +866,6 @@ def _create_authenticated_session_response(
     response.set_cookie(
         key=settings.session_cookie_name,
         value=created_session["token"],
-        max_age=DEFAULT_SESSION_MINUTES * 60,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite="lax",
@@ -877,7 +875,6 @@ def _create_authenticated_session_response(
     response.set_cookie(
         key=settings.csrf_cookie_name,
         value=csrf_token,
-        max_age=DEFAULT_SESSION_MINUTES * 60,
         httponly=False,
         secure=settings.session_cookie_secure,
         samesite="lax",
@@ -1074,6 +1071,28 @@ def read_current_user(
 
 
 @router.post(
+    "/session/activity",
+    response_model=SessionResponse,
+)
+def record_session_activity(
+    request: Request,
+    user: dict = AuthenticatedUserDependency,
+) -> SessionResponse:
+    token = extract_session_token(request)
+    session = get_active_session_by_token(token)
+
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
+        )
+
+    return SessionResponse(
+        expires_at=session["expires_at"],
+    )
+
+
+@router.post(
     "/session/renew",
     response_model=SessionResponse,
 )
@@ -1098,7 +1117,6 @@ def renew_current_session(
     response.set_cookie(
         key=settings.session_cookie_name,
         value=renewed_session["token"],
-        max_age=DEFAULT_SESSION_MINUTES * 60,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite="lax",
@@ -1108,7 +1126,6 @@ def renew_current_session(
     response.set_cookie(
         key=settings.csrf_cookie_name,
         value=csrf_token,
-        max_age=DEFAULT_SESSION_MINUTES * 60,
         httponly=False,
         secure=settings.session_cookie_secure,
         samesite="lax",

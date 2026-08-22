@@ -92,6 +92,31 @@ def test_create_user_session_returns_raw_token_once_and_stores_hash():
     assert session["user_agent"] == "pytest"
 
 
+def test_create_user_session_uses_configured_session_duration(
+    monkeypatch,
+):
+    monkeypatch.setenv(
+        "AUTHSTATUS_SESSION_INACTIVITY_MINUTES",
+        "45",
+    )
+    get_settings.cache_clear()
+
+    user = create_user(
+        "configured-session@example.com",
+        "password value",
+        role="UR",
+    )
+
+    before = datetime.now(UTC)
+    created_session = create_user_session(user["id"])
+    after = datetime.now(UTC)
+
+    expires_at = datetime.fromisoformat(created_session["session"]["expires_at"])
+
+    assert before + timedelta(minutes=45, seconds=-1) <= expires_at
+    assert expires_at <= after + timedelta(minutes=45)
+
+
 def test_get_active_session_by_token_returns_active_session():
     user = create_user("active@example.com", "password value", role="UR")
     created_session = create_user_session(user["id"])
@@ -126,18 +151,67 @@ def test_get_active_session_by_token_rejects_expired_session():
     assert get_active_session_by_token(created_session["token"]) is None
 
 
-def test_touch_session_updates_last_seen_at():
+def test_touch_session_updates_activity_and_expiration():
     user = create_user("touch@example.com", "password value", role="UR")
-    created_session = create_user_session(user["id"])
+    created_session = create_user_session(
+        user["id"],
+        minutes=5,
+    )
 
-    before = created_session["session"]["last_seen_at"]
+    before_last_seen = created_session["session"]["last_seen_at"]
+    before_expiration = created_session["session"]["expires_at"]
 
-    touch_session(created_session["token"])
+    updated_expiration = touch_session(created_session["token"])
 
     refreshed = get_active_session_by_token(created_session["token"])
 
     assert refreshed is not None
-    assert refreshed["last_seen_at"] >= before
+    assert updated_expiration == refreshed["expires_at"]
+    assert refreshed["last_seen_at"] >= before_last_seen
+    assert refreshed["expires_at"] > before_expiration
+
+
+def test_touch_session_does_not_revive_expired_session():
+    user = create_user(
+        "expired-touch@example.com",
+        "password value",
+        role="UR",
+    )
+    created_session = create_user_session(user["id"])
+
+    expired_at = (datetime.now(UTC) - timedelta(minutes=1)).isoformat(
+        timespec="seconds"
+    )
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE sessions
+            SET expires_at = ?
+            WHERE id = ?
+            """,
+            (
+                expired_at,
+                created_session["session"]["id"],
+            ),
+        )
+
+    updated_expiration = touch_session(created_session["token"])
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT expires_at
+            FROM sessions
+            WHERE id = ?
+            """,
+            (created_session["session"]["id"],),
+        ).fetchone()
+
+    assert updated_expiration is None
+    assert row is not None
+    assert row["expires_at"] == expired_at
+    assert get_active_session_by_token(created_session["token"]) is None
 
 
 def test_renew_session_rotates_token_and_extends_expiration():

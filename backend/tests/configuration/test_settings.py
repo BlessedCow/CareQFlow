@@ -227,6 +227,48 @@ def test_production_allows_hostname_containing_localhost_text():
     ]
 
 
+def test_session_inactivity_defaults_to_twenty_minutes():
+    settings = Settings()
+
+    assert settings.session_inactivity_minutes == 20
+
+
+@pytest.mark.parametrize(
+    "minutes",
+    [
+        "0",
+        "4",
+        "481",
+    ],
+)
+def test_session_inactivity_rejects_out_of_range_values(
+    minutes,
+):
+    with pytest.raises(ValidationError):
+        Settings(
+            AUTHSTATUS_SESSION_INACTIVITY_MINUTES=minutes,
+        )
+
+
+@pytest.mark.parametrize(
+    "minutes",
+    [
+        "5",
+        "20",
+        "60",
+        "480",
+    ],
+)
+def test_session_inactivity_accepts_supported_values(
+    minutes,
+):
+    settings = Settings(
+        AUTHSTATUS_SESSION_INACTIVITY_MINUTES=minutes,
+    )
+
+    assert settings.session_inactivity_minutes == int(minutes)
+
+
 def test_production_requires_secure_session_cookie():
     with pytest.raises(
         ValidationError,

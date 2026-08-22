@@ -375,7 +375,11 @@ def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
     return refreshed_user
 
 
-def get_user_for_session_token(token: str) -> dict[str, Any] | None:
+def get_user_for_session_token(
+    token: str,
+    *,
+    touch: bool = True,
+) -> dict[str, Any] | None:
     session = get_active_session_by_token(token)
 
     if session is None:
@@ -386,6 +390,7 @@ def get_user_for_session_token(token: str) -> dict[str, Any] | None:
     if user is None or not user["is_active"]:
         return None
 
-    touch_session(token)
+    if touch:
+        touch_session(token)
 
     return user

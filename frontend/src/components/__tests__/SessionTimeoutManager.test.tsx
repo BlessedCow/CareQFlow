@@ -66,6 +66,32 @@ function StatefulSessionTimeoutManager() {
   );
 }
 
+function ActivityUpdatedSessionTimeoutManager() {
+  const [expiresAt, setExpiresAt] = useState(
+    expirationAfter(5 * 60)
+  );
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setExpiresAt(expirationAfter(20 * 60))}
+      >
+        Simulate authenticated activity
+      </button>
+
+      <SessionTimeoutManager
+        darkMode={false}
+        expiresAt={expiresAt}
+        showTimer={true}
+        onSessionRenewed={setExpiresAt}
+        onSessionExpired={vi.fn()}
+        onLogout={vi.fn()}
+      />
+    </>
+  );
+}
+
 describe("SessionTimeoutManager", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -290,6 +316,34 @@ describe("SessionTimeoutManager", () => {
       screen.queryByRole("dialog")
     ).not.toBeInTheDocument();
 
+    expect(
+      screen.getByText("Session: 20:00")
+    ).toBeInTheDocument();
+  });
+
+  it("resets the warning when authenticated activity extends the session", () => {
+    render(<ActivityUpdatedSessionTimeoutManager />);
+  
+    expect(
+      screen.getByRole("dialog", {
+        name: "Your session is about to expire",
+      })
+    ).toBeInTheDocument();
+  
+    expect(
+      screen.getByText("Session: 5:00")
+    ).toBeInTheDocument();
+  
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Simulate authenticated activity",
+      })
+    );
+  
+    expect(
+      screen.queryByRole("dialog")
+    ).not.toBeInTheDocument();
+  
     expect(
       screen.getByText("Session: 20:00")
     ).toBeInTheDocument();

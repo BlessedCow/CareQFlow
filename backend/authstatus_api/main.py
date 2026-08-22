@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=CORS_ALLOWED_METHODS,
         allow_headers=CORS_ALLOWED_HEADERS,
+        expose_headers=["X-CareQueue-Session-Expires-At"],
     )
 
     if settings.app_environment == "production":

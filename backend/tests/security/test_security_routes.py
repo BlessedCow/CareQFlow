@@ -2499,7 +2499,7 @@ def test_user_regains_protected_access_after_required_password_change(client):
     assert allowed_response.json()["users"][0]["must_change_password"] is False
 
 
-def test_me_returns_same_session_expiration_as_login(client):
+def test_me_returns_current_session_expiration(client):
     create_user(
         "user@example.com",
         "correct horse battery staple",
@@ -2523,7 +2523,33 @@ def test_me_returns_same_session_expiration_as_login(client):
     me_response = client.get("/api/security/me")
 
     assert me_response.status_code == 200
-    assert me_response.json()["session"]["expires_at"] == login_expiration
+    assert me_response.json()["session"]["expires_at"] >= login_expiration
+
+
+def test_authenticated_response_reports_current_session_expiration(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    response = client.get("/api/security/me")
+
+    assert response.status_code == 200
+
+    expires_at = response.json()["session"]["expires_at"]
+
+    assert response.headers["x-carequeue-session-expires-at"] == expires_at
 
 
 def test_user_can_renew_active_session(client):
@@ -2572,14 +2598,17 @@ def test_user_can_renew_active_session(client):
 
     set_cookie_headers = renew_response.headers.get_list("set-cookie")
 
-    assert any(
-        header.startswith("carequeue_session=") and "Max-Age=1200" in header
+    session_cookie_header = next(
+        header
         for header in set_cookie_headers
+        if header.startswith("carequeue_session=")
     )
-    assert any(
-        header.startswith("carequeue_csrf=") and "Max-Age=1200" in header
-        for header in set_cookie_headers
+    csrf_cookie_header = next(
+        header for header in set_cookie_headers if header.startswith("carequeue_csrf=")
     )
+
+    assert "Max-Age=" not in session_cookie_header
+    assert "Max-Age=" not in csrf_cookie_header
 
 
 def test_session_renewal_requires_csrf_header(client):
@@ -2650,6 +2679,76 @@ def test_me_returns_renewed_session_expiration(client):
 
     assert me_response.status_code == 200
     assert me_response.json()["session"]["expires_at"] == renewed_expiration
+
+
+def test_session_activity_returns_extended_expiration(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    original_expiration = login_response.json()["session"]["expires_at"]
+
+    response = client.post(
+        "/api/security/session/activity",
+        headers=csrf_headers(client),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["expires_at"] >= original_expiration
+    assert (
+        response.headers["x-carequeue-session-expires-at"]
+        == response.json()["expires_at"]
+    )
+
+
+def test_session_activity_requires_csrf_header(client):
+    create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "user@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    response = client.post(
+        "/api/security/session/activity",
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "CSRF validation failed.",
+    }
+
+
+def test_session_activity_requires_active_session(client):
+    response = client.post(
+        "/api/security/session/activity",
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Authentication required.",
+    }
 
 
 def test_setup_initial_admin_creates_admin_when_no_users_exist(client):

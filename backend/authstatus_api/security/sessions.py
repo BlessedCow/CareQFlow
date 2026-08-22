@@ -12,9 +12,13 @@ from authstatus_api.security.mappings import (
     parse_datetime,
     session_row_to_dict,
 )
+from authstatus_api.settings import get_settings
 
 SESSION_TOKEN_BYTES = 32
-DEFAULT_SESSION_MINUTES = 20
+
+
+def get_session_minutes() -> int:
+    return get_settings().session_inactivity_minutes
 
 
 def generate_session_token() -> str:
@@ -29,8 +33,9 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def session_expiration(minutes: int = DEFAULT_SESSION_MINUTES) -> datetime:
-    return utc_now() + timedelta(minutes=minutes)
+def session_expiration(minutes: int | None = None) -> datetime:
+    session_minutes = minutes if minutes is not None else get_session_minutes()
+    return utc_now() + timedelta(minutes=session_minutes)
 
 
 def is_session_expired(expires_at: datetime, now: datetime | None = None) -> bool:
@@ -41,7 +46,7 @@ def is_session_expired(expires_at: datetime, now: datetime | None = None) -> boo
 def create_user_session(
     user_id: int,
     *,
-    minutes: int = DEFAULT_SESSION_MINUTES,
+    minutes: int | None = None,
     ip_address: str = "",
     user_agent: str = "",
 ) -> dict[str, Any]:
@@ -92,7 +97,7 @@ def create_user_session(
 def replace_user_session(
     user_id: int,
     *,
-    minutes: int = DEFAULT_SESSION_MINUTES,
+    minutes: int | None = None,
     ip_address: str = "",
     user_agent: str = "",
 ) -> dict[str, Any]:
@@ -198,28 +203,45 @@ def get_active_session_by_token(token: str) -> dict[str, Any] | None:
     return session
 
 
-def touch_session(token: str) -> None:
+def touch_session(token: str) -> str | None:
     init_db()
 
     token_hash = hash_session_token(token)
-    now = format_datetime(utc_now())
+    now_datetime = utc_now()
+    now = format_datetime(now_datetime)
+    expires_at = format_datetime(
+        now_datetime + timedelta(minutes=get_session_minutes())
+    )
 
     with get_conn() as conn:
-        conn.execute(
+        cursor = conn.execute(
             """
             UPDATE sessions
-            SET last_seen_at = ?
+            SET
+                last_seen_at = ?,
+                expires_at = ?
             WHERE token_hash = ?
-              AND revoked_at IS NULL
+            AND revoked_at IS NULL
+            AND expires_at > ?
             """,
-            (now, token_hash),
+            (
+                now,
+                expires_at,
+                token_hash,
+                now,
+            ),
         )
+
+    if cursor.rowcount == 0:
+        return None
+
+    return expires_at
 
 
 def renew_session(
     token: str,
     *,
-    minutes: int = DEFAULT_SESSION_MINUTES,
+    minutes: int | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -227,9 +249,11 @@ def renew_session(
     renewed_token = generate_session_token()
     renewed_token_hash = hash_session_token(renewed_token)
 
+    session_minutes = minutes if minutes is not None else get_session_minutes()
+
     now_datetime = utc_now()
     now = format_datetime(now_datetime)
-    expires_at = format_datetime(now_datetime + timedelta(minutes=minutes))
+    expires_at = format_datetime(now_datetime + timedelta(minutes=session_minutes))
 
     with get_conn() as conn:
         cursor = conn.execute(

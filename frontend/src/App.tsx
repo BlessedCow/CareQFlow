@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 // API
 import { fetchAuthRequests } from "./api/authStatus";
+import {
+  broadcastSessionLogout,
+  subscribeToSessionExpiration,
+  subscribeToSessionLogout,
+} from "./api/client";
 
 // Security
 import {
@@ -36,6 +41,7 @@ import { useAuthorizationSelection } from "./hooks/useAuthorizationSelection";
 import { useAuthorizationMutations } from "./hooks/useAuthorizationMutations";
 import { useWorkflowViewMode } from "./hooks/useWorkflowViewMode";
 import { useSessionTimerPreference } from "./hooks/useSessionTimerPreference";
+import { useSessionActivity } from "./hooks/useSessionActivity";
 
 // AppShell
 import { AppShell } from "./components/layout/AppShell";
@@ -52,6 +58,9 @@ function App() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  useSessionActivity(currentUser !== null);
+
   const {
     dashboardCardSettings,
     handleToggleDashboardCard,
@@ -122,11 +131,9 @@ function App() {
 
   const {
     authEvents,
-    setAuthEvents,
     isLoadingAuthEvents,
     isSavingAuthEvent,
     authEventsError,
-    setAuthEventsError,
     editingAuthEventId,
     confirmingDeleteAuthEventId,
     timelineEventForm,
@@ -174,9 +181,31 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    return subscribeToSessionExpiration((expiresAt) => {
+      setSessionExpiresAt((currentExpiration) => {
+        if (!currentExpiration) {
+          return expiresAt;
+        }
+  
+        const currentTime = Date.parse(currentExpiration);
+        const updatedTime = Date.parse(expiresAt);
+  
+        if (
+          Number.isNaN(currentTime) ||
+          Number.isNaN(updatedTime)
+        ) {
+          return currentExpiration;
+        }
+  
+        return updatedTime > currentTime
+          ? expiresAt
+          : currentExpiration;
+      });
+    });
+  }, []);
   const {
     newAuthForm,
-    setNewAuthForm,
     resetNewAuthForm,
     handleNewAuthFieldChange,
     loadAuthIntoForm,
@@ -357,10 +386,17 @@ function App() {
     setActivePage("dashboard");
   }, [clearAuthEvents, handleCancelAuthForm]);
 
+  useEffect(() => {
+    return subscribeToSessionLogout(() => {
+      clearAuthenticatedState();
+    });
+  }, [clearAuthenticatedState]);
+
   const handleRequiredPasswordChanged = async () => {
     try {
       await logoutUser();
     } finally {
+      broadcastSessionLogout();
       clearAuthenticatedState();
     }
   };
@@ -369,6 +405,7 @@ function App() {
     try {
       await logoutUser();
     } finally {
+      broadcastSessionLogout();
       clearAuthenticatedState();
     }
   };
@@ -417,6 +454,7 @@ function App() {
     try {
       await logoutUser();
     } finally {
+      broadcastSessionLogout();
       clearAuthenticatedState();
     }
   };

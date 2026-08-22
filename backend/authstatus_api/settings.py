@@ -133,6 +133,12 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="AUTHSTATUS_SESSION_COOKIE_SECURE",
     )
+    session_inactivity_minutes: int = Field(
+        default=20,
+        ge=5,
+        le=480,
+        validation_alias="AUTHSTATUS_SESSION_INACTIVITY_MINUTES",
+    )
     csrf_cookie_name: str = Field(
         default="carequeue_csrf",
         validation_alias="AUTHSTATUS_CSRF_COOKIE_NAME",
