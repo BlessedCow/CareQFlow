@@ -2,9 +2,12 @@
 
 This guide covers setting up and running CareQueue locally for development and testing.
 
-Development is separate from the packaged Windows installer. Use this guide when you are working on source code, running tests, or testing the app with backend and frontend development servers.
+Development is separate from packaged Windows and Linux deployment. Use this guide when working on source code, running tests, or testing the application with the backend and frontend development servers.
 
-For packaged Windows installation and installer operation modes, see [Windows Deployment](../deployment/windows.md).
+For packaged deployment, see:
+
+- [Windows Deployment](../deployment/windows.md)
+- [Linux Deployment](../deployment/linux.md)
 
 For health validation, see [Health Checks](../operations/health-checks.md).
 
@@ -19,6 +22,8 @@ CareQueue development uses:
 - SQLite or SQLCipher for local data storage
 - Separate backend and frontend development servers
 - Local application accounts stored in the active development database
+- TOTP MFA and remembered-device authentication
+- Versioned governance attestation
 
 ## Development Architecture
 
@@ -38,7 +43,7 @@ FastAPI
 SQLite or SQLCipher database
 ```
 
-Production packaging uses a different shape: Windows services, a bundled runtime, Caddy, and `https://carequeue.local`. Do not use the development server setup as proof that the packaged installer works.
+Packaged production deployment uses a different shape: operating-system services, packaged runtime dependencies, Caddy, and `https://carequeue.local`. Do not use the development server setup as proof that a packaged Windows or Linux release works.
 
 ## Prerequisites
 
@@ -51,7 +56,7 @@ Install:
 - PowerShell on Windows
 - A code editor
 
-CareQueue is currently developed primarily on Windows.
+PowerShell examples in this guide assume Windows development. Equivalent tooling may be used on other supported development systems when the repository dependencies are available.
 
 ## Clone the Repository
 
@@ -230,7 +235,9 @@ AUTHSTATUS_CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
 
 AUTHSTATUS_SESSION_COOKIE_SECURE=false
 AUTHSTATUS_SESSION_COOKIE_NAME=carequeue_session
+AUTHSTATUS_SESSION_INACTIVITY_MINUTES=20
 AUTHSTATUS_CSRF_COOKIE_NAME=carequeue_csrf
+AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME=carequeue_trusted_device
 AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
 VITE_AUTHSTATUS_API_BASE_URL=http://localhost:8000
@@ -332,11 +339,13 @@ UR
 Read Only
 ```
 
-The command-line password must be at least 12 characters.
+The password must be at least 12 characters.
 
 After the first Admin exists, create ordinary users through the Admin interface.
 
-The packaged Windows installer also includes a first-time Admin setup GUI. That GUI is part of the installer flow, not the normal development-server workflow.
+When the current governance attestation has not yet been accepted, the first Admin is directed to the governance setup workflow after login. Normal protected application functionality remains unavailable until an Admin completes the current organization attestation.
+
+Packaged Windows and Linux releases also include first-time Admin setup workflows. Those bootstrap tools are part of packaged deployment and are separate from the normal development-server workflow.
 
 ## Development Database Initialization
 
@@ -427,6 +436,7 @@ Examples:
 
 ```powershell
 pytest tests\security -q
+pytest tests\governance -q
 pytest tests\pdf_intake -q
 pytest tests\backups -q
 pytest tests\authorizations -q
@@ -482,38 +492,67 @@ npm run build
 
 Then manually test the workflow affected by the change.
 
-## Installer Development Check
+## Packaged Deployment Development Checks
 
-Only use this when changing files under `deployment\windows`, installer packaging, service configuration, or production startup behavior.
+Use these commands when changing installer packaging, service configuration, production startup behavior, or release tooling.
 
-Build a fresh payload:
+### Windows
+
+Build a fresh Windows payload:
 
 ```powershell
 .\deployment\windows\installer\build-payload.ps1 `
-    -EmbeddedPythonArchive "G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip"
+    -EmbeddedPythonArchive ".\local_installer_assets\python-3.14.6-embed-amd64.zip"
 ```
 
 Compile the installer:
 
 ```powershell
-& "C:\Program Files\Inno Setup 7\ISCC.exe" ".\deployment\windows\installer\CareQueue.iss"
+& "C:\Program Files\Inno Setup 7\ISCC.exe" `
+    ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-Run the installer:
+For CareQueue `0.3.0`, run:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.1.0.exe
+.\build\windows\installer\CareQueue-Setup-0.3.0.exe
 ```
 
-This is still local validation. Clean-machine VM validation is required before treating an installer build as release-ready.
+Validate the package:
+
+```powershell
+.\deployment\windows\installer\validate-release-package.ps1
+```
+
+### Linux
+
+Build the production frontend first:
+
+```powershell
+npm --prefix frontend run build
+```
+
+Build the Linux release archive:
+
+```powershell
+.\deployment\linux\installer\build-payload.ps1 -Version 0.3.0
+```
+
+For CareQueue `0.3.0`, the resulting archive is:
+
+```text
+build\linux\installer\CareQueue-Linux-Setup-0.3.0.tar.gz
+```
+
+Local package creation is not sufficient release validation. Test the exact release artifact on clean supported virtual machines before publishing it.
 
 ## Optional Security Checks
 
 Backend:
 
 ```powershell
-bandit -r authstatus_api
-pip-audit
+bandit -r authstatus_api scripts -c pyproject.toml
+python -m pip_audit -r requirements.txt
 ```
 
 Frontend:
@@ -523,6 +562,27 @@ npm audit
 ```
 
 Review findings before changing dependencies.
+
+## Release Version During Development
+
+When preparing a new release, use the repository version helper:
+
+```powershell
+.\deployment\bump-version.ps1 -Version 0.3.0
+```
+
+Replace `0.3.0` with the intended application release version.
+
+The helper updates controlled backend and deployment version declarations without blindly replacing matching strings in tests, dependency versions, documentation examples, or historical governance fixtures.
+
+The governance attestation version is independent of the CareQueue application version. Do not change the governance version only because the application release number changes.
+
+Review all changes after a version bump:
+
+```powershell
+git status --short
+git diff
+```
 
 ## API Documentation
 
@@ -554,7 +614,7 @@ When Vite uses another port, either free port 5173 or add the actual local origi
 
 Do not use a wildcard origin with credentialed requests.
 
-## Development Cookies
+## Development Cookies and Sessions
 
 Local development uses:
 
@@ -566,7 +626,23 @@ because the development frontend and backend use HTTP.
 
 Production must use secure HTTPS cookies.
 
-Do not copy this setting into production.
+Authenticated sessions use a server-enforced inactivity timeout. The default is:
+
+```env
+AUTHSTATUS_SESSION_INACTIVITY_MINUTES=20
+```
+
+Supported values range from 5 to 480 minutes.
+
+CareQueue also uses a separate remembered-device cookie for optional MFA trust:
+
+```env
+AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME=carequeue_trusted_device
+```
+
+Remembered-device state is separate from the authenticated session and does not keep the user signed in.
+
+Do not copy development-only cookie security settings into production.
 
 ## Switching Database Modes
 
@@ -713,11 +789,13 @@ Confirm the actual Vite origin appears in `AUTHSTATUS_CORS_ORIGINS`, then restar
 
 Create the first Admin again.
 
+A newly initialized database also has no governance attestation history, so the first Admin must complete the current governance setup after login before normal protected application pages become available.
+
 ### Login works in development but not production
 
-The environments use separate databases, keys, cookies, and origins.
+The environments use separate databases, keys, cookies, origins, governance state, sessions, MFA enrollment, and remembered-device records.
 
-Manage the account in the correct environment.
+Manage the account and authentication state in the correct environment.
 
 ### Backend import fails
 
@@ -799,20 +877,9 @@ Confirm:
 - No database or backup is staged
 - No real PDF is staged
 - No sensitive screenshot is staged
-- No key or credential appears in the changes
+- No key, credential, MFA secret, or authentication token appears in the changes
 - Backend tests passed
 - Ruff passed
 - Frontend tests passed when relevant
 - Frontend build passed when relevant
-- Installer validation passed when installer files changed
-
-## Related Documentation
-
-```text
-docs/deployment/windows.md
-docs/operations/health-checks.md
-docs/workflows/backup-and-recovery.md
-docs/workflows/pdf-intake.md
-docs/administration/users-and-security.md
-docs/troubleshooting/index.md
-```
+- Packaged deployment validation passed when deployment files changed

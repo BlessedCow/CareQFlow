@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to CareQueue.
 
-CareQueue is a local-first utilization review workflow and authorization management application focused on authorization tracking, payer and facility workflows, timeline events, documentation intake, encrypted storage, audit logging, session security, and operational backup support.
+CareQueue is a local-first utilization review workflow and authorization management application focused on authorization tracking, payer and facility workflows, timeline events, documentation intake, encrypted storage, audit logging, MFA, session security, governance controls, and operational backup support.
 
 The project is actively evolving. Contributions should remain focused, reviewable, privacy-conscious, and consistent with the existing repository structure.
 
@@ -211,6 +211,7 @@ backend/authstatus_api/
 ├── authorizations/
 ├── backups/
 ├── database_encryption/
+├── governance/
 ├── observability/
 ├── pdf_intake/
 ├── persistence/
@@ -228,6 +229,8 @@ backend/tests/
 ├── backups/
 ├── configuration/
 ├── database_encryption/
+├── deployment/
+├── governance/
 ├── observability/
 ├── pdf_intake/
 ├── registered_options/
@@ -252,9 +255,12 @@ Deployment helpers:
 
 ```text
 deployment/
+├── bump-version.ps1
 ├── linux/
+│   ├── installer/
 │   └── systemd/
 └── windows/
+    └── installer/
 ```
 
 Documentation:
@@ -288,11 +294,12 @@ cd CareQueue
 
 Use the root README and the local development guide for current setup instructions.
 
-The developer environment and the packaged Windows installer are separate workflows:
+The development environment and packaged deployment workflows are separate:
 
 - Developer setup runs the backend and frontend directly from source.
-- The packaged Windows installer installs service-managed runtime files under the Windows installation directory and stores operational data under `C:\ProgramData\CareQueue`.
-- Installer build and validation details belong in the Windows deployment guide.
+- The packaged Windows installer installs service-managed runtime files under the Windows installation directory and stores persistent operational data under `C:\ProgramData\CareQueue`.
+- The packaged Linux release installs application files under `/opt/carequeue` and keeps configuration, data, and logs under restricted system paths.
+- Windows and Linux build, installation, upgrade, and validation details belong in their respective deployment guides.
 
 ### Backend
 
@@ -352,8 +359,10 @@ When adding backend behavior:
 - Keep persistence behavior in the relevant repository or domain module.
 - Use parameterized SQL.
 - Do not construct SQL from unvalidated user input.
-- Use existing security dependencies.
+- Use existing security and governance dependencies.
 - Preserve CSRF checks for authenticated state-changing requests.
+- Preserve governance enforcement for normal protected application routes.
+- Keep bootstrap and governance setup routes narrowly scoped to the prerequisites they must bypass.
 - Do not expose internal exception details to clients.
 - Do not log request bodies containing sensitive data.
 - Keep audit metadata minimal and free of PHI or PII.
@@ -385,24 +394,34 @@ When adding frontend behavior:
 - Preserve dark-mode behavior.
 - Confirm loading, empty, error, and disabled states.
 
-## Session and Authentication Changes
+## Authentication, MFA, Session, and Governance Changes
 
-Changes to authentication or session behavior require focused review.
+Changes to authentication, MFA, session, or governance behavior require focused review.
 
 Confirm that:
 
 - Raw session tokens remain in HttpOnly cookies.
 - Session hashes remain server-side.
-- CSRF validation still applies to state-changing requests.
-- Session expiration remains backend-enforced.
-- Frontend countdowns remain informational.
-- Renewal requires an active session.
-- Renewal refreshes backend expiration and cookie lifetimes.
-- Logout clears frontend authorization data.
-- Expiration clears frontend authorization data.
+- CSRF validation still applies to authenticated state-changing requests.
+- Session inactivity expiration remains backend-enforced.
+- Expired sessions cannot be revived by browser activity.
+- Explicit renewal requires an active session and rotates session and CSRF state.
+- CareQueue continues to enforce one active authenticated session per account.
+- Frontend timers and cross-tab synchronization do not replace backend validation.
+- Logout and expiration clear protected frontend data.
+- MFA secrets and TOTP values never reach logs or audit metadata.
+- MFA challenge tokens and remembered-device tokens are protected server-side with keyed digests rather than stored raw.
+- Remembered-device MFA remains separate from authenticated session lifetime.
+- Security-sensitive account changes revoke the applicable sessions and remembered-device state.
 - Generic authentication errors do not reveal whether an account exists.
+- Normal protected routes remain blocked until the current governance attestation is complete.
+- Governance acceptance remains Admin-only.
+- Governance history remains append-only through the application.
+- Governance audit metadata remains free of organization names and other unnecessary sensitive values.
 
 The first-time Admin setup endpoint is only for bootstrap. It must remain unavailable after any user exists and must not replace normal authenticated Admin user management.
+
+The governance attestation version is independent of the CareQueue application release version. Do not increase the governance version merely because the application version changes.
 
 ## PDF Intake Changes
 
@@ -498,6 +517,12 @@ deployment/linux/
 deployment/windows/
 ```
 
+Shared release-version tooling lives under:
+
+```text
+deployment/
+```
+
 Deployment contributions must:
 
 - Avoid embedded secrets
@@ -505,15 +530,20 @@ Deployment contributions must:
 - Avoid embedded encryption keys
 - Use protected environment files
 - Use restricted service accounts
+- Keep the application API bound to loopback in the packaged private deployment
 - Use isolated operational directories
 - Document required permissions
 - Document installation and removal
+- Document upgrade and repair behavior
 - Document manual verification
 - Document failure diagnosis
 - Avoid deleting databases or backups automatically
+- Preserve production configuration and encryption keys during ordinary upgrade or repair
 - Preserve safe defaults
 
-Windows installer changes should be tested through the packaged installer when the change affects user-facing installation, upgrade, repair, uninstall, service startup, post-install health checks, first-time Admin setup, or ProgramData preservation.
+Windows installer changes should be tested through the packaged installer when the change affects user-facing installation, upgrade, repair, uninstall, service startup, post-install health checks, first-time Admin setup, governance flow, or ProgramData preservation.
+
+Linux deployment changes should be tested from a newly built release archive when the change affects installation, upgrade, repair, uninstall, systemd services, Caddy, certificate trust, first-time Admin setup, governance flow, or persistent data preservation.
 
 ### Windows PowerShell
 
@@ -564,7 +594,13 @@ ruff check . --fix
 Run Bandit when security-sensitive backend code changes:
 
 ```bash
-bandit -r authstatus_api
+bandit -r authstatus_api scripts -c pyproject.toml
+```
+
+Run the backend dependency audit when dependency or release security is in scope:
+
+```bash
+python -m pip_audit -r requirements.txt
 ```
 
 ### Frontend
@@ -572,10 +608,12 @@ bandit -r authstatus_api
 From the `frontend` directory:
 
 ```bash
+npm test
 npm run build
+npm audit
 ```
 
-If frontend tests are added in the future, run the relevant test command as well.
+Run focused Vitest files while developing when a change is limited to a specific page, component, hook, or API client.
 
 ### Focused Tests
 
@@ -585,6 +623,7 @@ Examples:
 
 ```bash
 pytest tests/security -n auto -q
+pytest tests/governance -n auto -q
 pytest tests/authorizations -n auto -q
 pytest tests/pdf_intake -n auto -q
 pytest tests/database_encryption -n auto -q
@@ -592,20 +631,29 @@ pytest tests/database_encryption -n auto -q
 
 Then run the complete suite before opening the pull request.
 
-### Installer Validation
+### Packaged Deployment Validation
 
-Installer validation is required when deployment behavior changes.
+Packaged deployment validation is required when deployment behavior changes.
 
-At minimum, confirm the relevant installer mode on Windows:
+At minimum, confirm the relevant modes for the affected platform:
 
 - Install
 - Upgrade
 - Repair
 - Uninstall
 
-Also confirm health checks, service status, and data preservation when those areas are affected.
+Also confirm:
 
-Clean-machine VM testing is required before treating a Windows installer build as release-ready.
+- Service status
+- Liveness and readiness
+- Private HTTPS access
+- First-time Admin setup when applicable
+- Governance setup when applicable
+- Data and configuration preservation
+- Backup scheduling
+- Reboot persistence when service startup behavior changes
+
+Clean-machine VM testing is required before treating a Windows or Linux package as release-ready.
 
 ### Test Organization
 
@@ -615,6 +663,7 @@ Examples:
 
 ```text
 backend/tests/security/
+backend/tests/governance/
 backend/tests/authorizations/
 backend/tests/pdf_intake/
 ```
@@ -648,10 +697,15 @@ Document relevant manual checks in the pull request.
 Examples include:
 
 - Login and logout
+- MFA enrollment and verification
+- Remembered-device behavior
+- Single-session invalidation
 - Session restoration
 - Session warning behavior
 - Session renewal
-- Automatic expiration
+- Automatic inactivity expiration
+- Cross-tab session behavior
+- Governance setup and role restrictions
 - Role-based UI behavior
 - Authorization creation and editing
 - Timeline updates
@@ -663,6 +717,7 @@ Examples include:
 - Windows service status
 - Windows installer mode behavior
 - Linux systemd service status
+- Linux installer mode behavior
 
 Manual checks must use synthetic data.
 
@@ -767,6 +822,9 @@ Do not paste:
 - Real patient data
 - Authentication cookies
 - Session tokens
+- MFA secrets or codes
+- MFA challenge tokens
+- Remembered-device tokens
 - Full production logs
 
 When suggesting a feature, include:
@@ -788,6 +846,8 @@ Do not open a public issue for:
 - Authentication bypass
 - Authorization bypass
 - Session vulnerabilities
+- MFA bypass or trusted-device vulnerabilities
+- Governance bypass
 - CSRF vulnerabilities
 - Encryption failures
 - Backup exposure

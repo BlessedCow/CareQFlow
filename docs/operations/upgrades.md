@@ -1,74 +1,236 @@
-# Windows Upgrades
+# Upgrades, Repair, and Uninstall
 
-This guide covers upgrading, repairing, and uninstalling an existing private Windows installation of CareQueue.
+This guide covers upgrading, repairing, and uninstalling packaged CareQueue installations on Windows and Linux.
 
-The normal private Windows path is the packaged installer:
+CareQueue separates installed application files from production configuration and runtime data so packaged upgrades and repairs can replace application components without intentionally replacing the active database, encryption keys, backups, or other persistent data.
+
+For first-time installation, see:
 
 ```text
-CareQueue-Setup-0.1.0.exe
+docs/deployment/windows.md
+docs/deployment/linux.md
 ```
 
-The lower-level installer engine remains available for development, troubleshooting, and direct validation:
+For backup and recovery procedures, see:
+
+```text
+docs/workflows/backup-and-recovery.md
+```
+
+For service validation and smoke tests, see:
+
+```text
+docs/operations/health-checks.md
+```
+
+## Supported Operations
+
+The packaged deployment workflows support:
+
+```text
+Install
+Upgrade
+Repair
+Uninstall
+```
+
+### Install
+
+Use Install when CareQueue is not already installed.
+
+A new installation creates the required application, configuration, data, service, and logging structure.
+
+### Upgrade
+
+Use Upgrade when replacing an existing installation with a newer reviewed CareQueue release.
+
+Upgrade preserves production configuration and runtime data while replacing application and packaged runtime components.
+
+### Repair
+
+Use Repair when the installed release is damaged, incomplete, or needs its packaged application files and service definitions restored.
+
+Repair preserves production configuration and runtime data.
+
+### Uninstall
+
+Use Uninstall to remove the installed CareQueue application and its operating-system services while intentionally preserving production configuration, data, and logs.
+
+A normal uninstall is not secure data destruction.
+
+## Application Version and Governance Version
+
+The CareQueue application version and governance attestation version are independent.
+
+For example:
+
+```text
+CareQueue application version: 0.3.0
+Governance attestation version: 1
+```
+
+Installing a new CareQueue application version does not by itself require a new governance attestation.
+
+Re-attestation is required only when the application's required governance attestation version changes or when no current attestation exists for the installation.
+
+After an upgrade, verify that the expected governance status is shown before returning the installation to normal use.
+
+## General Upgrade Safety
+
+Before upgrading any CareQueue installation:
+
+- Identify the exact release artifact being installed.
+- Record the current application version and source release information when available.
+- Confirm the current installation is healthy before changing it.
+- Create or confirm a recent encrypted backup.
+- Verify the selected backup for higher-risk upgrades.
+- Confirm required encryption and recovery keys are available.
+- Review release notes for configuration, migration, or security changes.
+- Schedule an appropriate maintenance window.
+- Keep the previously trusted release artifact and recovery documentation available.
+- Ensure that only approved administrators can access the host during the upgrade.
+- Do not begin an upgrade while the database, services, or storage state is uncertain.
+
+An application upgrade is not a substitute for backup, restore, migration, or disaster-recovery planning.
+
+## Release Validation Before Deployment
+
+Before a release artifact is used for an upgrade, the source revision and release build should already have passed the project's release validation.
+
+Typical source checks include:
+
+```powershell
+pytest backend\tests -n auto -q
+ruff check backend\authstatus_api backend\tests --fix
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Additional release security checks may include:
+
+```powershell
+bandit -r backend\authstatus_api backend\scripts -c backend\pyproject.toml
+python -m pip_audit -r backend\requirements.txt
+npm --prefix frontend audit
+```
+
+Review the repository state before building release artifacts:
+
+```powershell
+git status --short
+git rev-parse HEAD
+git log -1 --oneline
+```
+
+Do not package or deploy:
+
+- Real patient data
+- Production databases
+- Production environment files
+- Encryption keys
+- Backup files
+- Restored databases
+- Real PDFs containing PHI
+- Unreviewed generated files
+- Sensitive screenshots
+
+## Release Version Preparation
+
+Use the repository release-version helper to update controlled application and installer version declarations:
+
+```powershell
+.\deployment\bump-version.ps1 -Version 0.3.0
+```
+
+Replace `0.3.0` with the intended release version.
+
+The version helper intentionally does not rewrite arbitrary matching version strings in tests, dependency versions, documentation examples, or historical governance fixtures.
+
+Review the resulting changes:
+
+```powershell
+git status --short
+git diff
+```
+
+## Windows Upgrade Workflow
+
+The packaged Windows installer is the normal Windows upgrade path.
+
+A versioned release has a filename such as:
+
+```text
+CareQueue-Setup-0.3.0.exe
+```
+
+The lower-level installer engine is:
 
 ```text
 deployment/windows/installer/invoke-install.ps1
 ```
 
-The production services are:
+Direct engine invocation is intended for development, validation, and troubleshooting rather than normal operator use.
+
+### Windows Production Services
+
+The packaged Windows services are:
 
 ```text
 CareQueueApi
 CareQueueCaddy
 ```
 
-The upgrade process replaces installed application files while preserving production configuration and runtime data.
+The API remains bound to loopback and Caddy provides the private HTTPS application endpoint.
 
-For first-time installation, see [Windows Deployment](../deployment/windows.md).
+### Windows Persistent Data
 
-For backup and recovery, see [Backup and Recovery](../workflows/backup-and-recovery.md).
-
-For service validation and smoke tests, see [Health Checks](health-checks.md).
-
-## Installer Operation Modes
-
-When CareQueue is not installed, the packaged installer shows the normal Install flow.
-
-When CareQueue is already installed, the packaged installer offers these operation modes:
-
-- **Upgrade existing installation**
-- **Repair existing installation**
-- **Uninstall CareQueue**
-
-The installer detects an existing installation by checking for the installed backend, frontend, Python runtime, and Caddy files under:
+Installed application files are stored under:
 
 ```text
 C:\Program Files\CareQueue
 ```
 
-## Operation Summary
-
-| Operation | Purpose | Preserves runtime data? | Starts services afterward? |
-| --- | --- | --- | --- |
-| Install | Install CareQueue on a machine without an existing installation | Creates new runtime data | Yes |
-| Upgrade | Replace application files and packaged runtime files | Yes | Yes |
-| Repair | Restore application files, packaged runtime files, and services | Yes | Yes |
-| Uninstall | Remove application files and Windows services | Yes | No |
-
-Runtime data is stored under:
+Persistent production data is stored under:
 
 ```text
 C:\ProgramData\CareQueue
 ```
 
-## What an Upgrade Replaces
+The production environment file is:
 
-An upgrade may replace application files under:
+```text
+C:\ProgramData\CareQueue\Config\carequeue.env
+```
+
+An upgrade or repair preserves the existing environment file and runtime data.
+
+This includes settings and keys such as:
+
+```text
+AUTHSTATUS_ENCRYPTION_KEY
+AUTHSTATUS_SQLCIPHER_KEY
+AUTHSTATUS_BACKUP_ENCRYPTION_KEY
+```
+
+Persistent data can include:
+
+- Active database
+- Encrypted backups
+- Restore staging
+- Recovery staging
+- Logs
+- Caddy runtime data
+- Local certificate data
+
+### What a Windows Upgrade Replaces
+
+A Windows upgrade may replace application files under:
 
 ```text
 C:\Program Files\CareQueue
 ```
 
-This includes:
+including:
 
 ```text
 backend/
@@ -78,15 +240,11 @@ runtime/
 vendor/
 ```
 
-The packaged installer uses the private Python runtime and offline wheelhouse included in the installer payload.
+The packaged installer recreates the installed backend environment from the packaged private Python runtime and bundled dependency wheelhouse.
 
-The installed backend environment is recreated from the packaged runtime and bundled dependencies.
+### What Windows Repair Replaces
 
-## What Repair Replaces
-
-Repair is intended to restore a damaged or incomplete installation while preserving runtime data.
-
-Repair may replace or restore:
+Repair may restore:
 
 - Installed backend files
 - Installed frontend files
@@ -97,193 +255,56 @@ Repair may replace or restore:
 - Runtime directory structure
 - Filesystem permissions
 
-Repair does not reset Admin users, encryption keys, runtime data, active databases, or encrypted backups.
+Repair does not intentionally reset:
 
-## What Uninstall Removes
-
-Uninstall removes:
-
-- CareQueue application files under `C:\Program Files\CareQueue`
-- The `CareQueueApi` Windows service
-- The `CareQueueCaddy` Windows service
-
-Uninstall preserves:
-
-- Runtime configuration
-- Encryption keys
-- Active database
+- Admin users
+- Production encryption keys
+- Active database data
 - Encrypted backups
-- Restore staging
-- Recovery staging
-- Logs
-- Caddy runtime data
-- Local certificate data
+- Governance attestation history
 
-Preserved runtime data remains under:
+### Windows Pre-Upgrade Health Check
 
-```text
-C:\ProgramData\CareQueue
-```
-
-## What an Upgrade Preserves
-
-The installer preserves the production environment file:
-
-```text
-C:\ProgramData\CareQueue\Config\carequeue.env
-```
-
-This preserves settings and keys such as:
-
-```text
-AUTHSTATUS_ENCRYPTION_KEY
-AUTHSTATUS_SQLCIPHER_KEY
-AUTHSTATUS_BACKUP_ENCRYPTION_KEY
-```
-
-The installer also preserves runtime data under:
-
-```text
-C:\ProgramData\CareQueue
-```
-
-This includes:
-
-- Active database
-- Encrypted backups
-- Restore staging
-- Recovery staging
-- Logs
-- Caddy runtime data
-- Local certificate data
-
-## What the Installer Does Not Do
-
-The installer does not automatically:
-
-- Prove that the latest backup is recoverable
-- Require a fresh pre-upgrade backup
-- Rotate encryption keys
-- Migrate to another database engine
-- Roll back source code after a failed smoke test
-- Restore an older database schema
-- Validate every browser workflow
-- Complete clean-machine VM certification
-- Code sign the release package
-
-These responsibilities remain part of the deployment, validation, and release process.
-
-## Required Access
-
-Run the installer with administrative privileges.
-
-The installer needs elevated rights to:
-
-- Write under `C:\Program Files`
-- Write and secure `C:\ProgramData\CareQueue`
-- Install, remove, stop, and start Windows services
-- Replace installed files
-- Recreate the installed backend runtime
-- Reapply filesystem permissions
-
-## Pre-Upgrade Checklist
-
-Before upgrading:
-
-- Review the source being packaged.
-- Confirm the working tree contains only intended changes.
-- Record the source commit.
-- Run backend tests.
-- Run Ruff.
-- Run frontend tests.
-- Run the frontend build.
-- Build a fresh installer payload.
-- Compile a fresh installer EXE.
-- Confirm current production health.
-- Create or confirm a recent encrypted backup.
-- Confirm required recovery keys are available.
-- Review dependency and configuration changes.
-- Schedule a maintenance window.
-- Keep rollback and recovery instructions available.
-
-Do not begin while the current database or service state is uncertain.
-
-## Review the Source
-
-From the repository root:
+Before starting the installer, confirm:
 
 ```powershell
-git status --short
-git rev-parse HEAD
-git log -1 --oneline
+Get-Service CareQueueApi, CareQueueCaddy |
+    Select-Object Name, Status, StartType
 ```
 
-Do not deploy from a working tree containing:
+Both services should normally be running.
 
-- Unknown changes
-- Real databases
-- Real PDFs
-- Environment files
-- Backup files
-- Temporary restored databases
-- Unreviewed generated files
-- Sensitive screenshots
-
-## Run Backend Checks
-
-From `backend`:
+Check liveness:
 
 ```powershell
-pytest tests -n auto -q
-ruff check . --fix
+Invoke-RestMethod `
+    -Method Get `
+    -Uri "https://carequeue.local/api/health/live" `
+    -TimeoutSec 5
 ```
 
-Optional release checks:
+Check readiness:
 
 ```powershell
-bandit -r authstatus_api
-pip-audit
+Invoke-RestMethod `
+    -Method Get `
+    -Uri "https://carequeue.local/api/health/ready" `
+    -TimeoutSec 5
 ```
 
-## Run Frontend Checks
+Also verify normal browser login and a basic authorization workflow before changing the installation.
 
-From `frontend`:
+Do not use an upgrade to hide an existing production failure.
 
-```powershell
-npm test
-npm run build
-```
+### Create a Windows Pre-Upgrade Backup
 
-Optional dependency review:
-
-```powershell
-npm audit
-```
-
-## Confirm Current Production Health
-
-Use the procedures in [Health Checks](health-checks.md).
-
-At minimum, confirm:
-
-- `CareQueueApi` is running
-- `CareQueueCaddy` is running
-- HTTPS liveness passes
-- HTTPS readiness passes
-- Login works
-- The authorization queue loads
-
-Do not use an upgrade to conceal an existing production failure.
-
-## Create a Fresh Pre-Upgrade Backup
-
-Run:
+Run the installed backup helper:
 
 ```powershell
 & "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1"
 ```
 
-Confirm the new file exists:
+Review the newest backups:
 
 ```powershell
 Get-ChildItem `
@@ -296,141 +317,81 @@ Select-Object -First 3 `
     LastWriteTime
 ```
 
-Record the selected backup filename in the change record.
+A file listing confirms only that a backup file exists. It does not prove recoverability.
 
-A file listing does not prove recoverability. For higher-risk upgrades, verify or restore the selected backup into the approved restore area before proceeding.
+For higher-risk upgrades, verify the selected encrypted backup through the supported backup verification workflow before proceeding.
 
-## Review Frontend Environment Files
+### Build the Windows Release
 
-Development may use:
-
-```env
-VITE_AUTHSTATUS_API_BASE_URL=http://localhost:8000
-```
-
-Keep that setting in:
-
-```text
-frontend\.env.development.local
-```
-
-The production frontend should use same-origin API requests.
-
-Review frontend environment files:
+Build the production frontend first:
 
 ```powershell
-Get-ChildItem `
-    ".\frontend" `
-    -Force `
-    -File `
-    -Filter ".env*"
+npm --prefix frontend run build
 ```
 
-Inspect API URL settings:
-
-```powershell
-Get-ChildItem `
-    ".\frontend" `
-    -Force `
-    -File `
-    -Filter ".env*" |
-ForEach-Object {
-    Write-Host "`n=== $($_.Name) ==="
-
-    Select-String `
-        -Path $_.FullName `
-        -Pattern "VITE_AUTHSTATUS_API_BASE_URL|VITE_API_BASE_URL"
-}
-```
-
-Do not store production secrets in frontend environment files.
-
-## Build the Installer Payload
-
-Build the Windows payload from the repository root:
+Build the Windows payload:
 
 ```powershell
 .\deployment\windows\installer\build-payload.ps1 `
-    -EmbeddedPythonArchive "G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip"
+    -EmbeddedPythonArchive ".\local_installer_assets\python-3.14.6-embed-amd64.zip"
 ```
-
-Use the approved local path for the embedded Python archive.
-
-The payload build should create or update:
-
-```text
-build\windows\payload
-```
-
-## Compile the Packaged Installer
 
 Compile the Inno Setup installer:
 
 ```powershell
-& "C:\Program Files\Inno Setup 7\ISCC.exe" ".\deployment\windows\installer\CareQueue.iss"
+& "C:\Program Files\Inno Setup 7\ISCC.exe" `
+    ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-The compiled installer should be created under:
+For CareQueue `0.3.0`, the resulting artifact is:
 
 ```text
-build\windows\installer
+build\windows\installer\CareQueue-Setup-0.3.0.exe
 ```
 
-For version `0.1.0`, the expected installer filename is:
-
-```text
-CareQueue-Setup-0.1.0.exe
-```
-
-## Run the Upgrade Through the GUI Installer
-
-Run the compiled installer:
+Validate the release package:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.1.0.exe
+.\deployment\windows\installer\validate-release-package.ps1
 ```
 
-If CareQueue is already installed, choose:
+### Run the Windows Upgrade
+
+Launch the versioned installer:
+
+```powershell
+.\build\windows\installer\CareQueue-Setup-0.3.0.exe
+```
+
+When an existing installation is detected, select:
 
 ```text
 Upgrade existing installation
 ```
 
-Confirm the ready page describes the upgrade operation before continuing.
+Review the installer summary before continuing.
 
-## Run Repair Through the GUI Installer
+### Run Windows Repair
 
-Run:
-
-```powershell
-.\build\windows\installer\CareQueue-Setup-0.1.0.exe
-```
-
-Choose:
+Launch the same versioned installer and select:
 
 ```text
 Repair existing installation
 ```
 
-Repair should preserve runtime data and restore the installed application, services, and packaged runtime files.
+Repair should preserve production configuration and runtime data while restoring packaged application and service components.
 
-## Run Uninstall Through the GUI Installer
+### Run Windows Uninstall
 
-Run:
-
-```powershell
-.\build\windows\installer\CareQueue-Setup-0.1.0.exe
-```
-
-Choose:
+Launch the installer and select:
 
 ```text
 Uninstall CareQueue
 ```
 
-Confirm the ready page describes the uninstall operation before continuing.
+The uninstall workflow removes the installed application and CareQueue Windows services while preserving persistent runtime data.
 
-After uninstall, confirm application files and services were removed while runtime data was preserved.
+After uninstall, verify:
 
 ```powershell
 Get-Service CareQueueApi, CareQueueCaddy -ErrorAction SilentlyContinue
@@ -441,158 +402,60 @@ Test-Path "C:\ProgramData\CareQueue\Config\carequeue.env"
 Test-Path "C:\ProgramData\CareQueue\Data\auth_tracker.sqlcipher.db"
 ```
 
-Expected result after uninstall:
+For a normal populated installation, the expected pattern is:
 
 ```text
-No service output
+No CareQueue service output
 False
 True
 True
 True
 ```
 
-## Direct Installer Engine Validation
+The final database-path result depends on whether that installation already contains an active database.
 
-The packaged installer calls the direct installer engine internally.
+### Windows Installer Sequence
 
-For development or troubleshooting, the engine can be run directly against the packaged payload.
+The Windows installer performs the upgrade in a controlled sequence that includes:
 
-Upgrade example:
-
-```powershell
-powershell.exe `
-    -NoProfile `
-    -NonInteractive `
-    -ExecutionPolicy Bypass `
-    -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
-    -Mode Upgrade `
-    -ApplicationOrigin "https://carequeue.local" `
-    -PayloadDirectory ".\build\windows\payload" `
-    -InstallDirectory "C:\Program Files\CareQueue" `
-    -DataDirectory "C:\ProgramData\CareQueue"
-```
-
-Repair example:
-
-```powershell
-powershell.exe `
-    -NoProfile `
-    -NonInteractive `
-    -ExecutionPolicy Bypass `
-    -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
-    -Mode Repair `
-    -ApplicationOrigin "https://carequeue.local" `
-    -PayloadDirectory ".\build\windows\payload" `
-    -InstallDirectory "C:\Program Files\CareQueue" `
-    -DataDirectory "C:\ProgramData\CareQueue"
-```
-
-Uninstall example:
-
-```powershell
-powershell.exe `
-    -NoProfile `
-    -NonInteractive `
-    -ExecutionPolicy Bypass `
-    -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
-    -Mode Uninstall `
-    -PayloadDirectory ".\build\windows\payload" `
-    -InstallDirectory "C:\Program Files\CareQueue" `
-    -DataDirectory "C:\ProgramData\CareQueue"
-```
-
-Use the GUI installer for normal operator validation. Use direct mode only when lower-level diagnostics are needed.
-
-## Upgrade Sequence
-
-The installer engine performs the upgrade in this general order:
-
-1. Validate the application origin.
-2. Verify required packaged payload files.
-3. Create required runtime directories.
-4. Read or create the production environment.
-5. Stop Caddy.
-6. Stop the API.
-7. Replace installed application files.
-8. Restore packaged Python runtime and vendor assets.
+1. Validate installer state and application origin.
+2. Validate required packaged payload files.
+3. Verify the packaged payload hash manifest.
+4. Prepare required runtime directories and logging.
+5. Preserve or migrate the production environment configuration.
+6. Stop the HTTPS proxy.
+7. Stop the API service.
+8. Replace installed application and packaged runtime files.
 9. Recreate the installed backend environment.
 10. Install backend dependencies from the packaged wheelhouse.
 11. Validate the installed backend.
-12. Reapply runtime permissions.
-13. Start the API.
-14. Start Caddy.
-15. Run post-installation validation.
+12. Reinstall or refresh service configuration.
+13. Reapply runtime permission hardening.
+14. Start the API.
+15. Start Caddy.
+16. Validate the installed services and application health.
 
-## Service Stop Order
+The exact implementation may evolve, so release validation should always use the installer included with the release being tested.
 
-The installer stops services in this order:
+### Windows Service Order
+
+The normal stop order is:
 
 ```text
 1. CareQueueCaddy
 2. CareQueueApi
 ```
 
-Caddy is stopped first because it depends on the API.
-
-## Service Start Order
-
-The installer starts services in this order:
+The normal start order is:
 
 ```text
 1. CareQueueApi
 2. CareQueueCaddy
 ```
 
-The API starts first because Caddy proxies to it.
+This keeps the reverse proxy from serving requests while the API is unavailable during planned replacement work.
 
-## Installed Backend Validation
-
-After dependency installation, the installer loads the production environment and imports:
-
-```text
-authstatus_api.main
-uvicorn
-```
-
-Successful output includes:
-
-```text
-CareQueue production backend validated.
-```
-
-This confirms the installed backend can load under production configuration.
-
-It does not replace the post-upgrade smoke test.
-
-## Post-Installation Validation
-
-The installer engine validates that the expected services reach a running state and that the local API health check responds.
-
-Successful logs may include:
-
-```text
-Post-installation validation completed successfully.
-```
-
-A successful installer validation does not replace browser smoke testing.
-
-## Permission Hardening
-
-The installer reapplies restricted permissions to:
-
-```text
-C:\ProgramData\CareQueue
-```
-
-The intended access includes:
-
-- `SYSTEM`
-- Built-in Administrators
-- The administrator performing the installation
-
-Do not broadly grant access to resolve unrelated failures.
-
-## Installer Logs
+### Windows Installer Logs
 
 Installer logs are stored under:
 
@@ -600,7 +463,7 @@ Installer logs are stored under:
 C:\ProgramData\CareQueue\Logs\Installer
 ```
 
-To inspect the newest installer log:
+Find the newest log:
 
 ```powershell
 $latestLog = Get-ChildItem `
@@ -611,368 +474,551 @@ Sort-Object LastWriteTime -Descending |
 Select-Object -First 1
 
 $latestLog.FullName
+```
 
+Read the newest log:
+
+```powershell
 Get-Content `
     -LiteralPath $latestLog.FullName `
     -Tail 240
 ```
 
-Review logs before sharing them.
+Review logs before sharing them because deployment logs can reveal environment and host information.
 
-## Successful Upgrade Output
+## Linux Upgrade Workflow
 
-Important successful lines include:
+CareQueue includes a packaged Linux release workflow for supported Debian-based systems.
 
-```text
-Mode: Upgrade
-CareQueue Upgrade operation completed successfully.
-Post-installation validation completed successfully.
-```
-
-Review the full installer result. Dependency installation output alone does not prove success.
-
-## Successful Repair Output
-
-Important successful lines include:
+The release archive has a filename such as:
 
 ```text
-Mode: Repair
-CareQueue Repair operation completed successfully.
-Post-installation validation completed successfully.
+CareQueue-Linux-Setup-0.3.0.tar.gz
 ```
 
-## Successful Uninstall Output
-
-Important successful lines include:
+The packaged entry point is:
 
 ```text
-Mode: Uninstall
-CareQueue application files and Windows services were removed.
-CareQueue data was preserved at: C:\ProgramData\CareQueue
-Uninstall operation completed successfully.
+deployment/linux/installer/invoke-install.sh
 ```
 
-## Post-Upgrade Validation
+Supported Linux modes are:
 
-Run the post-upgrade procedure in [Health Checks](health-checks.md#post-upgrade-smoke-test).
+```text
+install
+upgrade
+repair
+uninstall
+```
 
-At minimum, confirm:
+### Linux Production Services
 
-- Both services are running
-- HTTPS liveness passes
-- HTTPS readiness passes
-- The login page loads over HTTPS
-- Login succeeds
-- Dashboard loads
-- Authorization queue loads
-- Registered options load
-- Logout succeeds
-- A post-upgrade encrypted backup succeeds
+The packaged Linux services are:
 
-Do not declare the upgrade complete based only on service status.
+```text
+carequeue-api.service
+carequeue-caddy.service
+carequeue-backup.service
+carequeue-backup.timer
+```
 
-## Verify Backup Operation
+### Linux Persistent Paths
 
-Run:
+Installed application files:
+
+```text
+/opt/carequeue
+```
+
+Production configuration:
+
+```text
+/etc/carequeue
+```
+
+Runtime data:
+
+```text
+/var/lib/carequeue
+```
+
+Logs:
+
+```text
+/var/log/carequeue
+```
+
+Upgrade and repair replace application/runtime files under `/opt/carequeue` while preserving production configuration and runtime data.
+
+### What a Linux Upgrade Replaces
+
+The Linux installer refreshes:
+
+- Backend application files
+- Frontend production build
+- Deployment files
+- Python virtual environment
+- Backend dependencies
+- systemd unit files
+- Caddy configuration
+- Installed application metadata
+
+Existing production configuration is preserved and required deployment settings may be migrated.
+
+### What Linux Repair Replaces
+
+Repair uses the same production installation engine to restore the packaged application state while preserving:
+
+- `/etc/carequeue`
+- `/var/lib/carequeue`
+- `/var/log/carequeue`
+
+Repair is appropriate when application files, Python dependencies, service definitions, or other packaged installation components need to be restored.
+
+### Linux Pre-Upgrade Health Check
+
+Check the API service:
+
+```bash
+sudo systemctl status carequeue-api.service
+```
+
+Check the HTTPS service:
+
+```bash
+sudo systemctl status carequeue-caddy.service
+```
+
+Check the backup timer:
+
+```bash
+sudo systemctl status carequeue-backup.timer
+```
+
+Check liveness:
+
+```bash
+curl --fail --silent --show-error \
+  https://carequeue.local/api/health/live
+```
+
+Check readiness:
+
+```bash
+curl --fail --silent --show-error \
+  https://carequeue.local/api/health/ready
+```
+
+Also verify normal browser login and a basic authorization workflow.
+
+Do not proceed until unexplained service or readiness failures have been resolved.
+
+### Create or Verify a Linux Pre-Upgrade Backup
+
+Confirm that the scheduled backup timer is active:
+
+```bash
+sudo systemctl is-enabled carequeue-backup.timer
+sudo systemctl is-active carequeue-backup.timer
+```
+
+Review the most recent encrypted backup files in the configured CareQueue backup directory.
+
+Use the supported backup verification workflow for higher-risk upgrades.
+
+Do not assume that the presence of a backup file proves it can be restored.
+
+### Build the Linux Release
+
+Build the production frontend:
 
 ```powershell
-& "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1"
+npm --prefix frontend run build
 ```
 
-Confirm a new encrypted backup appears.
-
-This checks:
-
-- Environment loading
-- Database access
-- Backup path handling
-- Permissions
-- Backup encryption
-
-## Review Logs
-
-API wrapper log:
+Build the Linux release archive:
 
 ```powershell
-Get-Content `
-    "C:\ProgramData\CareQueue\Logs\Api\CareQueueApi.wrapper.log" `
-    -Tail 100
+.\deployment\linux\installer\build-payload.ps1 -Version 0.3.0
+```
+
+After the repository version has already been bumped, the default version can be used:
+
+```powershell
+.\deployment\linux\installer\build-payload.ps1
+```
+
+For CareQueue `0.3.0`, the resulting artifact is:
+
+```text
+build\linux\installer\CareQueue-Linux-Setup-0.3.0.tar.gz
+```
+
+The build script reports the package path, size, and SHA256 value.
+
+### Extract the Linux Release
+
+On the target Linux system:
+
+```bash
+mkdir carequeue-installer
+tar -xzf CareQueue-Linux-Setup-0.3.0.tar.gz \
+  -C carequeue-installer
+cd carequeue-installer
+```
+
+Use a newly extracted, reviewed release package for upgrade and repair operations.
+
+### Run the Linux Upgrade
+
+From the extracted release package:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh upgrade
+```
+
+Upgrade preserves the existing production configuration and data.
+
+### Run Linux Repair
+
+From the extracted release package:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair
+```
+
+Repair also preserves production configuration and data.
+
+### Run Linux Uninstall
+
+From the extracted release package:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh uninstall
+```
+
+The uninstall workflow:
+
+- Stops and disables the CareQueue backup timer.
+- Stops and disables the CareQueue Caddy service.
+- Stops and disables the CareQueue API service.
+- Removes CareQueue systemd unit files.
+- Removes `/opt/carequeue`.
+- Removes the CareQueue-managed local hosts-file entry.
+- Preserves configuration, runtime data, and logs.
+
+The following paths are intentionally preserved:
+
+```text
+/etc/carequeue
+/var/lib/carequeue
+/var/log/carequeue
+```
+
+A normal uninstall does not delete the database or encryption keys.
+
+### Linux Upgrade Sequence
+
+The Linux production installer performs the installation or refresh in this general order:
+
+1. Require root privileges.
+2. Validate the HTTPS application origin.
+3. Validate the Linux distribution.
+4. Validate required release-package contents.
+5. Install required system dependencies.
+6. Ensure the dedicated CareQueue service account exists.
+7. Create or validate production directories.
+8. Replace installed application files under `/opt/carequeue`.
+9. Recreate the CareQueue Python virtual environment.
+10. Install backend dependencies.
+11. Validate the backend import.
+12. Preserve or create the production environment file.
+13. Write installation state.
+14. Install or refresh systemd units.
+15. Install Caddy when required.
+16. Disable the distribution's default Caddy service where necessary.
+17. Install and validate the CareQueue Caddy configuration.
+18. Ensure the packaged local hostname configuration exists.
+19. Start or restart CareQueue services.
+20. Ensure the Caddy internal root certificate is trusted.
+21. Validate the API service, Caddy service, and backup timer.
+22. Validate the HTTPS frontend, liveness endpoint, and readiness endpoint.
+
+Upgrade and repair use the same production installation engine and therefore refresh the packaged application state while preserving existing production configuration and data.
+
+### Linux Installer Logs
+
+Installer logs are stored under:
+
+```text
+/var/log/carequeue/installer/
+```
+
+Review the relevant log after upgrade, repair, or uninstall.
+
+API logs:
+
+```bash
+sudo journalctl \
+  -u carequeue-api.service \
+  --since today
 ```
 
 Caddy logs:
 
-```powershell
-Get-ChildItem `
-    "C:\ProgramData\CareQueue\Logs\Caddy" `
-    -File |
-ForEach-Object {
-    Write-Host "`n=== $($_.Name) ==="
-    Get-Content $_.FullName -Tail 100
-}
+```bash
+sudo journalctl \
+  -u carequeue-caddy.service \
+  --since today
 ```
 
-Review logs before sharing them.
+Backup logs:
 
-## Record the Upgrade
-
-Record:
-
-- Upgrade date and time
-- Administrator
-- Source commit
-- Previous version
-- New version
-- Installer filename
-- Installer checksum
-- Pre-upgrade backup filename
-- Test results
-- Installer result
-- Service status
-- Health-check results
-- Login result
-- Post-upgrade backup result
-- Problems encountered
-- Corrective actions
-- Final approval
-
-Do not include passwords, keys, tokens, cookies, PHI, or decrypted database content.
-
-## Rollback Strategy
-
-CareQueue does not currently provide a one-command code rollback.
-
-A rollback plan requires:
-
-- Previous trusted source
-- Preserved production environment
-- Recent encrypted backup
-- Required encryption keys
-- Installer access
-- A reviewed database compatibility decision
-
-Do not assume older code is compatible with a newer database schema.
-
-## Code Rollback
-
-When schema compatibility is confirmed:
-
-1. Check out the previous trusted source.
-2. Run tests.
-3. Confirm database compatibility.
-4. Build the payload and packaged installer for the approved source.
-5. Run the installer against the target machine.
-6. Run health checks.
-7. Verify login and representative workflows.
-
-Example:
-
-```powershell
-git checkout <approved-previous-commit>
+```bash
+sudo journalctl \
+  -u carequeue-backup.service \
+  --since today
 ```
 
-Then build and run the approved installer package for that source.
+## Post-Upgrade Validation
 
-## Database Rollback
+After any upgrade or repair, validate the installation before returning it to routine use.
 
-Database rollback is a recovery operation.
+### Service Health
 
-Use:
+Confirm that required services are running.
+
+Windows:
+
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy |
+    Select-Object Name, Status, StartType
+```
+
+Linux:
+
+```bash
+sudo systemctl is-active carequeue-api.service
+sudo systemctl is-active carequeue-caddy.service
+sudo systemctl is-enabled carequeue-backup.timer
+```
+
+### HTTPS Application Health
+
+Confirm:
 
 ```text
-docs/workflows/backup-and-recovery.md
+https://carequeue.local/
+https://carequeue.local/api/health/live
+https://carequeue.local/api/health/ready
 ```
 
-Do not manually overwrite the active database.
+The packaged installer performs automated health checks, but operator validation should still include the browser workflow.
 
-## Failed Upgrade Scenarios
+### Browser Smoke Test
 
-### Python runtime files are locked
+At minimum:
 
-Cause:
+1. Open CareQueue through the approved HTTPS origin.
+2. Sign in with an approved test or administrative account.
+3. Confirm any required governance attestation state is correct.
+4. Confirm the authorization queue loads.
+5. Open an existing authorization.
+6. Confirm expected role restrictions.
+7. Confirm logout works.
+8. Sign in again.
+9. Confirm the Admin System page reports the expected application version.
+10. Confirm backup scheduling remains enabled.
 
-A running process is using files from the packaged Python runtime or installed backend environment.
+Use only synthetic or approved non-production data during release validation environments.
+
+### Security-Sensitive Checks
+
+For releases that modify authentication, session, governance, encryption, or deployment behavior, perform targeted checks appropriate to the change.
+
+Examples include:
+
+- MFA enrollment and login
+- Remembered-device behavior
+- Single-session invalidation
+- Inactivity timeout warning and expiration
+- Session renewal
+- Cross-tab logout behavior
+- Governance enforcement and history
+- Audit integrity verification
+- Backup creation and verification
+- Certificate trust
+- Production same-origin API behavior
+
+## Failure Handling
+
+If an upgrade or repair fails:
+
+1. Preserve the installer log and relevant service logs.
+2. Do not delete the production database or encryption keys.
+3. Confirm the current state of the installed services.
+4. Confirm whether the application files were partially replaced.
+5. Confirm the production environment file is still present.
+6. Confirm the most recent verified encrypted backup is available.
+7. Avoid repeated repair attempts until the failure is understood.
+8. Use the documented recovery workflow when database recovery is required.
+
+Do not edit encrypted database or backup files manually.
+
+## Rollback
+
+CareQueue does not currently provide a complete automated application rollback workflow for every packaged deployment path.
+
+Before a higher-risk upgrade:
+
+- Keep the previously trusted release artifact.
+- Keep a recent verified encrypted backup.
+- Preserve the existing production environment file and keys.
+- Record the current application version.
+- Record the selected backup and its verification result.
+- Ensure the recovery process is understood.
+
+If rollback becomes necessary, treat application rollback and database recovery as separate decisions.
+
+Do not restore an older database merely because application files are being reverted. Database compatibility must be considered explicitly.
+
+## What the Installers Do Not Prove
+
+A successful installer result does not prove that:
+
+- The newest backup is recoverable.
+- Every browser workflow works.
+- Every role-specific workflow works.
+- External network policy is correct.
+- Endpoint protection is healthy.
+- Organizational access reviews are current.
+- Required agreements have been executed.
+- The deployment is HIPAA compliant.
+- The release is appropriate for public internet exposure.
+- Disaster recovery has been tested.
+
+Those remain part of release validation and organizational operations.
+
+## Permission Review
+
+After upgrade or repair, confirm that persistent production directories still have the intended restricted permissions.
+
+Windows deployments should review access under:
+
+```text
+C:\ProgramData\CareQueue
+```
+
+Linux deployments should review ownership and modes under:
+
+```text
+/etc/carequeue
+/var/lib/carequeue
+/var/log/carequeue
+```
+
+Do not broaden permissions simply to bypass an unrelated installation or service failure.
+
+## Common Problems
+
+### Upgrade is unavailable
+
+Confirm CareQueue is already installed.
+
+Windows detects the installed backend, frontend, private Python runtime, and Caddy files under the installation directory.
+
+Linux upgrade should be run against an existing packaged installation using a newly extracted release package.
+
+### Install is rejected because CareQueue already exists
+
+Use Upgrade or Repair rather than Install.
+
+### Application does not start after upgrade
+
+Review:
+
+- Installer logs
+- API service logs
+- Caddy service logs
+- Production environment-file presence
+- Database path
+- Encryption-key availability
+- Service-account permissions
+- Backend dependency installation
+- Health and readiness results
+
+### Readiness fails after upgrade
+
+Readiness can fail even when the process is running.
+
+Review:
+
+- Database accessibility
+- SQLCipher configuration
+- Production path validation
+- Encryption configuration
+- Service logs
+- Application environment
+- Installed application version
+
+Do not treat liveness alone as proof that the application is ready.
+
+### Login succeeds but protected pages require governance setup
+
+The current organization governance attestation has not been completed.
+
+An Admin must complete the current attestation before normal protected application functionality becomes available.
+
+A CareQueue application-version change does not automatically require re-attestation unless the required governance attestation version also changed or no current attestation exists.
+
+### Certificate warning appears after upgrade
+
+Confirm that the packaged Caddy service is running and the CareQueue internal root certificate is trusted on the approved client system.
+
+Do not permanently disable TLS certificate validation to work around a trust problem.
+
+### Backup timer is missing after Linux upgrade
+
+Check:
+
+```bash
+sudo systemctl status carequeue-backup.timer
+sudo systemctl list-timers carequeue-backup.timer
+```
+
+Review the installer log and reinstall or repair only after the cause is understood.
+
+### Windows services are missing after repair
 
 Check:
 
 ```powershell
-Get-Service -Name "CareQueueApi", "CareQueueCaddy"
+Get-Service CareQueueApi, CareQueueCaddy -ErrorAction SilentlyContinue
 ```
 
-Also check whether developer tools are using the packaged runtime as an interpreter.
+Review the newest installer log before retrying the operation.
 
-Use the project virtual environment for development instead of:
+## Recommended Change Record
+
+For production upgrades, retain an organizational change record containing at least:
 
 ```text
-build\windows\components\python-runtime\python.exe
+Date and time
+Operator
+Previous CareQueue version
+New CareQueue version
+Release artifact filename
+Release artifact SHA256
+Source commit or tag
+Pre-upgrade health result
+Backup filename
+Backup verification result
+Upgrade or repair result
+Post-upgrade health result
+Browser smoke-test result
+Governance status
+Unexpected findings
+Recovery or rollback actions, if any
 ```
 
-### Frontend build fails during payload build
-
-Because this happens before the packaged installer is compiled, the installed application is untouched.
-
-Run:
-
-```powershell
-npm test
-npm run build
-```
-
-Review frontend environment files and correct the source problem.
-
-### Payload build fails
-
-Review:
-
-- Missing embedded Python archive
-- Missing vendor asset
-- Failed frontend build
-- Failed wheelhouse build
-- Locked build output files
-- Unexpected source tree contents
-
-Do not compile or release an installer from a failed or partial payload.
-
-### Dependency installation fails
-
-The installer may already have replaced files and stopped services.
-
-Preserve:
-
-```text
-C:\ProgramData\CareQueue\Config\carequeue.env
-C:\ProgramData\CareQueue\Data
-C:\ProgramData\CareQueue\Backups
-```
-
-Review:
-
-- Full package error
-- Python compatibility
-- Requirements changes
-- Service status
-- Whether post-installation validation ran
-
-Do not repeatedly rerun the installer without understanding the current state.
-
-### Backend validation fails
-
-Possible causes:
-
-- Invalid production configuration
-- Missing dependency
-- Incompatible Python version
-- Invalid CORS origin
-- Unsafe path rejection
-- Database configuration error
-- Source import error
-
-Keep services stopped when the installed state is uncertain.
-
-Do not paste production environment contents into troubleshooting output.
-
-### Permission hardening fails
-
-Inspect ACLs:
-
-```powershell
-icacls.exe `
-    "C:\ProgramData\CareQueue"
-```
-
-Confirm the installer is elevated.
-
-Do not grant `Everyone` broad access.
-
-### API starts but Caddy does not
-
-Check services and Caddy logs.
-
-Validate the installed Caddyfile with the packaged Caddy binary:
-
-```powershell
-& "C:\Program Files\CareQueue\vendor\caddy\caddy.exe" `
-    validate `
-    --config "C:\Program Files\CareQueue\deployment\windows\Caddyfile" `
-    --adapter caddyfile
-```
-
-### Health succeeds but login fails
-
-Use [Health Checks](health-checks.md) to isolate the issue, then verify:
-
-- The production user exists
-- Cookies are enabled
-- The certificate is trusted
-- The production frontend uses same-origin API requests
-- The system clock is correct
-
-## Emergency Stop
-
-To stop access quickly:
-
-```powershell
-Stop-Service -Name "CareQueueCaddy"
-Stop-Service -Name "CareQueueApi"
-```
-
-Confirm:
-
-```powershell
-Get-Service -Name "CareQueueApi", "CareQueueCaddy"
-```
-
-Do not delete application or database files during an emergency stop.
-
-## Upgrade Acceptance Checklist
-
-Before declaring the upgrade complete:
-
-- Repository checks passed.
-- A recent encrypted backup exists.
-- Required keys are recoverable.
-- Installer payload built successfully.
-- Packaged installer compiled successfully.
-- Installer completed successfully.
-- Installed backend validation passed.
-- Permission hardening passed.
-- Post-installation validation passed.
-- Services are running.
-- HTTPS liveness passed.
-- HTTPS readiness passed.
-- Login succeeded.
-- Dashboard loaded.
-- Authorization queue loaded.
-- Registered options loaded.
-- Logout and login were tested.
-- A post-upgrade backup succeeded.
-- Logs were reviewed.
-- Upgrade details were recorded.
-- The change owner accepted the result.
-
-## Repair Acceptance Checklist
-
-Before declaring repair complete:
-
-- Installer completed in Repair mode.
-- Runtime data was preserved.
-- Services are running.
-- HTTPS liveness passed.
-- HTTPS readiness passed.
-- Login succeeded.
-- Dashboard loaded.
-- Representative workflows loaded.
-- Logs were reviewed.
-
-## Uninstall Acceptance Checklist
-
-Before declaring uninstall complete:
-
-- Installer completed in Uninstall mode.
-- `CareQueueApi` service was removed.
-- `CareQueueCaddy` service was removed.
-- `C:\Program Files\CareQueue` was removed.
-- `C:\ProgramData\CareQueue` was preserved.
-- Runtime configuration was preserved.
-- Active database was preserved.
-- Encrypted backups were preserved.
-- Installer log was reviewed.
+Do not include passwords, MFA secrets, encryption keys, session tokens, PHI, or other sensitive values in the change record.

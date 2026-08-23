@@ -16,9 +16,15 @@ Registered options standardize selection lists. They do not prove that a facilit
 
 ## Access
 
-All authenticated users can read registered options.
+Registered options are protected application data.
+
+Users must have an active authenticated session and the current organization governance attestation must be complete before registered-option endpoints are available.
+
+All authenticated users can read registered options after those prerequisites are satisfied.
 
 Only Admins can create or delete them.
+
+State-changing requests also require valid CSRF protection.
 
 Backend authorization is authoritative. Frontend visibility is only a convenience layer.
 
@@ -230,6 +236,7 @@ Access:
 
 ```text
 Authenticated user
+Current governance attestation required
 ```
 
 Optional category filter:
@@ -256,6 +263,8 @@ Access:
 
 ```text
 Admin
+Current governance attestation required
+CSRF protection required
 ```
 
 Example:
@@ -283,6 +292,8 @@ Access:
 
 ```text
 Admin
+Current governance attestation required
+CSRF protection required
 ```
 
 Successful response:
@@ -317,6 +328,8 @@ After success:
 - The list updates
 - `registered_option.create` is recorded
 
+The audit event identifies the registered-option resource and safe category metadata without intentionally copying the option name into audit metadata.
+
 ## Remove an Option
 
 As an Admin:
@@ -338,6 +351,8 @@ A successful deletion records:
 ```text
 registered_option.delete
 ```
+
+The delete event follows the same audit-safety rules as creation and does not intentionally duplicate the option name in audit metadata.
 
 ## Existing Records Are Not Rewritten
 
@@ -448,6 +463,22 @@ category
 ```
 
 The option name is not intentionally included in audit metadata.
+
+These events participate in CareQueue's normal application audit pipeline and tamper-evident audit chain.
+
+See [Audit Log](audit-log.md) for audit integrity behavior, review guidance, and limitations.
+
+## Session and Governance Behavior
+
+Registered-option management follows the same session and governance protections as other normal CareQueue workflows.
+
+CareQueue uses a server-enforced inactivity timeout for authenticated sessions. Normal authenticated activity can extend a valid session, but an expired session cannot be revived.
+
+CareQueue also permits one active authenticated session per account. If the same account signs in again elsewhere, the previous active session is revoked.
+
+Remembered-device MFA is separate from the authenticated session. It can affect whether TOTP is required on a later login, but it does not extend the lifetime of a registered-options management session.
+
+If the current governance attestation is incomplete, registered-option list and management operations remain unavailable until an Admin completes the requirement.
 
 ## Security Boundary
 
@@ -562,14 +593,25 @@ Existing authorization records retain the old text.
 Check:
 
 - User is authenticated
+- Session has not expired
+- Required password-change state is complete
+- Current governance attestation is complete
 - API readiness succeeds
 - Correct environment is open
 - Registered-options endpoint succeeds
 - Database is available
 
+A `428 Governance attestation required` response means an Admin must complete the current organization governance requirement before normal protected application functionality becomes available.
+
 ### Add button is disabled
 
-The input may be empty, whitespace-only, or another save or delete operation may still be running.
+Possible causes include:
+
+- The input is empty or whitespace-only.
+- Another save or delete operation is still running.
+- The current user is not an Admin.
+- The authenticated session is no longer valid.
+- Required governance setup is incomplete.
 
 ### Duplicate error
 
@@ -579,9 +621,10 @@ Check for capitalization, spacing, punctuation, abbreviation, or naming variants
 
 Possible reasons:
 
-- Current user is not an Admin
-- Option is protected
-- List is still loading
+- The current user is not an Admin.
+- The option is protected.
+- The list is still loading.
+- Required governance setup is incomplete.
 
 ### Protected `Other` cannot be deleted
 
@@ -594,13 +637,3 @@ Existing authorization records still contain the value.
 ### PDF intake says a value is unregistered
 
 Select an existing option, correct the extracted value, or add the approved option as Admin.
-
-## Related Documentation
-
-```text
-docs/workflows/authorization-workflow.md
-docs/workflows/pdf-intake.md
-docs/administration/audit-log.md
-docs/administration/users-and-security.md
-docs/operations/health-checks.md
-```

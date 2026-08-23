@@ -6,12 +6,13 @@ The application is organized around several separate concerns:
 
 - Authorization records and timeline events
 - Dashboard analytics and due-date workflows
-- Authentication, sessions, roles, and CSRF protection
+- Authentication, MFA, sessions, roles, and CSRF protection
+- Versioned organization governance attestation
 - Registered facilities, insurers, and portal details
 - PDF-assisted intake
 - Encrypted storage, backups, and staged recovery
-- Audit and operational logging
-- Private Windows deployment through a packaged installer, Caddy, and Windows services
+- Tamper-evident audit records and operational logging
+- Packaged private Windows and Linux deployment through Caddy and operating-system services
 
 CareQueue is intended for private or controlled deployment. Its technical controls are only one part of operating a system that may handle sensitive healthcare information.
 
@@ -70,7 +71,7 @@ CareQueue/
 │   └── src/                # React application
 ├── deployment/
 │   ├── windows/            # Installer, services, Caddy, and scheduled backups
-│   └── linux/              # Linux Caddy and systemd files
+│   └── linux/              # Release packaging, installer, Caddy, and systemd services
 ├── docs/                   # Longer workflow and operating documentation
 ├── README.md
 ├── ARCHITECTURE.md
@@ -108,11 +109,13 @@ src/
 
 - Restoring the current authenticated session
 - Tracking the signed-in user and role
+- Loading and resolving governance status
+- Preventing normal protected workflows until required governance setup is complete
 - Clearing protected data after logout or session expiration
-- Loading authorization records
+- Loading authorization records after authentication and governance prerequisites are satisfied
 - Coordinating page navigation
 - Passing user permissions into page and component workflows
-- Managing session expiration behavior
+- Managing session expiration and cross-tab session behavior
 
 The application shell provides primary navigation, user context, theme controls, and logout access.
 
@@ -126,7 +129,8 @@ frontend/src/api/
 
 It contains clients for:
 
-- Authentication and session operations
+- Authentication, MFA, remembered-device, and session operations
+- Governance status, acceptance, and history
 - Authorization records
 - Authorization timeline events
 - Registered options
@@ -165,7 +169,7 @@ Reusable interface and workflow components are under:
 frontend/src/components/
 ```
 
-These include forms, filters, data tables, charts, authorization detail views, timeline controls, PDF intake review, login screens, password-change screens, and session timeout controls.
+These include forms, filters, data tables, charts, authorization detail views, timeline controls, PDF intake review, login and MFA screens, password-change screens, governance setup, and session timeout controls.
 
 ### Hooks and local preferences
 
@@ -185,7 +189,7 @@ Hooks manage areas such as:
 - Registered options
 - PDF intake previews
 - Dashboard presentation
-- Session timer preferences
+- Session activity and timeout behavior
 
 Only non-sensitive interface preferences should be stored in browser persistence.
 
@@ -205,6 +209,7 @@ authstatus_api/
 ├── authorizations/
 ├── backups/
 ├── database_encryption/
+├── governance/
 ├── observability/
 ├── pdf_intake/
 ├── persistence/
@@ -274,7 +279,8 @@ backend/authstatus_api/routers/
 
 The API is divided into the following main areas:
 
-- Security and session management
+- Security, MFA, trusted devices, and session management
+- Governance status, acceptance, and history
 - Authorization records and timeline events
 - Dashboard analytics
 - Registered facilities, insurers, and portal details
@@ -321,7 +327,7 @@ It is responsible for:
 - Initializing tables and indexes
 - Coordinating schema migrations
 
-Domain packages define their own tables where practical. This keeps authorization, security, audit, registered-option, and backup concerns separate while still using the same database connection layer.
+Domain packages define their own tables where practical. This keeps authorization, security, governance, audit, registered-option, and backup concerns separate while still using the same database connection layer.
 
 ## Database and Encryption Boundaries
 
@@ -362,7 +368,7 @@ This separation limits the impact of a single exposed key and keeps sensitive-fi
 
 Backups use a separate backup encryption key. The active database key and the backup key serve different purposes and should be stored and managed separately.
 
-## Authentication and Session Flow
+## Authentication, MFA, Sessions, and Governance
 
 Authentication behavior is under:
 
@@ -370,23 +376,96 @@ Authentication behavior is under:
 backend/authstatus_api/security/
 ```
 
-The normal session flow is:
+Governance behavior is under:
+
+```text
+backend/authstatus_api/governance/
+```
+
+### Password authentication
+
+The initial authentication path is:
 
 ```text
 User submits username and password
   |
   v
-Backend verifies Argon2id password hash
+Backend normalizes the username
   |
   v
-Backend creates a server-side session
+Backend verifies the Argon2id password hash
   |
-  +--> Hashed session token stored in database
+  +--> Invalid credentials update failed-login state
   |
-  +--> Secure session cookie returned to browser
-  |
-  +--> CSRF cookie returned to browser
+  +--> Valid credentials continue to MFA or session creation
 ```
+
+Repeated failed password attempts can temporarily lock the account.
+
+### TOTP MFA
+
+When MFA is enabled and no valid remembered-device token is accepted, password verification does not immediately create an authenticated session.
+
+The flow becomes:
+
+```text
+Username and password accepted
+  |
+  v
+Backend creates a short-lived MFA challenge
+  |
+  v
+User submits current TOTP code
+  |
+  v
+Backend verifies the challenge and code
+  |
+  v
+Authenticated session is created
+```
+
+MFA secrets are encrypted before persistence.
+
+Raw MFA challenge tokens are returned only to the client participating in the login flow. The backend stores a keyed digest rather than the raw challenge token.
+
+### Remembered devices
+
+After successful MFA verification, the user can optionally remember the device.
+
+The trusted-device model is separate from the authenticated session:
+
+```text
+Password verification
+  |
+  v
+Valid remembered-device token?
+  |                    |
+ yes                   no
+  |                    |
+  v                    v
+Skip TOTP         Require MFA challenge
+  |                    |
+  +----------+---------+
+             |
+             v
+      Create session
+```
+
+Remembered-device records have their own expiration and revocation state. The raw trusted-device token is kept in a protected browser cookie while the backend stores a keyed digest.
+
+A remembered device does not bypass password verification and does not create a persistent authenticated session.
+
+### Single active session
+
+CareQueue allows one active authenticated session per account.
+
+When a new authenticated session is created, previous active sessions for that user are revoked.
+
+This rule applies whether the login completed through password-only authentication, MFA verification, or a valid remembered-device path.
+
+### Server-side session validation
+
+The browser receives the raw session token through an HttpOnly cookie. The backend stores only a hash of that token.
 
 For authenticated requests:
 
@@ -397,20 +476,94 @@ Browser sends session cookie
 Backend hashes and verifies the session token
   |
   v
-Session, user, role, expiration, and revocation are checked
+Session, user, expiration, revocation, and account state are checked
+  |
+  v
+Required password-change state is checked
+  |
+  v
+Governance state is checked for protected application routes
+  |
+  v
+Role requirements are enforced
 ```
 
 For state-changing requests, the frontend reads the CSRF cookie and sends its value in the configured CSRF header. The backend verifies that the cookie and header values match.
 
-Session tokens and CSRF tokens are rotated during renewal. Expired, revoked, or otherwise invalid sessions are rejected.
+### Inactivity timeout
+
+Authenticated sessions use a configurable server-side inactivity timeout. The default is 20 minutes.
+
+Authenticated application activity can extend the expiration of a session that is still valid. The update is designed not to revive an already expired session.
+
+The backend communicates the current expiration time to the frontend. The frontend uses that value to:
+
+- Display the required expiration warning
+- Offer explicit session renewal
+- Keep expiration state aligned across open CareQueue tabs
+- Clear protected state after logout or expiration
+
+Session and CSRF tokens are rotated during explicit renewal.
+
+Browser activity updates are throttled so ordinary interaction can extend the inactivity window without generating a request for every individual browser event.
+
+The backend remains authoritative for session validity.
 
 ### Initial Admin setup
 
-The packaged Windows installation can launch a local first-time Admin setup GUI after installation. The GUI submits the initial Admin username and password to the local API over loopback.
+CareQueue does not provide public registration.
 
-The initial setup endpoint is available only while no users exist. Once any user exists, initial setup is disabled and further user administration must happen through the authenticated Admin workflow or the maintenance script.
+Packaged Windows and Linux installations include local first-time Admin setup workflows. These workflows submit the initial Admin credentials only to the loopback CareQueue API.
 
-This keeps first-user creation out of command-line arguments while preserving a separate script-based path for development and maintenance.
+The bootstrap endpoint is available only while no users exist. After the first account is created, user management proceeds through authenticated Admin workflows or approved maintenance tooling.
+
+### Governance prerequisite
+
+After authentication and any required password change, CareQueue evaluates the current organization governance attestation.
+
+The application flow is:
+
+```text
+Authenticated user
+  |
+  v
+Required password change?
+  | yes
+  v
+Password-change workflow
+  |
+  no
+  v
+Current governance attestation accepted?
+  |                         |
+ yes                        no
+  |                         |
+  v                         v
+Normal application    Governance setup state
+                            |
+                            +--> Admin may accept
+                            |
+                            +--> Non-Admin waits for Admin completion
+```
+
+Normal protected application routes are rejected until the current governance attestation has been accepted.
+
+The governance status endpoint remains available during setup so the frontend can determine which state to display. The Admin acceptance route also remains available before governance is current.
+
+Each accepted attestation records:
+
+```text
+Attestation version
+Organization name
+Deployment mode
+Accepting user
+Acceptance time
+CareQueue application version
+```
+
+Attestation history is append-only through the application. A future governance version can require re-attestation without deleting prior records.
+
+The governance attestation version is independent of the CareQueue application version.
 
 ### Roles
 
@@ -422,17 +575,6 @@ CareQueue currently uses three roles:
 
 Backend dependencies enforce role requirements. Frontend role checks improve the interface but are not treated as the security boundary.
 
-### Session expiration
-
-The backend returns the current session expiration time to the frontend. The frontend uses that value to:
-
-- Display the mandatory expiration warning
-- Offer session renewal
-- Optionally show a countdown
-- Clear protected state after expiration
-
-The backend remains authoritative for whether a session is valid.
-
 ## Audit and Logging
 
 Audit behavior is under:
@@ -441,7 +583,9 @@ Audit behavior is under:
 backend/authstatus_api/audit/
 ```
 
-Audit records capture security and authorization activity where supported by the workflow.
+Audit records capture security, governance, authorization, document, backup, recovery, and administrative activity where supported by the workflow.
+
+Current audit events are linked through a cryptographic hash chain. CareQueue stores the current chain head separately and provides an Admin integrity-verification workflow. Older pre-chain events may remain as legacy records and are reported separately during verification.
 
 Operational logging is under:
 
@@ -702,13 +846,55 @@ Linux deployment files are under:
 deployment/linux/
 ```
 
-The repository currently includes:
+The packaged Linux deployment includes:
 
-- A Caddy configuration
-- A systemd service for backups
-- A systemd timer for scheduled backups
+```text
+Caddyfile
+CareQueue-AdminSetup.sh
+install-production.sh
+uninstall-production.sh
+installer/build-payload.ps1
+installer/invoke-install.sh
+systemd/carequeue-api.service
+systemd/carequeue-backup.service
+systemd/carequeue-backup.timer
+systemd/carequeue-caddy.service
+```
 
-The Linux deployment path is less complete than the Windows path and still requires operating-system-specific setup and validation.
+The Linux release is distributed as a versioned tar archive:
+
+```text
+CareQueue-Linux-Setup-<version>.tar.gz
+```
+
+The installer supports:
+
+- Install
+- Upgrade
+- Repair
+- Uninstall
+
+The production layout separates application files from configuration, data, and logs.
+
+The installer creates a dedicated `carequeue` service identity, installs the backend runtime and prebuilt frontend, preserves existing production configuration during upgrade or repair, installs systemd units, configures Caddy, enables encrypted backup scheduling, establishes private HTTPS trust, starts the services, and performs post-install health checks.
+
+The packaged services keep FastAPI bound to:
+
+```text
+127.0.0.1:8000
+```
+
+and place Caddy in front of the application.
+
+The default packaged private origin is:
+
+```text
+https://carequeue.local
+```
+
+The Linux deployment is intended for administrators comfortable with Linux, systemd, package installation, certificate trust, and operating-system permissions.
+
+Automated rollback to a previous application release is not currently implemented.
 
 ## Testing Structure
 
@@ -718,7 +904,7 @@ Backend tests are under:
 backend/tests/
 ```
 
-They are organized by domain, including authorization, security, audit, backup, PDF intake, configuration, database encryption, observability, and system behavior.
+They are organized by domain, including authorization, security, governance, audit, backup, PDF intake, configuration, database encryption, observability, deployment, and system behavior.
 
 Frontend tests are colocated under `__tests__` directories and use Vitest and Testing Library.
 
@@ -748,11 +934,11 @@ The application is designed to operate without sending authorization data to a h
 
 ### Explicit security boundaries
 
-Authentication, authorization, CSRF handling, encryption, backup encryption, and audit behavior are separate concerns rather than one shared mechanism.
+Password authentication, MFA, remembered-device handling, sessions, authorization, governance enforcement, CSRF handling, encryption, backup encryption, and audit behavior are separate concerns rather than one shared mechanism.
 
 ### Domain ownership
 
-Authorization, security, backup, audit, registered-option, PDF intake, and system behavior are grouped into their own backend packages.
+Authorization, security, governance, backup, audit, registered-option, PDF intake, and system behavior are grouped into their own backend packages.
 
 ### Backend-enforced access
 
@@ -768,21 +954,19 @@ Development may use separate frontend and backend origins. Production uses same-
 
 ### Controlled installation lifecycle
 
-Production install, upgrade, repair, and uninstall flows preserve runtime data and keys where appropriate, validate service health after installation work, and keep service orchestration inside the deployment layer.
+Packaged Windows and Linux install, upgrade, repair, and uninstall flows preserve runtime data and keys where appropriate, validate service health after installation work, and keep service orchestration inside the deployment layer.
 
 ## Current Limitations
 
 The current architecture has several known boundaries:
 
-- It is primarily developed and validated on Windows.
-- Clean-machine VM validation is still required before treating the Windows installer as stable.
-- Linux deployment support is not yet equivalent to Windows deployment.
-- The built-in private HTTPS configuration is not a public internet deployment template.
+- The built-in private HTTPS configurations are not public internet deployment templates.
 - PDF intake depends on embedded PDF text and does not provide a general OCR pipeline.
-- Technical controls do not establish HIPAA compliance by themselves.
-- Operational monitoring, endpoint protection, access reviews, incident response, and secure key custody remain deployment responsibilities.
-- Migration and rollback workflows still need additional formalization.
-- Code signing and release packaging are still pending.
-- A public demo must use a separate instance with synthetic data and independent keys, storage, and backups.
+- Technical controls and governance attestation do not establish HIPAA compliance by themselves.
+- Operational monitoring, endpoint protection, periodic access review, incident response, secure key custody, and organizational policy remain deployment responsibilities.
+- Automated rollback to a previous application release is not implemented across all packaged deployment paths.
+- Linux deployment currently targets supported Debian-based systems and should be validated on the exact target operating-system version.
+- Public DNS and publicly trusted certificate deployment require separate design and security review.
+- A public demonstration environment must use synthetic data and independent credentials, keys, storage, and backups.
 
 See [SECURITY.md](SECURITY.md) for security assumptions and reporting, and [ROADMAP.md](ROADMAP.md) for planned work.

@@ -44,11 +44,11 @@ See:
 Use it for:
 
 - Frontend and backend structure
-- Authentication and session flow
+- Authentication, MFA, session, and governance flow
 - Database and encryption boundaries
 - Backup and recovery architecture
 - PDF intake architecture
-- Windows production services
+- Windows and Linux production services
 - Current architectural limitations
 
 ### Security
@@ -63,8 +63,10 @@ Use it for:
 
 - Security reporting
 - Sensitive-data rules
-- Authentication and roles
-- Session and CSRF controls
+- Authentication, MFA, and roles
+- Single-session, inactivity-timeout, and CSRF controls
+- Remembered-device MFA behavior
+- Governance attestation boundaries
 - Encryption and key handling
 - Backup security
 - PDF security
@@ -125,16 +127,19 @@ deployment/linux.md
 
 Use it for:
 
-- Intended filesystem layout
+- Versioned Linux release packages
+- Install, Upgrade, Repair, and Uninstall modes
 - Dedicated service account
-- Environment configuration
-- Frontend build
-- Caddy configuration
-- Backup systemd service and timer
-- Firewall and permission review
+- Application, configuration, data, and log paths
+- Production environment and encryption-key setup
+- CareQueue API and Caddy systemd services
+- Private HTTPS and certificate trust
+- Encrypted backup service and timer
+- First-time Admin setup
+- Governance setup after first login
 - Current Linux limitations
 
-Linux support remains partial. The repository does not yet include a complete Linux installer or a CareQueue API systemd service.
+CareQueue includes a packaged Linux installation workflow for supported Debian-based systems. Linux deployment remains more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
 
 ## Operations
 
@@ -195,12 +200,17 @@ administration/users-and-security.md
 Use it for:
 
 - First-time Admin setup
+- Governance attestation after first Admin login
 - User creation
 - Roles
 - Temporary passwords
 - Password resets
 - Required password changes
-- Session expiration and renewal
+- TOTP MFA enrollment and reset
+- Remembered-device MFA behavior
+- Single active sessions
+- Inactivity timeout and session renewal
+- Cross-tab logout and expiration behavior
 - CSRF behavior
 - Deactivation
 - Offboarding
@@ -350,7 +360,9 @@ Use it for:
 - Concurrent backend and frontend runs
 - Installed Windows app start and stop commands
 - Health checks
-- Installer build and repair commands
+- Windows installer build and repair commands
+- Linux release-package build commands
+- Release-version bump commands
 - Checksum commands
 - Security and test commands
 - Common URLs and runtime paths
@@ -407,10 +419,6 @@ docs/
     └── pdf-intake.md
 ```
 
-New documents should be placed in the most relevant existing area.
-
-Create a new folder only when the subject does not fit cleanly into the current structure.
-
 ## Documentation Conventions
 
 ### Commands
@@ -429,6 +437,7 @@ Repository-relative paths:
 backend/authstatus_api/
 frontend/src/
 deployment/windows/
+deployment/linux/
 ```
 
 Installed Windows paths:
@@ -471,52 +480,11 @@ Use clearly synthetic examples.
 
 Screenshots must use synthetic data only.
 
-Store images under:
+Screenshots are stored under:
 
 ```text
 docs/images/
 ```
-
-Organize them by relevant documentation area.
-
-Example:
-
-```text
-docs/images/
-├── administration/
-├── deployment/
-├── development/
-├── operations/
-└── workflows/
-```
-
-Use descriptive lowercase filenames.
-
-Before committing a screenshot:
-
-- Review it at full resolution
-- Remove personal usernames and machine names where practical
-- Remove browser profile details
-- Remove unrelated bookmarks
-- Confirm no real data is visible
-- Confirm no environment values are visible
-- Confirm no tokens, cookies, or request bodies are visible
-- Confirm no terminal history reveals sensitive values
-- Confirm filenames contain no sensitive information
-
-### Links
-
-Use relative repository links.
-
-Examples:
-
-```markdown
-[Security](../SECURITY.md)
-[Windows Deployment](deployment/windows.md)
-[Backup and Recovery](workflows/backup-and-recovery.md)
-```
-
-Do not use links that depend on a local filesystem path.
 
 ## Updating Documentation
 

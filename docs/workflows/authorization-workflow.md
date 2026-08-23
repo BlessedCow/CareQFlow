@@ -22,7 +22,22 @@ Admin and UR users can create and manage authorization records.
 
 Read Only users can view records but cannot create, edit, or delete them.
 
+Authorization workflows are protected application functionality. Users must have an active authenticated session, satisfy the current governance requirement, and hold a role permitted for the requested operation.
+
 Backend permission checks are authoritative. Frontend controls should make the workflow clear, but the API remains the enforcement point.
+
+## Governance Requirement
+
+The authorization queue, record detail views, timeline workflows, PDF intake, and other normal application functions require the current organization governance attestation.
+
+If the attestation is incomplete:
+
+- An Admin is directed to the governance setup workflow.
+- A non-Admin user cannot accept the organization-level attestation.
+- Protected authorization endpoints return HTTP `428` until the requirement is completed.
+- Login, logout, required password change, session management, and governance setup remain available as needed to complete setup safely.
+
+The governance requirement is versioned independently from the CareQueue application release version.
 
 ## Authorization Record
 
@@ -199,11 +214,14 @@ Do not place passwords, portal credentials, session tokens, encryption keys, cop
 
 A successful create operation:
 
-1. Validates the request.
-2. Encrypts selected sensitive fields.
-3. Writes the authorization.
-4. Updates frontend state.
-5. Records `auth.create`.
+1. Validates the authenticated session and role.
+2. Verifies required governance setup is current.
+3. Validates CSRF protection for the state-changing request.
+4. Validates the authorization data.
+5. Encrypts selected sensitive fields.
+6. Writes the authorization.
+7. Updates frontend state.
+8. Records `auth.create`.
 
 Audit metadata identifies submitted field names rather than copying sensitive values.
 
@@ -215,11 +233,14 @@ Admin and UR users may edit the record.
 
 A successful update:
 
-1. Validates the changes.
-2. Encrypts selected sensitive fields.
-3. Writes the update.
-4. Refreshes frontend state.
-5. Records `auth.update`.
+1. Validates the authenticated session and role.
+2. Verifies required governance setup is current.
+3. Validates CSRF protection for the state-changing request.
+4. Validates the submitted changes.
+5. Encrypts selected sensitive fields.
+6. Writes the update.
+7. Refreshes frontend state.
+8. Records `auth.update`.
 
 Audit metadata identifies changed field names.
 
@@ -256,6 +277,8 @@ Deletion records:
 ```text
 auth.delete
 ```
+
+Authorization deletion is a protected, role-restricted, CSRF-protected operation.
 
 Do not delete a valid completed authorization merely because the workflow is finished.
 
@@ -388,9 +411,23 @@ After applying PDF values:
 
 See [PDF Intake](pdf-intake.md) for supported templates, confidence, review requirements, and file limits.
 
+## Session Behavior During Authorization Work
+
+CareQueue uses a server-enforced inactivity timeout for authenticated sessions.
+
+Normal authenticated use can extend a valid session, while an already expired session cannot be revived.
+
+The frontend may display a warning before expiration and can offer explicit session renewal. Logout and expiration state are synchronized across open CareQueue tabs when supported by the browser.
+
+If the same account signs in again from another browser or device, the previous active session is revoked because CareQueue allows one active authenticated session per account.
+
+A remembered device affects only whether the TOTP MFA step can be skipped on a later login. It does not extend an active authorization-workflow session.
+
 ## Sensitive Fields
 
 Selected authorization fields are encrypted before database storage.
+
+CareQueue's storage protections do not change the need to limit collected information to what is operationally necessary.
 
 Adding a new sensitive field requires review of:
 
@@ -400,6 +437,9 @@ Adding a new sensitive field requires review of:
 - Audit exclusion
 - Log exclusion
 - Backup and restore behavior
+- PDF intake behavior
+- Export or reporting behavior
+- Whether the field is necessary for the workflow
 
 ## Audit Events
 
@@ -421,13 +461,22 @@ auth_event.delete
 
 Audit metadata should contain field names and resource identifiers, not sensitive values.
 
+These events participate in CareQueue's application audit pipeline and tamper-evident audit chain. See [Audit Log](../administration/audit-log.md) for integrity-verification behavior and audit limitations.
+
 ## Common Problems
 
 ### Add Authorization is missing
 
-Check the user role and session.
+Check:
+
+- The user role.
+- Session status.
+- Required password-change state.
+- Current governance status.
 
 Read Only users cannot create records.
+
+If governance has not been completed, normal protected authorization workflows remain unavailable until an Admin accepts the current organization attestation.
 
 ### Form will not submit
 
@@ -440,6 +489,10 @@ Review:
 - Registered insurance
 - Submission details
 - Validation messages
+- Session status
+- CSRF state
+- Current governance status
+- API response
 
 ### Record does not appear
 
@@ -457,10 +510,16 @@ Check:
 
 - Current role
 - Session status
+- Required password-change state
+- Current governance status
 - CSRF handling
 - Record still exists
 - Submitted values are valid
 - API response
+
+A `403` can indicate a role, password-change, or CSRF restriction.
+
+A `428` indicates that the current governance attestation is required before protected application access can continue.
 
 ### Queue appears empty
 
@@ -473,13 +532,3 @@ Check active filters, selected dashboard items, legacy values, and whether both 
 ### Calendar date appears wrong
 
 Review the requested review date, time zone, edit history, and timeline events before changing the record.
-
-## Related Documentation
-
-```text
-docs/workflows/pdf-intake.md
-docs/administration/registered-options.md
-docs/administration/audit-log.md
-docs/administration/users-and-security.md
-docs/troubleshooting/index.md
-```

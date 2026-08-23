@@ -61,6 +61,10 @@ UR
 
 Read Only users cannot preview PDFs.
 
+PDF intake is a protected application workflow. The user must have an active authenticated session, satisfy the current governance requirement, and have a role permitted to use the preview endpoint.
+
+Because preview is a state-changing authenticated request, the browser client also supplies the required CSRF protection.
+
 ## Request Format
 
 The frontend sends the PDF as the raw request body.
@@ -99,9 +103,9 @@ The worker has timeout handling so a stalled parser can be terminated without bl
 
 It does not write the uploaded document to the CareQueue database or a permanent upload directory.
 
-Operators must still account for browser behavior, proxy limits, crash dumps, endpoint security, and infrastructure logging.
+Operators must still account for browser behavior, proxy limits, crash dumps, endpoint security, operating-system protections, and infrastructure logging.
 
-Do not add request-body logging around the PDF endpoint.
+Do not add request-body logging around the PDF endpoint, and do not log extracted page text or candidate values.
 
 ## Validation
 
@@ -423,7 +427,9 @@ candidate_count
 has_usable_text
 ```
 
-It does not include PDF bytes, extracted text, or candidate values.
+It does not include PDF bytes, extracted text, candidate values, patient identifiers, or authorization data.
+
+The audit event participates in CareQueue's normal application audit pipeline. See [Audit Log](../administration/audit-log.md) for audit-chain and integrity-verification behavior.
 
 ## Local Inspection Tool
 
@@ -535,6 +541,8 @@ PDF intake tests should cover:
 - Identifier fallback
 - False-positive prevention
 - Role access
+- Governance enforcement
+- CSRF protection
 - No-store headers
 - Safe error messages
 - Safe audit metadata
@@ -558,6 +566,8 @@ Possible causes:
 - Labels changed
 - Document is a different layout
 
+An empty preview should be treated as a request for manual review, not as evidence that the source document contains no relevant information.
+
 ### Dates do not appear
 
 The current review panel recognizes:
@@ -579,6 +589,22 @@ Correct it, select an existing option, or add the approved value in Settings.
 ### Wrong identifier pair is selected
 
 Choose the medical pair, behavioral-health pair, or no pair after comparing both with the source document.
+
+### 403 response
+
+A `403` can indicate that:
+
+- The current role is not allowed to use PDF intake.
+- CSRF validation failed for the authenticated request.
+- A required password-change state is still active.
+
+Confirm the signed-in role, session state, and browser request path before retrying.
+
+### 428 Governance attestation required
+
+The user is authenticated, but the current organization governance attestation has not been completed.
+
+An Admin must complete the current governance requirement before PDF intake and other normal protected workflows become available.
 
 ### 413 response
 
@@ -611,12 +637,3 @@ Before adding OCR, evaluate:
 - Review behavior
 
 OCR output must remain review-first and must not be treated as automatically correct.
-
-## Related Documentation
-
-```text
-docs/workflows/authorization-workflow.md
-docs/administration/registered-options.md
-docs/administration/audit-log.md
-docs/troubleshooting/index.md
-```

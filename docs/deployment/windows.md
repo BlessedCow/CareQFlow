@@ -20,10 +20,12 @@ A completed installation uses:
 - Bundled Caddy and WinSW service binaries
 - The CareQueue API Windows service
 - The CareQueue Caddy Windows service
-- A local HTTPS hostname such as `carequeue.local`
+- The private HTTPS hostname `carequeue.local`
 - SQLCipher-backed production storage
 - Runtime data under `C:\ProgramData\CareQueue`
 - Application files under `C:\Program Files\CareQueue`
+- A packaged first-time Admin setup workflow
+- A required organization governance attestation before normal protected application access
 
 The built-in Windows deployment is intended for a private workstation or restricted private network. It is not a public internet deployment template.
 
@@ -303,6 +305,31 @@ The downloaded assets are validated by SHA256 before use.
 
 If the assets are already cached and valid, the builder can reuse the cached files.
 
+## Set the Release Version
+
+CareQueue keeps the application release version in several backend and deployment files.
+
+Use the repository helper before building a new release:
+
+```powershell
+.\deployment\bump-version.ps1 -Version 0.3.0
+```
+
+Replace `0.3.0` with the intended release version.
+
+The helper updates the controlled version declarations used by the backend, Windows installer, Windows package validation, Windows payload metadata, and Linux release-package defaults.
+
+It intentionally does not replace arbitrary version strings in tests, dependency versions, documentation examples, or historical governance records.
+
+The governance attestation version is independent of the CareQueue application release version and should not be changed merely because the application version changes.
+
+Review the working tree after changing the release version:
+
+```powershell
+git status --short
+git diff
+```
+
 ## Build the Installer Payload
 
 From the repository root:
@@ -341,7 +368,7 @@ After building the payload, compile the Inno Setup script:
 The default output is:
 
 ```text
-build\windows\installer\CareQueue-Setup-0.1.0.exe
+build\windows\installer\CareQueue-Setup-0.3.0.exe
 ```
 
 The exact filename follows the version configured in `CareQueue.iss`.
@@ -351,18 +378,18 @@ The exact filename follows the version configured in `CareQueue.iss`.
 Run the compiled installer:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.1.0.exe
+.\build\windows\installer\CareQueue-Setup-0.3.0.exe
 ```
 
 If PowerShell requires an explicit invocation path:
 
 ```powershell
-& "G:\CareQueue\build\windows\installer\CareQueue-Setup-0.1.0.exe"
+& "G:\CareQueue\build\windows\installer\CareQueue-Setup-0.3.0.exe"
 ```
 
 The installer requires administrator elevation because it installs services and writes to protected directories.
 
-## First-Time Admin Setup
+## First-Time Admin and Governance Setup
 
 CareQueue does not provide public account registration.
 
@@ -384,6 +411,12 @@ The setup window creates the first Admin without passing the password through co
 The first-time setup endpoint is available only while no users exist. After any user exists, the backend disables the initial Admin setup endpoint and the setup window reports that setup is already complete.
 
 The first Admin password must be at least 12 characters.
+
+After the first Admin signs in through the browser, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
+
+The governance workflow records the organization, deployment mode, accepting Admin, acceptance timestamp, CareQueue application version, and governance attestation version.
+
+The governance workflow supports organizational accountability. It does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
 ## Choose a Private Application Origin
 
@@ -429,30 +462,21 @@ https://carequeue.local?mode=prod
 
 Do not use `https://localhost` for the current production configuration. Production CORS validation rejects local development hosts.
 
-## Add the Private Hostname
+## Private Hostname Configuration
 
-For a private single-machine installation, map the chosen hostname to the loopback address.
+The packaged Windows installer configures the local CareQueue hostname for the default private installation:
 
-Open PowerShell as Administrator:
-
-```powershell
-$hostsFile = "$env:SystemRoot\System32\drivers\etc\hosts"
-
-if (
-    -not (
-        Select-String `
-            -Path $hostsFile `
-            -SimpleMatch "carequeue.local" `
-            -Quiet
-    )
-) {
-    Add-Content `
-        -Path $hostsFile `
-        -Value "`r`n127.0.0.1 carequeue.local"
-}
+```text
+carequeue.local
 ```
 
-Confirm name resolution:
+The expected local mapping is:
+
+```text
+127.0.0.1 carequeue.local
+```
+
+Confirm name resolution after installation:
 
 ```powershell
 ping carequeue.local
@@ -464,9 +488,17 @@ The hostname should resolve to:
 127.0.0.1
 ```
 
-This hosts-file entry does not publish CareQueue to the internet. It only maps the hostname on the configured machine.
+This local mapping does not publish CareQueue to the internet. It provides a stable private hostname for the local HTTPS deployment.
 
-For a restricted-network deployment, use an approved internal DNS record instead of manually editing every hosts file.
+If the hostname does not resolve after installation, review the installer log and the Windows hosts file:
+
+```text
+C:\Windows\System32\drivers\etc\hosts
+```
+
+Do not add duplicate or conflicting `carequeue.local` entries.
+
+A broader restricted-network deployment using internal DNS requires separate deployment planning. The packaged Windows Caddy configuration is designed around the private `carequeue.local` deployment and should not be treated as a general-purpose network or public-internet configuration.
 
 ## Development Environment Files
 
@@ -545,6 +577,9 @@ Confirm:
 - First-time Admin setup works when no users exist.
 - Existing Admin setup is blocked after a user exists.
 - Login succeeds.
+- The governance attestation appears when the current organization attestation has not yet been completed.
+- Only an Admin can accept the organization governance attestation.
+- Normal protected application access unlocks after governance acceptance.
 - Dashboard loads.
 - Authorization queue loads.
 - Logout succeeds.
@@ -707,6 +742,7 @@ After reinstalling, verify:
 - The health endpoint responds.
 - Existing Admin setup is not offered if users already exist.
 - Existing login credentials still work.
+- Existing governance attestation history is still present.
 - Existing authorization data is still present.
 
 ## Lower-Level PowerShell Scripts
@@ -769,14 +805,21 @@ At minimum, test:
 - Fresh install on a clean Windows 11 VM
 - First-time Admin setup with no existing users
 - Browser access to `https://carequeue.local`
-- Login
+- Governance attestation after first Admin login
+- Login and logout
+- TOTP MFA enrollment and login
+- Remembered-device MFA behavior
+- Single-session invalidation
+- Inactivity timeout behavior
+- Basic authorization workflow
 - Reboot and service auto-start
+- Scheduled backup behavior
 - Repair
 - Upgrade over an existing install
 - Uninstall with ProgramData preserved
 - Fresh install after uninstall using preserved data
 
-Ideally, repeat the same matrix on a clean supported Windows 10 VM.
+When Windows 10 remains an intended target, repeat the applicable validation matrix on a clean supported Windows 10 VM.
 
 Local developer-machine success is useful, but it does not replace clean-machine testing.
 
@@ -1008,14 +1051,27 @@ Check:
 - The browser is using `https://carequeue.local`.
 - The production frontend uses same-origin `/api` requests.
 - The user was created against the production database.
+- The account is active.
 - The password is correct.
+- The account is not temporarily locked.
 - The account role is valid.
+- Required MFA can be completed.
 - Cookies are enabled.
 - The system clock is correct.
 - The browser is not blocking the private certificate.
 - API and Caddy logs do not show a startup or session error.
 
 A user created against the development `.env` and development database will not automatically exist in the production database.
+
+### Login succeeds but CareQueue shows governance setup
+
+This is expected when the current organization governance attestation has not yet been completed.
+
+An Admin must complete the current governance attestation before normal protected application functionality becomes available.
+
+Non-Admin users cannot accept the organization-level attestation.
+
+A new CareQueue application release does not automatically require re-attestation unless the required governance attestation version also changes or no current attestation exists.
 
 ## Production Database Is a Separate Instance
 
@@ -1056,9 +1112,13 @@ Before using CareQueue with sensitive information, confirm:
 - Restoration has been tested.
 - Service logs are protected and reviewed.
 - Windows and dependencies are patched.
-- Access is limited to approved users.
+- Access is limited to approved individual users.
+- Admin access is limited to users who require it.
+- MFA policy and account-recovery procedures are defined.
 - User removal and password-reset procedures exist.
-- Real data is not used in public screenshots, issues, or tests.
+- The current governance attestation has been completed by an authorized Admin.
+- Required BAAs and other agreements have been executed separately where applicable.
+- Real data is not used in public screenshots, issues, tests, or demonstrations.
 - Incident response and recovery responsibilities are documented.
 - Legal and compliance review is complete.
 

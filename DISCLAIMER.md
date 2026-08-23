@@ -1,20 +1,67 @@
 # Disclaimer
 
-CareQueue is an early-stage, local-first workflow prototype for tracking utilization review authorization activity, authorization status, review dates, payer communication details, PDF intake review data, and related dashboard metrics.
+CareQueue is a local-first workflow application for utilization review and authorization management. It supports authorization tracking, review dates, payer and facility workflows, timeline events, PDF-assisted intake, dashboards, user access controls, audit records, encrypted storage options, backups, and private packaged deployment.
 
-This project is not medical advice, legal advice, billing advice, clinical guidance, compliance guidance, or a substitute for payer verification.
+This project is provided as software for administrative workflow support. It is not medical advice, legal advice, billing advice, clinical guidance, compliance guidance, or a substitute for verification with an authorized payer, provider, legal professional, compliance professional, or other responsible organization.
 
-## Not a Production Healthcare System
+## Healthcare and Compliance Status
 
-CareQueue is not currently designed, certified, audited, or represented as a production-ready healthcare system.
+CareQueue includes technical and administrative-support features that may help an organization implement parts of its security and compliance program.
 
-CareQueue should not be treated as a HIPAA-compliant platform without additional review, safeguards, policies, access controls, encryption review, backup controls, organizational approval, legal review, and compliance evaluation.
+These include controls such as:
 
-Security features in this repository may reduce certain risks, but they do not create HIPAA compliance on their own.
+- Local user authentication
+- Role-based access control
+- TOTP multi-factor authentication
+- Optional remembered-device MFA
+- Single active authenticated sessions
+- Server-enforced inactivity timeouts
+- CSRF protection
+- Versioned organization governance attestation
+- Field-level encryption for selected sensitive values
+- SQLCipher database encryption support
+- Separately encrypted backups
+- Audit logging and integrity verification
+- Private HTTPS deployment through Caddy
+- Restricted production runtime paths
+- Backup and recovery workflows
+
+These controls do not, by themselves, make CareQueue or a CareQueue deployment compliant with HIPAA or any other legal, regulatory, contractual, accreditation, security, or privacy framework.
+
+Compliance depends on the complete environment in which the software is deployed and operated, including organizational policies, workforce practices, agreements, physical safeguards, technical safeguards, risk analysis, access management, incident response, backup practices, device security, network architecture, monitoring, and applicable legal requirements.
+
+CareQueue is not represented as independently certified, formally audited, or approved by a government agency, payer, accreditation body, or standards organization unless a specific release or accompanying documentation explicitly states otherwise.
+
+Organizations considering use with regulated or sensitive data should perform their own security, legal, compliance, and operational review before deployment.
+
+## Governance Attestation
+
+CareQueue includes a versioned organization governance attestation that must be completed by an Admin before normal protected application functionality becomes available.
+
+The attestation is intended to:
+
+- Record organizational acknowledgment of security and privacy responsibilities.
+- Record the organization and deployment mode associated with the installation.
+- Record the accepting Admin and acceptance time.
+- Preserve versioned attestation history.
+- Require re-attestation when the application's governance requirements are intentionally revised.
+
+The governance workflow is an application accountability control.
+
+Accepting the governance attestation:
+
+- Does not execute a Business Associate Agreement.
+- Does not replace a Business Associate Agreement where one is required.
+- Does not establish HIPAA compliance.
+- Does not replace legal or compliance review.
+- Does not transfer responsibility for organizational safeguards to the software.
+- Does not certify that a deployment has been configured or operated securely.
+
+Required agreements must be executed separately by the appropriate parties.
 
 ## Administrative Workflow Only
 
-CareQueue is intended to support administrative workflow tracking.
+CareQueue is intended to support administrative utilization review and authorization workflows.
 
 It does not provide:
 
@@ -23,90 +70,294 @@ It does not provide:
 - Treatment recommendations
 - Clinical decision-making
 - Medical necessity determinations
-- Legal or compliance determinations
+- Legal determinations
+- Compliance determinations
 - Billing advice
 - Payer coverage guarantees
+- Eligibility guarantees
+- Authorization guarantees
 
-Authorization statuses, payer decisions, review requirements, and coverage details should be verified directly with the relevant payer or authorized source.
+CareQueue may display or organize information entered by users or extracted from documents, but it does not independently verify that the information is correct, current, complete, or authoritative.
+
+Authorization statuses, payer decisions, review requirements, coverage details, dates, identifiers, and other operational information should be verified with the relevant payer, provider, facility, or other authorized source when accuracy matters.
 
 ## PDF Intake Limitations
 
-CareQueue may help extract information from supported PDF formats, but extracted values are not authoritative.
+CareQueue can assist with extracting information from supported PDF documents.
 
-PDF intake output must be reviewed before use. Fields marked as needing review should be corrected or confirmed by an authorized user before saving or relying on the record.
+PDF-assisted intake is not an authoritative source of record.
 
-CareQueue does not guarantee that a PDF was parsed completely, that a payer form is current, that a template applies to all variations of a document, or that extracted authorization details match the payer's final determination.
+Extracted values must be reviewed before they are applied to an authorization record.
 
-## PHI/PII Warning
+CareQueue does not guarantee that:
 
-CareQueue may be used to enter or process information that resembles protected health information, personally identifiable information, payer information, authorization details, or care coordination notes.
+- A PDF was parsed completely.
+- Embedded text accurately represents the visible document.
+- A payer or facility form is current.
+- A supported template applies to every variation of a document.
+- A field was labeled consistently.
+- Extracted values are correct.
+- Extracted authorization information matches the payer's final determination.
+- Scanned documents can be processed successfully.
 
-Do not commit, publish, upload, or share real PHI/PII, including but not limited to:
+Fields marked as needing review should be confirmed or corrected by an authorized user before use.
 
-- Client or patient names
+CareQueue does not currently provide a general-purpose OCR pipeline for scanned documents.
+
+## PHI and PII Warning
+
+CareQueue can process information that may constitute protected health information, personally identifiable information, payer information, authorization information, or other sensitive operational data.
+
+Do not commit, publish, upload, or otherwise expose real sensitive data through source control, public issue trackers, public demonstrations, screenshots, test fixtures, or documentation.
+
+Sensitive information can include:
+
+- Patient or client names
 - Member IDs
 - Group numbers
 - Dates of birth
 - Phone numbers
 - Fax numbers
+- Addresses
 - Clinical notes
-- Authorization numbers tied to identifiable people
-- Facility-specific private data
-- Payer communication details tied to identifiable people
+- Authorization numbers associated with identifiable individuals
+- Facility-specific private information
+- Payer communications associated with identifiable individuals
+- Uploaded intake PDFs
+- Extracted PDF text
+- Extracted PDF JSON
 - Database files
 - SQLCipher database files
 - Backup files
 - Restored database files
 - Environment files
 - Encryption keys
-- API keys
-- Screenshots containing private information
-- Uploaded intake PDFs
-- Extracted PDF text or JSON containing private information
+- API credentials
+- Passwords
+- Temporary passwords
+- MFA secrets
+- MFA codes
+- MFA challenge tokens
+- Session tokens
+- Remembered-device tokens
+- CSRF tokens
+- Authentication cookies
+- Private certificates or private keys
 
-Use fake or clearly anonymized data for examples, tests, screenshots, issues, and documentation.
+Use synthetic or appropriately de-identified data for examples, automated tests, screenshots, demonstrations, bug reports, and documentation.
 
-## Encryption and Security Limitations
+De-identification requirements depend on the applicable context and should be reviewed by qualified personnel when regulated data is involved.
 
-CareQueue includes security features such as field-level encryption, optional SQLCipher database encryption, encrypted backups, user authentication, role-based access controls, session handling, audit logging, and one-time initial Admin setup controls.
+## Authentication and Access-Control Limitations
 
-These features help reduce certain local deployment and development risks, but they do not guarantee compliance with any legal, regulatory, organizational, contractual, payer-specific, or security framework requirement.
+CareQueue includes authentication, MFA, role-based authorization, session controls, and governance prerequisites.
 
-Security features do not replace:
+These controls depend on correct deployment and operation.
 
-- Formal compliance review
-- Organizational approval
-- Written policies and procedures
-- Workforce training
-- Device security
-- Secure deployment architecture
-- Secure key management
-- Secure backup retention policies
-- Access reviews
-- Incident response planning
-- Business associate agreements, where required
-- Legal or compliance review
+For example:
 
-If an encryption key is lost, encrypted records or backups may become unreadable. If an encryption key is exposed with the related database or backup file, encrypted data may be decryptable.
+- A compromised administrator account can still perform actions permitted to an Admin.
+- A compromised host can undermine application-level controls.
+- A remembered device reduces repeated MFA prompts and therefore must be used only on appropriately protected devices.
+- Single-session enforcement does not prevent compromise of the currently active session.
+- Session timeouts do not replace workstation locking or physical access controls.
+- Role-based access does not replace periodic organizational access review.
+- Account deactivation in CareQueue does not automatically remove operating-system, VPN, network, file-share, or other external access.
 
-## Local Use Only
+Organizations remain responsible for identity verification, account provisioning, role assignment, MFA policy, access review, offboarding, workstation security, and account recovery procedures.
 
-CareQueue is currently intended for private local development, private local testing, and controlled validation of the packaged Windows deployment.
+## Encryption and Key-Management Limitations
 
-Any use with real healthcare, patient, client, payer, facility, employer, or operational data should occur only after appropriate authorization, compliance review, security controls, and organizational approval are in place.
+CareQueue supports multiple encryption layers, including selected field-level encryption, SQLCipher-backed database encryption, and separately encrypted backups.
+
+Encryption reduces certain risks but does not eliminate them.
+
+Encryption protections depend on:
+
+- Secure key generation
+- Correct configuration
+- Restricted access to environment files
+- Secure key backup
+- Appropriate service-account permissions
+- Secure host administration
+- Secure recovery procedures
+
+If an encryption key is lost, related encrypted records or backups may become permanently unreadable.
+
+If an encryption key is exposed together with the corresponding encrypted data, that data may become decryptable.
+
+Do not generate replacement keys for an existing encrypted database merely to resolve a configuration or startup failure.
+
+Encryption at rest also does not protect data after it has been legitimately decrypted for an authorized application process or displayed to an authorized user.
+
+## Backup and Recovery Limitations
+
+CareQueue supports encrypted backup creation, verification, retention controls, staged recovery, and controlled recovery activation.
+
+A successful backup operation does not prove that:
+
+- The backup contains the expected data.
+- The correct key is available.
+- The backup can be restored on the required system.
+- Recovery procedures will succeed during an actual incident.
+- Off-host copies exist.
+- Organizational retention requirements have been satisfied.
+
+Organizations should perform periodic backup verification and recovery exercises.
+
+Backup files, rollback databases, restored databases, and recovery staging data remain sensitive and must be protected accordingly.
+
+## Audit Log Limitations
+
+CareQueue records selected application, security, governance, administrative, backup, recovery, and workflow actions.
+
+Current audit events participate in a tamper-evident cryptographic hash chain and can be checked through the application's integrity-verification workflow.
+
+Tamper-evident does not mean tamper-proof.
+
+A sufficiently privileged attacker who can modify the application, database, keys, backups, and host environment may be able to undermine application-level evidence.
+
+CareQueue's audit log is not currently a substitute for:
+
+- Independent immutable logging
+- Centralized SIEM collection
+- Host audit logging
+- Network monitoring
+- Administrative change records
+- Organizational incident-response evidence
+
+Deployments requiring independent or immutable evidence should use additional external controls.
+
+## Private Deployment Model
+
+Packaged CareQueue releases are designed primarily for private or controlled deployment.
+
+The packaged Windows and Linux configurations place the CareQueue API on the loopback interface and use Caddy to provide HTTPS access.
+
+The default packaged private origin is:
+
+```text
+https://carequeue.local
+```
+
+The included configuration should not be treated as a general-purpose public internet deployment template.
+
+A public or broadly network-accessible deployment requires separate review of areas such as:
+
+- DNS
+- Public certificate management
+- Reverse-proxy configuration
+- Firewall policy
+- Network segmentation
+- Remote access
+- Service identities
+- Host hardening
+- Monitoring
+- Patch management
+- Intrusion detection
+- Incident response
+- Availability requirements
+- Backup location and key custody
+- Denial-of-service exposure
+- Administrative access paths
+
+Do not expose the loopback CareQueue API directly to an untrusted network.
+
+## Platform and Deployment Validation
+
+CareQueue includes packaged deployment workflows for Windows and supported Debian-based Linux systems.
+
+A successful build or installation on one system does not guarantee identical behavior on another system.
+
+Before introducing sensitive production data, validate the exact release artifact on the intended operating-system version and deployment environment.
+
+Validation should include appropriate checks for:
+
+- Installation
+- Service startup
+- HTTPS access
+- Certificate trust
+- First-time Admin setup
+- Governance attestation
+- Login and logout
+- MFA
+- Session behavior
+- Role enforcement
+- Representative authorization workflows
+- Backup creation
+- Backup verification
+- Upgrade
+- Repair
+- Uninstall behavior
+- Reboot persistence
+- Recovery procedures
 
 ## Release Status
 
-Installer builds, release artifacts, and documentation snapshots should be treated according to their GitHub release label.
+Release artifacts and documentation should be interpreted according to their published release status.
 
-Pre-release builds are validation builds. They may have passed local testing, but they should not be treated as stable production releases unless the release notes clearly state that clean-machine testing, release packaging checks, and any required signing or distribution review have been completed.
+A pre-release, beta, release candidate, development build, or locally built artifact may contain incomplete functionality or unresolved defects even when automated tests pass.
+
+A stable release label does not remove the need for deployment-specific validation.
+
+Release notes should be reviewed for:
+
+- Security-sensitive changes
+- Configuration changes
+- Upgrade requirements
+- Known limitations
+- Required manual validation
+- Changes to deployment behavior
+- Changes to governance requirements
+
+The CareQueue application version and governance attestation version are independent. An application release does not automatically require a new governance attestation unless the required governance version changes.
+
+## No Guarantee of Availability
+
+CareQueue does not guarantee continuous availability.
+
+Availability can be affected by:
+
+- Host failure
+- Database corruption
+- Lost encryption keys
+- Certificate problems
+- Dependency failures
+- Operating-system updates
+- Storage exhaustion
+- Backup failures
+- Service failures
+- Misconfiguration
+- Network problems
+- Software defects
+
+Organizations using CareQueue for operational workflows should maintain appropriate downtime, backup, recovery, and business-continuity procedures.
 
 ## No Warranty
 
-This project is provided as-is, without warranty of any kind.
+CareQueue is provided as-is, without warranty of any kind, to the extent permitted by applicable law.
 
-The author makes no guarantees regarding accuracy, security, reliability, availability, compliance, fitness for a particular purpose, suitability for healthcare operations, or correctness of authorization tracking information.
+No guarantee is made regarding:
+
+- Accuracy
+- Completeness
+- Security
+- Reliability
+- Availability
+- Compatibility
+- Regulatory compliance
+- Fitness for a particular purpose
+- Suitability for healthcare operations
+- Correctness of authorization or payer information
+- Successful installation or recovery in every environment
+
+Users and organizations are responsible for evaluating whether the software is appropriate for their intended use.
 
 ## Limitation of Liability
 
-Use of this project is at your own risk. The author is not responsible for claims, damages, losses, privacy incidents, compliance failures, payer disputes, operational errors, or other liabilities arising from use, modification, deployment, or distribution of this software.
+To the extent permitted by applicable law, use, modification, deployment, and distribution of CareQueue are at the user's or organization's own risk.
+
+The project maintainers and contributors are not responsible for claims, damages, losses, privacy incidents, compliance failures, payer disputes, operational errors, data loss, service interruption, or other liabilities arising from use of the software except where liability cannot legally be excluded or limited.
+
+Nothing in this disclaimer overrides rights or obligations that cannot be waived under applicable law.
+

@@ -1,10 +1,10 @@
 # Linux Deployment
 
-CareQueue includes a Linux deployment foundation, but the Linux path is not yet equivalent to the packaged Windows installer flow.
+CareQueue includes a packaged Linux installation workflow for supported Debian-based systems.
 
-Use this guide as an operator reference for the Linux files that currently exist in the repository and the manual work still required to run CareQueue safely on Linux.
+The Linux release is distributed as a versioned tar archive containing the production backend, prebuilt frontend, Linux installer scripts, Caddy configuration, and systemd service definitions.
 
-CareQueue is intended for private or controlled deployment. This guide is not a complete public internet deployment plan, managed hosting plan, or compliance program.
+CareQueue is intended for private or controlled deployment. This guide does not describe a general public internet hosting architecture, managed hosting service, or complete compliance program. Organizations remain responsible for their own security, privacy, legal, operational, and compliance requirements.
 
 ## Current Status
 
@@ -13,49 +13,68 @@ The repository currently includes:
 ```text
 deployment/linux/
 ├── Caddyfile
+├── CareQueue-AdminSetup.sh
+├── install-production.sh
+├── uninstall-production.sh
+├── installer/
+│   ├── build-payload.ps1
+│   └── invoke-install.sh
 └── systemd/
+    ├── carequeue-api.service
     ├── carequeue-backup.service
-    └── carequeue-backup.timer
+    ├── carequeue-backup.timer
+    └── carequeue-caddy.service
 ```
 
-Implemented Linux foundation:
+Implemented Linux deployment capabilities include:
 
-- Caddy configuration for serving the built frontend
-- Same-origin `/api` reverse proxy to FastAPI on loopback
-- Static frontend serving with SPA fallback
-- Basic security response headers
-- Encrypted backup systemd service
-- Daily encrypted backup timer
-- Basic systemd hardening for backup execution
+- Versioned `CareQueue-Linux-Setup-<version>.tar.gz` release packages
+- Install, upgrade, repair, and uninstall modes
+- Ubuntu and Debian distribution validation
+- Dedicated `carequeue` system account and group
+- Production application, configuration, runtime, and log directories
+- Prebuilt frontend installation
+- Isolated production Python virtual environment creation
+- Backend dependency installation and import validation
+- Production environment-file creation
+- Independent field-encryption, SQLCipher, and backup-encryption keys
+- Preservation of existing production configuration during upgrade and repair
+- Trusted production data-root migration for existing configuration
+- SQLCipher production database configuration
+- Hardened CareQueue API systemd service
+- Hardened CareQueue Caddy systemd service
+- Encrypted backup service and daily backup timer
+- Automatic Caddy installation when it is not already available
+- Same-origin HTTPS through Caddy
+- Local `carequeue.local` hostname configuration
+- Caddy internal certificate-authority trust setup on the Linux host
+- Automatic service enablement and startup
+- HTTPS frontend, liveness, and readiness validation after installation
+- Interactive first-Admin setup on new installations
+- Uninstall support while preserving production configuration, runtime data, and logs
 
-Not yet implemented as a complete Linux release workflow:
+The Linux installer is intended for an administrator comfortable with Linux, systemd, package installation, filesystem permissions, and certificate trust.
 
-- Linux production installer
-- CareQueue API systemd service
-- Runtime directory creation script
-- Service-account creation script
-- Environment-file installation script
-- API service hardening policy
-- Automated upgrades
-- Automated rollback
-- Caddy installation automation
-- Private certificate trust workflow
-- Full Linux smoke-test tooling
-- Distribution-specific validation
-- Uninstall procedure
+Current limitations include:
 
-For now, the packaged Windows installer remains the primary validated private deployment path. Linux deployment requires more operator judgment until the missing pieces above are implemented and tested.
+- Automated rollback to a previous application release is not implemented.
+- Linux support is currently limited to Ubuntu and Debian.
+- The packaged Caddy configuration is designed around the private `carequeue.local` deployment model.
+- Trusting the Caddy internal CA on the server does not automatically distribute trust to other client devices.
+- Public DNS and publicly trusted certificate deployment require separate planning and configuration.
+- Production disaster-recovery activation still requires operator review and validation.
+- The exact target distribution and operating-system version should be validated before introducing sensitive production data.
 
-## Intended Architecture
+## Architecture
 
-The intended Linux request flow is:
+The packaged Linux request flow is:
 
 ```text
 Browser
   |
   | HTTPS
   v
-Caddy
+CareQueue Caddy service
   |\
   | \__ Serves /opt/carequeue/frontend/dist
   |
@@ -65,26 +84,20 @@ Caddy
        CareQueue API
            |
            v
-       SQLCipher database
+   SQLCipher database
 ```
 
-The API should bind only to:
+The API binds only to:
 
 ```text
 127.0.0.1:8000
 ```
 
-Caddy should be the only process exposed to users.
+Caddy is the user-facing HTTP service. Do not expose Uvicorn directly to the network unless a separately reviewed deployment architecture explicitly requires it.
 
-## Recommended Filesystem Layout
+## Default Filesystem Layout
 
-Recommended application location:
-
-```text
-/opt/carequeue
-```
-
-Recommended application contents:
+Application files:
 
 ```text
 /opt/carequeue/
@@ -92,261 +105,193 @@ Recommended application contents:
 │   ├── authstatus_api/
 │   ├── scripts/
 │   ├── requirements.txt
+│   ├── pyproject.toml
 │   └── .venv/
 ├── frontend/
 │   └── dist/
-├── deployment/
-│   └── linux/
-└── docs/
+└── deployment/
+    └── linux/
 ```
 
-Recommended runtime location:
+Runtime data:
 
 ```text
 /var/lib/carequeue/
 ├── backups/
+├── caddy/
+│   ├── config/
+│   └── data/
 ├── data/
 ├── recovery/
 └── restores/
 ```
 
-Recommended configuration location:
+Configuration:
 
 ```text
-/etc/carequeue/carequeue.env
+/etc/carequeue/
+├── carequeue.env
+├── Caddyfile
+└── install-state.env
 ```
 
-Recommended log location:
+Logs:
 
 ```text
 /var/log/carequeue/
+└── installer/
 ```
 
-Caddy may use its distribution default storage and logging locations unless the deployment chooses explicit paths.
+The installer supports environment overrides for the application, data, configuration, and log roots, but the packaged systemd units are designed for the default paths above. Treat path changes as an advanced deployment change that requires service-unit review and validation.
 
 ## Service Account
 
-Use a dedicated system account:
+The installer creates or reuses the dedicated system account and group:
 
 ```text
 carequeue
 ```
 
-The account should:
+The service account is created without an interactive login shell and is used by the CareQueue API, Caddy, and backup services.
 
-- Have no interactive login shell
-- Own CareQueue runtime directories
-- Read the production environment file
-- Read and write the active database
-- Write backups
-- Execute the installed Python environment
-- Avoid unnecessary access outside CareQueue paths
+Do not run the long-lived application services under an ordinary administrator account.
 
-Example account creation:
+## Build the Linux Release Archive
 
-```bash
-sudo useradd \
-  --system \
-  --home /var/lib/carequeue \
-  --create-home \
-  --shell /usr/sbin/nologin \
-  carequeue
+From the repository root, build the production frontend first:
+
+```powershell
+npm --prefix frontend run build
 ```
 
-Some distributions use a different path for `nologin`.
+Then build the Linux release archive:
 
-Check before running:
-
-```bash
-command -v nologin
+```powershell
+.\deployment\linux\installer\build-payload.ps1
 ```
 
-Do not reuse an ordinary administrator account as the long-running application identity.
+A specific version may also be supplied:
 
-## Runtime Directories
-
-Create the runtime root:
-
-```bash
-sudo install \
-  -d \
-  -o carequeue \
-  -g carequeue \
-  -m 0750 \
-  /var/lib/carequeue
+```powershell
+.\deployment\linux\installer\build-payload.ps1 -Version 0.3.0
 ```
 
-Create runtime subdirectories:
-
-```bash
-sudo install \
-  -d \
-  -o carequeue \
-  -g carequeue \
-  -m 0750 \
-  /var/lib/carequeue/data \
-  /var/lib/carequeue/backups \
-  /var/lib/carequeue/restores \
-  /var/lib/carequeue/recovery
-```
-
-Create the configuration directory:
-
-```bash
-sudo install \
-  -d \
-  -o root \
-  -g carequeue \
-  -m 0750 \
-  /etc/carequeue
-```
-
-Create the application directory:
-
-```bash
-sudo install \
-  -d \
-  -o root \
-  -g carequeue \
-  -m 0750 \
-  /opt/carequeue
-```
-
-## Application Files
-
-Copy a reviewed CareQueue source tree into:
+The package is written under:
 
 ```text
-/opt/carequeue
+build/linux/installer/
 ```
 
-The exact copy mechanism depends on the release process.
-
-Examples include:
-
-- A versioned release archive
-- A deployment package
-- A reviewed repository checkout
-- A configuration-management system
-
-Do not copy:
-
-- Development databases
-- Local `.env` files
-- Real intake PDFs
-- Local backup directories
-- Test artifacts
-- Development screenshots
-- `node_modules`
-- Development virtual environments
-
-After copying, review the staged file tree:
-
-```bash
-sudo find /opt/carequeue \
-  -maxdepth 2 \
-  -type f \
-  | sort
-```
-
-## Python Environment
-
-Create the production virtual environment:
-
-```bash
-sudo -u carequeue \
-  python3 \
-  -m venv \
-  /opt/carequeue/backend/.venv
-```
-
-Upgrade pip:
-
-```bash
-sudo -u carequeue \
-  /opt/carequeue/backend/.venv/bin/python \
-  -m pip install \
-  --upgrade pip
-```
-
-Install backend requirements:
-
-```bash
-sudo -u carequeue \
-  /opt/carequeue/backend/.venv/bin/python \
-  -m pip install \
-  -r /opt/carequeue/backend/requirements.txt
-```
-
-Confirm the interpreter:
-
-```bash
-sudo -u carequeue \
-  /opt/carequeue/backend/.venv/bin/python \
-  --version
-```
-
-Confirm the application imports:
-
-```bash
-sudo -u carequeue \
-  /opt/carequeue/backend/.venv/bin/python \
-  -c "import authstatus_api.main; import uvicorn; print('CareQueue backend import succeeded.')"
-```
-
-This import check requires valid production environment variables.
-
-## Frontend Build
-
-Build from the frontend source:
-
-```bash
-cd /opt/carequeue/frontend
-sudo -u carequeue npm ci
-sudo -u carequeue npm run build
-```
-
-The built frontend should exist at:
+For CareQueue v0.3.0, the expected release filename is:
 
 ```text
-/opt/carequeue/frontend/dist
+CareQueue-Linux-Setup-0.3.0.tar.gz
 ```
 
-Confirm:
+The build script validates required payload sources, requires an existing production frontend build, stages the production files, normalizes Linux deployment text files to LF line endings, and creates the compressed tar archive.
+
+## Install the Release Package
+
+Transfer the reviewed release archive to the target Linux system and extract it into a temporary installation directory.
+
+For example:
 
 ```bash
-test -f /opt/carequeue/frontend/dist/index.html
+mkdir carequeue-installer
+
+tar -xzf CareQueue-Linux-Setup-0.3.0.tar.gz \
+  -C carequeue-installer
+
+cd carequeue-installer
 ```
 
-The Linux Caddyfile expects that exact path.
+Run the installer as root:
 
-Production builds should use same-origin API requests.
-
-Do not build the production frontend with:
-
-```env
-VITE_AUTHSTATUS_API_BASE_URL=http://localhost:8000
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh install
 ```
 
-A production browser should call:
+The installer rejects `install` mode if an existing CareQueue installation is already detected. Use `upgrade` or `repair` for an existing installation.
+
+Installer logs are written under:
 
 ```text
-https://<carequeue-hostname>/api/...
+/var/log/carequeue/installer/
 ```
 
-not the API port directly.
+Keep the release archive and installer log until installation validation is complete.
+
+## Supported Linux Distributions
+
+The current production installer validates `/etc/os-release` and supports:
+
+```text
+Ubuntu
+Debian
+```
+
+Other distributions are rejected by the installer.
+
+The installer uses `apt` and installs required packages including Python, Python virtual-environment support, build tools, SQLCipher development libraries, certificates, and `curl`.
+
+## What the Installer Does
+
+A new installation performs the following high-level sequence:
+
+1. Requires root privileges.
+2. Validates the requested installer mode.
+3. Creates an installer log.
+4. Validates the application origin.
+5. Validates the Linux distribution.
+6. Installs required operating-system packages.
+7. Creates or reuses the `carequeue` service account and group.
+8. Creates the application, data, configuration, and log directories.
+9. Installs the CareQueue backend, prebuilt frontend, and Linux deployment files.
+10. Recreates the production Python virtual environment.
+11. Installs backend Python requirements.
+12. Validates that the backend imports successfully.
+13. Creates the production environment file on a new installation or preserves and migrates it on upgrade or repair.
+14. Installs CareQueue systemd units.
+15. Installs Caddy if needed.
+16. Disables the distribution's default Caddy service so CareQueue can use its dedicated Caddy unit.
+17. Installs and validates the CareQueue Caddy configuration.
+18. Ensures the local `carequeue.local` hosts entry exists.
+19. Enables and starts the CareQueue API, Caddy, and backup timer.
+20. Trusts the CareQueue Caddy internal root certificate on the Linux host.
+21. Validates the HTTPS frontend, liveness endpoint, and readiness endpoint.
+22. On a new installation, launches the interactive first-Admin setup utility.
+
+If a required step fails, the installer stops with an error rather than continuing as though installation succeeded.
+
+## Application Origin
+
+The installer defaults to:
+
+```text
+https://carequeue.local
+```
+
+The installer validates that `APPLICATION_ORIGIN` is an absolute HTTPS origin containing only a hostname and optional port.
+
+The packaged `deployment/linux/Caddyfile` is currently configured specifically for:
+
+```text
+carequeue.local
+```
+
+and uses Caddy's internal certificate authority.
+
+Because the packaged Caddyfile and local hosts-entry management are currently centered on `carequeue.local`, use of a different application origin requires a reviewed Caddy and hostname configuration change. Do not assume that setting `APPLICATION_ORIGIN` alone completely reconfigures the packaged HTTPS deployment.
 
 ## Production Environment File
 
-Create:
+The installer creates the production environment file at:
 
 ```text
 /etc/carequeue/carequeue.env
 ```
 
-Use the root `.env.example` only as a starting reference.
-
-The production environment should include independent keys for:
+On a new installation, it generates independent secrets for:
 
 ```text
 AUTHSTATUS_ENCRYPTION_KEY
@@ -354,7 +299,7 @@ AUTHSTATUS_SQLCIPHER_KEY
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY
 ```
 
-Recommended production behavior includes:
+The generated configuration includes production settings such as:
 
 ```env
 AUTHSTATUS_APP_ENVIRONMENT=production
@@ -362,271 +307,221 @@ AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
 AUTHSTATUS_SESSION_COOKIE_SECURE=true
 ```
 
-Recommended paths:
+Default trusted storage paths include:
 
 ```env
-AUTHSTATUS_DATABASE_PATH=/var/lib/carequeue/data/carequeue.db
+AUTHSTATUS_PRODUCTION_DATA_ROOT=/var/lib/carequeue
+AUTHSTATUS_DATABASE_PATH=/var/lib/carequeue/data/auth_tracker.sqlcipher.db
 AUTHSTATUS_BACKUP_DIRECTORY=/var/lib/carequeue/backups
 AUTHSTATUS_RESTORE_DIRECTORY=/var/lib/carequeue/restores
-AUTHSTATUS_RECOVERY_DIRECTORY=/var/lib/carequeue/recovery
 ```
 
-Set CORS to the exact HTTPS application origin:
+The installer also configures the exact application origin as the allowed CORS origin.
 
-```env
-AUTHSTATUS_CORS_ORIGINS=["https://carequeue.example.com"]
-```
-
-Do not use development origins in production.
+For a new production installation, do not replace the generated keys with development keys or placeholder values.
 
 ## Environment File Permissions
 
-Set ownership:
+The installer sets:
 
-```bash
-sudo chown root:carequeue \
-  /etc/carequeue/carequeue.env
+```text
+Owner: root
+Group: carequeue
+Mode: 0640
 ```
 
-Set permissions:
+for:
 
-```bash
-sudo chmod 0640 \
-  /etc/carequeue/carequeue.env
+```text
+/etc/carequeue/carequeue.env
 ```
 
-Confirm:
+Do not print the environment file contents into logs, tickets, screenshots, chat messages, or public documentation.
 
-```bash
-sudo stat \
-  /etc/carequeue/carequeue.env
+## Upgrade and Repair Configuration Preservation
+
+When `/etc/carequeue/carequeue.env` already exists, the installer preserves it rather than generating new encryption keys.
+
+During the current migration path, legacy unsafe-path override settings are removed and the trusted production data root is written as:
+
+```text
+AUTHSTATUS_PRODUCTION_DATA_ROOT=/var/lib/carequeue
 ```
 
-Do not print the file contents into logs, tickets, screenshots, or documentation.
-
-## Production Keys
-
-Generate independent keys through an approved local process.
-
-Requirements:
-
-- Each key must be independently generated.
-- Keys must have sufficient entropy.
-- Keys must be stored outside the repository.
-- Recoverable copies must exist through an approved key-custody process.
-- Backup keys must remain separate from backup files.
-
-Do not reuse development keys in production.
+The existing database and encryption keys must remain available across upgrades and repairs. Replacing them can make existing encrypted data unreadable.
 
 ## Database Encryption
 
-A production deployment containing sensitive data should use:
+Production configuration uses:
 
 ```env
 AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
 ```
 
-The installed Python environment must include a working SQLCipher-compatible package.
-
-Validate SQLCipher behavior before using real data. A successful application import is not proof that the resulting database file is encrypted.
-
-Use the project verification tooling and confirm plaintext SQLite cannot read the database.
-
-## Caddy Configuration
-
-The repository file is:
+with the default database path:
 
 ```text
-deployment/linux/Caddyfile
+/var/lib/carequeue/data/auth_tracker.sqlcipher.db
 ```
 
-It currently expects:
+The installer installs SQLCipher development libraries and the application's Python requirements.
+
+Before using real sensitive data, validate that the deployed database is actually encrypted and cannot be read as ordinary plaintext SQLite.
+
+## CareQueue API Service
+
+The repository includes:
 
 ```text
-carequeue.example.com
+deployment/linux/systemd/carequeue-api.service
 ```
 
-Replace that placeholder with the approved deployment hostname.
-
-The current Caddyfile:
-
-- Enables `zstd` and `gzip`
-- Adds security response headers
-- Removes the `Server` header
-- Proxies `/api` and `/api/*` to `127.0.0.1:8000`
-- Serves the frontend from `/opt/carequeue/frontend/dist`
-- Uses `/index.html` as the SPA fallback
-
-Install it to the Caddy configuration location used by the distribution. A common location is:
+The installer installs it as:
 
 ```text
-/etc/caddy/Caddyfile
+/etc/systemd/system/carequeue-api.service
 ```
 
-Example:
+The service:
 
-```bash
-sudo cp \
-  /opt/carequeue/deployment/linux/Caddyfile \
-  /etc/caddy/Caddyfile
-```
-
-Edit the hostname:
-
-```bash
-sudo editor /etc/caddy/Caddyfile
-```
-
-Do not leave `carequeue.example.com` in a real deployment.
-
-## Validate Caddy
-
-Format the file:
-
-```bash
-sudo caddy fmt \
-  --overwrite \
-  /etc/caddy/Caddyfile
-```
-
-Validate it:
-
-```bash
-sudo caddy validate \
-  --config /etc/caddy/Caddyfile \
-  --adapter caddyfile
-```
-
-Expected final output includes:
-
-```text
-Valid configuration
-```
-
-Do not restart Caddy until validation succeeds.
-
-## Start or Reload Caddy
-
-The exact service name depends on the distribution package.
-
-Common start command:
-
-```bash
-sudo systemctl enable --now caddy
-```
-
-After configuration changes:
-
-```bash
-sudo systemctl reload caddy
-```
+- Runs as `carequeue:carequeue`
+- Uses `/opt/carequeue/backend` as its working directory
+- Loads `/etc/carequeue/carequeue.env`
+- Forces production application mode
+- Runs the installed Python virtual environment
+- Starts Uvicorn with one worker
+- Binds to `127.0.0.1:8000`
+- Trusts forwarded proxy information only from loopback
+- Disables Uvicorn access logging
+- Restarts after unexpected failure
+- Uses a restrictive `UMask`
+- Prevents privilege escalation
+- Uses a private temporary directory
+- Restricts home-directory visibility
+- Makes the general filesystem read-only
+- Allows writes only under the CareQueue runtime and log roots
 
 Check status:
 
 ```bash
-sudo systemctl status caddy
+sudo systemctl status carequeue-api.service
 ```
 
 Review logs:
 
 ```bash
 sudo journalctl \
-  -u caddy \
+  -u carequeue-api.service \
   --since today
 ```
 
-## Certificate Mode
+## CareQueue Caddy Service
 
-For a public DNS hostname, Caddy can normally request and renew a publicly trusted certificate when DNS, routing, and firewall requirements are met.
-
-A public deployment requires additional review and is outside the currently validated CareQueue deployment path.
-
-For a private hostname that cannot receive a public certificate, use an approved internal certificate strategy.
-
-Options may include:
-
-- Caddy’s internal certificate authority
-- An organization-managed internal CA
-- A certificate issued by an approved private PKI
-
-Do not disable certificate validation in browsers or clients.
-
-When using a private CA:
-
-- Distribute the root certificate through an approved process.
-- Trust it only on approved systems.
-- Document renewal and replacement.
-- Restrict private key access.
-- Remove trust when the deployment is retired.
-
-The current Linux Caddyfile does not include a private-CA directive. Add one only after reviewing the intended hostname and trust model.
-
-## CareQueue API Service
-
-The current repository does not include a Linux systemd unit for the API.
-
-Until one is added and tested, create a reviewed unit outside the repository or run the API through an approved process manager.
-
-A suitable future service should:
-
-- Use `User=carequeue`
-- Use `Group=carequeue`
-- Set `WorkingDirectory=/opt/carequeue/backend`
-- Load `/etc/carequeue/carequeue.env`
-- Run the installed virtual environment
-- Bind Uvicorn to `127.0.0.1:8000`
-- Trust proxy headers only from loopback
-- Restart after unexpected failure
-- Use systemd sandboxing
-- Allow writes only to required runtime paths
-- Start before Caddy serves traffic
-- Stop cleanly before upgrades or recovery
-
-Do not expose Uvicorn directly on:
+The repository includes:
 
 ```text
-0.0.0.0
+deployment/linux/systemd/carequeue-caddy.service
 ```
 
-without a separately reviewed network architecture.
+The installer installs it as:
 
-## Temporary Manual API Start
+```text
+/etc/systemd/system/carequeue-caddy.service
+```
 
-For controlled validation only:
+CareQueue uses this dedicated unit instead of the distribution's default `caddy.service`.
+
+The service:
+
+- Runs as `carequeue:carequeue`
+- Requires the CareQueue API service
+- Uses Caddy data under `/var/lib/carequeue/caddy`
+- Loads `/etc/carequeue/Caddyfile`
+- Uses only the capability needed to bind low-numbered network ports
+- Prevents privilege escalation
+- Uses a private temporary directory
+- Restricts home-directory visibility
+- Makes the general filesystem read-only
+- Allows writes to the CareQueue Caddy data directory
+
+Check status:
 
 ```bash
-cd /opt/carequeue/backend
+sudo systemctl status carequeue-caddy.service
 ```
 
-Load the environment:
+Review logs:
 
 ```bash
-set -a
-source /etc/carequeue/carequeue.env
-set +a
+sudo journalctl \
+  -u carequeue-caddy.service \
+  --since today
 ```
 
-Start Uvicorn:
+## Caddy Configuration
 
-```bash
-sudo -u carequeue \
-  /opt/carequeue/backend/.venv/bin/uvicorn \
-  authstatus_api.main:create_app \
-  --factory \
-  --host 127.0.0.1 \
-  --port 8000 \
-  --proxy-headers \
-  --forwarded-allow-ips 127.0.0.1 \
-  --no-access-log
+The packaged Caddyfile is:
+
+```text
+deployment/linux/Caddyfile
 ```
 
-This terminal process is not a durable production service.
+The installer copies it to:
 
-Use it only to validate the application before a proper service unit is installed.
+```text
+/etc/carequeue/Caddyfile
+```
+
+The current configuration:
+
+- Serves `https://carequeue.local`
+- Uses `tls internal`
+- Enables `zstd` and `gzip`
+- Adds security response headers
+- Removes the `Server` response header
+- Proxies `/api` and `/api/*` to `127.0.0.1:8000`
+- Serves the frontend from `/opt/carequeue/frontend/dist`
+- Uses `/index.html` as the SPA fallback
+
+The installer validates the Caddyfile before starting CareQueue services.
+
+## Local Hostname
+
+For the default private deployment, the installer ensures `/etc/hosts` contains:
+
+```text
+127.0.0.1 carequeue.local # CareQueue
+```
+
+This makes `carequeue.local` resolvable on the Linux server itself.
+
+This hosts entry does not automatically make `carequeue.local` resolvable from other computers. Client devices need an approved DNS, hosts-file, or other name-resolution strategy if users will access CareQueue from another machine.
+
+## Certificate Trust
+
+The packaged Caddy configuration uses Caddy's internal CA.
+
+After starting the CareQueue Caddy service, the installer runs Caddy's trust operation using the CareQueue Caddy data and configuration directories. This establishes trust on the Linux installation host.
+
+For other client devices, the internal CA root certificate must be distributed and trusted through an approved process before browsers on those devices will trust the CareQueue certificate.
+
+Do not bypass browser certificate warnings or disable certificate validation.
+
+For a deployment using public DNS or an organization-managed PKI, review and replace the packaged private certificate model rather than weakening TLS validation.
 
 ## Health Checks
 
-Direct liveness:
+The installer performs post-installation checks against the configured application origin for:
+
+```text
+/
+/api/health/live
+/api/health/ready
+```
+
+It accepts successful 2xx and 3xx responses and retries transient failures before declaring installation unsuccessful.
+
+You can also check the API directly on the Linux server:
 
 ```bash
 curl \
@@ -636,8 +531,6 @@ curl \
   http://127.0.0.1:8000/api/health/live
 ```
 
-Direct readiness:
-
 ```bash
 curl \
   --fail \
@@ -646,75 +539,70 @@ curl \
   http://127.0.0.1:8000/api/health/ready
 ```
 
-HTTPS liveness:
+Check the HTTPS deployment:
 
 ```bash
 curl \
   --fail \
   --silent \
   --show-error \
-  https://carequeue.example.com/api/health/live
+  https://carequeue.local/api/health/live
 ```
-
-HTTPS readiness:
 
 ```bash
 curl \
   --fail \
   --silent \
   --show-error \
-  https://carequeue.example.com/api/health/ready
+  https://carequeue.local/api/health/ready
 ```
 
-Use the actual hostname for HTTPS checks.
+## First-Time Admin Setup
+
+On a new installation, `invoke-install.sh install` launches the installed Admin setup utility:
+
+```text
+/opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
+```
+
+The setup utility checks whether initial Admin setup is still available and, when required, prompts interactively for the first Admin account.
+
+Do not place the Admin password on the command line or in shell history.
+
+If initial setup has already been completed, the first-Admin endpoint is no longer available for creating another account.
+
+## Governance Attestation
+
+After the first Admin signs in through the browser, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
+
+The attestation records information including:
+
+- Organization name
+- Deployment mode
+- Accepting Admin
+- Acceptance timestamp
+- CareQueue application version
+- Governance attestation version
+
+Governance history is append-only and is visible to Admin users on the System page.
+
+The in-application governance workflow supports organizational security and compliance processes. Accepting the attestation does not itself execute a Business Associate Agreement or establish HIPAA compliance.
 
 ## Browser Smoke Test
 
-Open the frontend in a browser and confirm:
+After installation, open CareQueue in a supported browser and confirm:
 
-- The certificate is trusted.
-- The login page loads.
-- API calls use the HTTPS origin.
+- The CareQueue HTTPS certificate is trusted on the client device.
+- The login page loads over HTTPS.
+- Browser API calls use the same HTTPS origin.
 - No browser request goes directly to `127.0.0.1:8000`.
-- No browser request uses the development frontend server.
+- Initial Admin login works.
+- The governance attestation appears when required.
+- After governance acceptance, the normal application loads.
+- A representative protected workflow loads successfully.
+- Logout works and returns the browser to the login state.
 
-## Create the First Admin
-
-Linux does not currently include a packaged first-time setup GUI.
-
-For the current Linux path, create the first Admin with the backend script after the production environment is loaded.
-
-Load the production environment in a controlled administrator shell:
-
-```bash
-set -a
-source /etc/carequeue/carequeue.env
-set +a
-```
-
-Run:
-
-```bash
-sudo -u carequeue \
-  /opt/carequeue/backend/.venv/bin/python \
-  /opt/carequeue/backend/scripts/create_user.py \
-  --username carequeue.admin \
-  --role Admin
-```
-
-The script prompts for the password.
-
-Do not pass passwords on the command line.
-
-Available roles:
-
-```text
-Admin
-UR
-Read Only
-```
-
-For the account model, role boundaries, and one-time initial setup behavior, see [Users and Security](../administration/users-and-security.md).
+Use synthetic data for deployment validation.
 
 ## Encrypted Backup Service
 
@@ -724,115 +612,83 @@ The repository includes:
 deployment/linux/systemd/carequeue-backup.service
 ```
 
-The service is a one-shot task.
+The installer installs the service and its timer automatically.
 
-It runs:
-
-```text
-/opt/carequeue/backend/.venv/bin/python
-/opt/carequeue/backend/scripts/create_encrypted_backup.py
-```
-
-with:
+The backup service runs the project's encrypted backup script from the installed Python environment and writes backups under:
 
 ```text
---backup-directory /var/lib/carequeue/backups
+/var/lib/carequeue/backups
 ```
 
-It loads:
+It loads the production environment from:
 
 ```text
 /etc/carequeue/carequeue.env
 ```
 
-## Backup Service Hardening
-
-The current backup service includes:
+The service uses systemd hardening including:
 
 ```ini
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/carequeue/backups
 UMask=0077
 ```
 
-These settings:
+The backup directory is explicitly writable while the general filesystem remains protected.
 
-- Create a private temporary directory
-- Prevent privilege escalation
-- Restrict home-directory visibility
-- Make most of the filesystem read-only
-- Permit writes only to the backup directory
-- Create files with restrictive default permissions
+## Backup Timer
 
-The service still needs read access to:
+The installer enables:
 
-- `/opt/carequeue`
-- `/etc/carequeue/carequeue.env`
-- The configured active database
-- Required shared libraries
-
-Validate the unit against the actual database path and distribution.
-
-If the backup implementation requires another writable path, update `ReadWritePaths` narrowly. Do not remove `ProtectSystem=strict` merely to make the service work.
-
-## Install Backup Units
-
-Copy the service:
-
-```bash
-sudo cp \
-  /opt/carequeue/deployment/linux/systemd/carequeue-backup.service \
-  /etc/systemd/system/
+```text
+carequeue-backup.timer
 ```
 
-Copy the timer:
+The current schedule uses:
 
-```bash
-sudo cp \
-  /opt/carequeue/deployment/linux/systemd/carequeue-backup.timer \
-  /etc/systemd/system/
+```ini
+OnCalendar=*-*-* 02:00:00
+RandomizedDelaySec=15m
+Persistent=true
 ```
 
-Reload systemd:
+This means the backup runs daily around 2:00 AM, may be delayed by up to 15 minutes, and may run after startup if a scheduled run was missed while the system was unavailable.
+
+Check the timer:
 
 ```bash
-sudo systemctl daemon-reload
+sudo systemctl status carequeue-backup.timer
 ```
 
-Validate the units:
+List its next run:
 
 ```bash
-systemd-analyze verify \
-  /etc/systemd/system/carequeue-backup.service \
-  /etc/systemd/system/carequeue-backup.timer
+systemctl list-timers carequeue-backup.timer
 ```
-
-Resolve errors before enabling the timer.
 
 ## Run a Manual Backup
 
-Start the service:
+Start the one-shot service:
 
 ```bash
 sudo systemctl start carequeue-backup.service
 ```
 
-Check status:
+Check the result:
 
 ```bash
 sudo systemctl status carequeue-backup.service
 ```
 
-A successful one-shot service may show:
+A successful one-shot service may return to:
 
 ```text
 inactive (dead)
 ```
 
-after completion. That is normal when the result is successful.
+after the task completes. Review the result and logs rather than treating that state alone as failure.
 
 Review logs:
 
@@ -842,7 +698,7 @@ sudo journalctl \
   --since today
 ```
 
-Confirm a backup exists:
+Confirm encrypted backups exist:
 
 ```bash
 sudo find \
@@ -853,67 +709,13 @@ sudo find \
   -printf "%TY-%Tm-%Td %TH:%TM:%TS %s %f\n"
 ```
 
-Confirm the latest backup is nonempty.
-
-## Enable the Backup Timer
-
-Enable and start:
-
-```bash
-sudo systemctl enable --now carequeue-backup.timer
-```
-
-Check status:
-
-```bash
-sudo systemctl status carequeue-backup.timer
-```
-
-List the next run:
-
-```bash
-systemctl list-timers carequeue-backup.timer
-```
-
-The current timer uses:
-
-```ini
-OnCalendar=*-*-* 02:00:00
-RandomizedDelaySec=15m
-Persistent=true
-```
-
-This means:
-
-- The timer runs daily around 2:00 AM.
-- systemd may delay it by up to 15 minutes.
-- A missed run may execute after the system returns.
-
-Disable the timer when needed:
-
-```bash
-sudo systemctl disable --now carequeue-backup.timer
-```
-
-Disabling the timer does not delete existing backups.
-
-## Backup Verification
-
-A successful systemd result is not enough.
-
-Confirm:
-
-- A recent `.db.enc` file exists.
-- The file is nonempty.
-- The backup creation output reported verification.
-- Retention completed or reported a reviewed warning.
-- A staged restore test has been performed on schedule.
+A successful service result is not sufficient by itself. Confirm that the backup file is present, nonempty, encrypted, and recoverable through a staged restore test.
 
 See [Backup and Recovery](../workflows/backup-and-recovery.md).
 
 ## File Permissions
 
-Review runtime ownership:
+Review runtime ownership and permissions:
 
 ```bash
 sudo find \
@@ -922,58 +724,59 @@ sudo find \
   -printf "%M %u %g %p\n"
 ```
 
-Recommended general pattern:
+The installer uses restrictive ownership and permissions for production configuration and runtime storage. Do not make the database, encryption keys, backups, recovery files, or logs world-readable or world-writable.
+
+## Firewall and Network Exposure
+
+The API should remain loopback-only:
 
 ```text
-Directories: 0750
-Environment file: 0640
-Backup files: 0600
-Database files: 0600 or similarly restricted
+127.0.0.1:8000
 ```
-
-Exact permissions depend on the service and administrator access model.
-
-Do not make runtime storage world-readable or world-writable.
-
-## Firewall
-
-A private reverse-proxy deployment normally exposes only the approved HTTPS port.
-
-The API port should remain loopback-only.
 
 Review listening sockets:
 
 ```bash
-sudo ss \
-  -lntp
+sudo ss -lntp
 ```
 
-Expected pattern:
+Only the approved HTTPS service should be exposed to CareQueue users.
 
-```text
-127.0.0.1:8000
-0.0.0.0:443 or approved interface:443
-```
+Do not expose:
 
-Port 80 may be used by Caddy for redirects or certificate challenges depending on the certificate strategy.
+- The Uvicorn API port directly
+- Database files
+- Backup storage
+- Recovery storage
+- Administrative services beyond what the environment requires
 
-Apply firewall rules through the distribution’s approved firewall tool.
-
-Do not expose SSH, database files, backup storage, or the Uvicorn port more broadly than required.
+Apply firewall rules through the operating system's approved firewall tooling.
 
 ## Logs
 
-Review Caddy logs:
+Installer logs:
+
+```text
+/var/log/carequeue/installer/
+```
+
+API logs:
 
 ```bash
 sudo journalctl \
-  -u caddy \
+  -u carequeue-api.service \
   --since today
 ```
 
-The API log location depends on the service unit or process manager used. A future CareQueue API systemd unit should write to the journal or to a restricted CareQueue log directory.
+CareQueue Caddy logs:
 
-Review backup logs:
+```bash
+sudo journalctl \
+  -u carequeue-caddy.service \
+  --since today
+```
+
+Backup logs:
 
 ```bash
 sudo journalctl \
@@ -981,119 +784,171 @@ sudo journalctl \
   --since today
 ```
 
-Do not share production logs publicly without reviewing them for:
+Before sharing logs, review them for hostnames, usernames, internal paths, credentials, tokens, database errors, and other sensitive information.
 
-- Hostnames
-- Usernames
-- Internal paths
-- Tokens
-- Credentials
-- Database errors
-- Sensitive values
+## Upgrade
 
-## Manual Upgrade Outline
+Before an upgrade:
 
-Linux upgrade automation is not yet included.
+1. Confirm a recent verified encrypted backup exists.
+2. Retain the currently trusted release artifact.
+3. Review the new release notes and deployment changes.
+4. Extract the new release package into a temporary installer directory.
 
-A manual upgrade should follow this order:
+Run:
 
-```text
-1. Confirm recent verified encrypted backup
-2. Run repository tests
-3. Build and stage updated frontend
-4. Stop Caddy or place the application in maintenance mode
-5. Stop the API
-6. Preserve the current installed release
-7. Install updated application files
-8. Recreate or update the production Python environment
-9. Validate the installed backend
-10. Review database migration requirements
-11. Start the API
-12. Check readiness
-13. Reload or start Caddy
-14. Check HTTPS
-15. Test login and representative workflows
-16. Run a post-upgrade backup
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh upgrade
 ```
 
-Do not overwrite the only known-good installed release without keeping a rollback copy.
+Upgrade mode requires an existing installation. It preserves the existing production configuration and runtime data while reinstalling application files, recreating the Python environment, reinstalling service definitions, validating Caddy, restarting services, and rerunning health checks.
 
-For the general upgrade safety model, see [Upgrades](../operations/upgrades.md).
+The current workflow does not provide automatic rollback to the previous application release.
 
-## Future Release Layout
+## Repair
 
-A future safer Linux layout may use versioned releases:
+Use repair mode when an existing installation needs the packaged application and deployment components reapplied without intentionally replacing production data or secrets.
 
-```text
-/opt/carequeue/
-├── releases/
-│   ├── 2026.07.31/
-│   └── 2026.08.15/
-├── current -> /opt/carequeue/releases/2026.08.15
-└── shared/
+Run:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair
 ```
 
-This is not currently implemented by the repository.
+Repair mode requires an existing installation and preserves the existing production configuration and runtime data.
 
-Do not adopt it without updating:
+After repair, confirm service health, HTTPS access, login, governance state, and a representative application workflow.
 
-- Caddy paths
-- systemd paths
-- backup service paths
-- environment references
-- upgrade documentation
-- rollback testing
+## Uninstall
+
+Run uninstall from an extracted CareQueue release package:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh uninstall
+```
+
+The uninstall workflow:
+
+- Disables and stops the CareQueue backup timer
+- Disables and stops the CareQueue Caddy service
+- Disables and stops the CareQueue API service
+- Removes the CareQueue systemd unit files
+- Removes `/opt/carequeue`
+- Removes the installer-managed `carequeue.local` hosts entry
+
+A normal uninstall intentionally preserves:
+
+```text
+/etc/carequeue
+/var/lib/carequeue
+/var/log/carequeue
+```
+
+This means the database, encryption keys, backups, recovery data, and logs are not automatically deleted.
+
+Do not manually remove preserved production data unless retention, recovery, and destruction requirements have been reviewed and the required backups and keys are accounted for.
 
 ## Rollback
 
-The current repository does not include a Linux rollback script.
+The current repository does not include an automated Linux rollback command.
 
-A rollback requires:
+A safe rollback requires review of:
 
-- The previous trusted release
-- The existing production environment file
-- Database compatibility
+- The previous trusted application release
+- Existing production configuration and encryption keys
+- Database schema compatibility
 - A recent verified encrypted backup
-- Recovery instructions
+- Recovery procedures
 - A maintenance window
 
-Do not run older application code against a newer database schema without reviewing compatibility.
+Do not run older application code against a newer database schema without confirming compatibility.
 
-Database rollback must use the staged recovery process.
+Do not manually overwrite the active production database as an application rollback mechanism.
 
-Do not manually overwrite the active database.
+Database recovery should use the project's staged recovery workflow.
+
+See [Upgrades](../operations/upgrades.md) and [Backup and Recovery](../workflows/backup-and-recovery.md).
 
 ## Troubleshooting
 
-### Caddy reports an invalid configuration
+### The installer says CareQueue is already installed
 
-Format and validate the file:
+Use:
 
 ```bash
-sudo caddy fmt \
-  --overwrite \
-  /etc/caddy/Caddyfile
+sudo bash deployment/linux/installer/invoke-install.sh upgrade
 ```
+
+or:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair
+```
+
+`install` mode intentionally refuses to overwrite an existing detected installation.
+
+### Upgrade or repair says CareQueue is not installed
+
+The installer considers CareQueue installed when both of these exist:
+
+```text
+/opt/carequeue/backend
+/etc/carequeue/carequeue.env
+```
+
+Review whether the installation is incomplete or whether nondefault paths were used.
+
+### CareQueue API service is not running
+
+Check status:
+
+```bash
+sudo systemctl status carequeue-api.service
+```
+
+Review logs:
+
+```bash
+sudo journalctl \
+  -u carequeue-api.service \
+  --since today
+```
+
+Confirm the environment file exists and the database and runtime paths are accessible to the `carequeue` service account.
+
+### CareQueue Caddy service is not running
+
+Check status:
+
+```bash
+sudo systemctl status carequeue-caddy.service
+```
+
+Review logs:
+
+```bash
+sudo journalctl \
+  -u carequeue-caddy.service \
+  --since today
+```
+
+Validate the installed Caddyfile:
 
 ```bash
 sudo caddy validate \
-  --config /etc/caddy/Caddyfile \
+  --config /etc/carequeue/Caddyfile \
   --adapter caddyfile
 ```
 
-Review the exact line reported.
-
 ### Caddy cannot connect to the API
 
-Confirm the API listens on loopback:
+Confirm Uvicorn is listening on loopback:
 
 ```bash
-sudo ss \
-  -lntp \
-  | grep 8000
+sudo ss -lntp | grep 8000
 ```
 
-Test directly:
+Test the API directly:
 
 ```bash
 curl \
@@ -1101,11 +956,25 @@ curl \
   http://127.0.0.1:8000/api/health/live
 ```
 
-If direct health works but Caddy fails, inspect Caddy logs and reverse-proxy configuration.
+If direct health succeeds but HTTPS fails, inspect the CareQueue Caddy service and Caddy configuration.
+
+### Browser does not trust the certificate
+
+The installer trusts the Caddy internal root CA on the Linux server, not automatically on every client device.
+
+Confirm that the CareQueue internal root certificate has been distributed and trusted on the browser's device through an approved process.
+
+Do not bypass the certificate warning.
+
+### `carequeue.local` does not resolve from another computer
+
+The installer adds `carequeue.local` only to the Linux server's `/etc/hosts` file.
+
+Configure approved name resolution for each client or through your private DNS environment.
 
 ### Frontend loads but routes return 404
 
-Confirm the Caddyfile includes:
+Confirm the installed Caddyfile contains SPA fallback behavior using:
 
 ```caddyfile
 try_files {path} /index.html
@@ -1119,31 +988,29 @@ Confirm the frontend build exists:
 
 ### Browser requests `localhost:8000`
 
-The production frontend was built with a development Vite API override.
+The production frontend was built with an inappropriate development API override.
 
-Remove the production-relevant override, rebuild the frontend, and redeploy `dist`.
+Rebuild the frontend for same-origin production API requests and recreate the release package.
 
-### API imports fail
+### Backend import or startup fails
 
-Load the environment and test the import:
+Check the API service logs first.
 
-```bash
-set -a
-source /etc/carequeue/carequeue.env
-set +a
-```
+You can also validate the installed backend from the server:
 
 ```bash
+cd /opt/carequeue/backend
+
 sudo -u carequeue \
   /opt/carequeue/backend/.venv/bin/python \
   -c "import authstatus_api.main"
 ```
 
-Review configuration validation errors without printing secrets.
+Review configuration errors without printing secrets.
 
 ### Backup service cannot write
 
-Review service status and logs:
+Review:
 
 ```bash
 sudo systemctl status carequeue-backup.service
@@ -1158,97 +1025,77 @@ sudo journalctl \
 Check the backup directory:
 
 ```bash
-sudo ls -ld \
-  /var/lib/carequeue/backups
+sudo ls -ld /var/lib/carequeue/backups
 ```
 
-Confirm the directory is writable by `carequeue`.
-
-### Backup service cannot read the database
-
-Confirm:
-
-- The environment file points to the intended database.
-- The service account can traverse parent directories.
-- The database is readable by `carequeue`.
-- `ProtectSystem=strict` does not block the configured path.
-- The SQLCipher key is present.
-- The database path is not outside approved storage without explicit configuration.
+Confirm it is writable by the `carequeue` service account.
 
 ### Environment file is rejected
 
-Production configuration validation may reject:
+Production validation may reject placeholder secrets, unsafe paths, development origins, invalid encryption settings, or malformed configuration values.
 
-- Placeholder keys
-- Development origins
-- Unsafe paths
-- Missing required encryption settings
-- Invalid JSON values
-
-Fix the exact setting. Do not weaken validation without understanding the risk.
+Fix the specific rejected setting. Do not weaken production validation merely to make startup succeed.
 
 ## Security Checklist
 
-Before using real sensitive data:
+Before using real sensitive data, confirm:
 
+- The target operating system and version have been validated.
 - The API binds only to loopback.
-- Caddy is the only user-facing service.
-- HTTPS is valid and trusted.
-- The production hostname is correct.
-- The environment file is `0640` or more restrictive.
-- Runtime directories are not world-readable.
-- SQLCipher mode is enabled.
-- Independent encryption keys are recoverable.
-- Backups run automatically.
-- Backup files are encrypted and nonempty.
-- Restore testing has been completed.
-- Off-host backup policy is documented.
-- Firewall rules are reviewed.
-- Service accounts are restricted.
-- Logs are protected.
-- Operating system updates are managed.
-- Caddy and dependencies are patched.
+- The CareQueue Caddy service is the intended user-facing HTTP service.
+- HTTPS is valid and trusted on every approved client device.
+- The deployment hostname resolves only where intended.
+- The production environment file remains restricted.
+- Production encryption keys are independent and recoverable through an approved key-custody process.
+- SQLCipher mode is enabled and the deployed database has been verified as encrypted.
+- Runtime, backup, recovery, and log directories are not broadly readable.
+- Automatic encrypted backups are enabled.
+- Recent backup files exist and are nonempty.
+- Backup restore testing has been performed.
+- Off-host backup policy is documented when required.
+- Firewall and network exposure have been reviewed.
+- The `carequeue` service account has only the access it requires.
+- Operating-system security updates are managed.
+- Caddy and application dependencies are maintained.
+- First-Admin setup is complete.
+- Governance attestation is complete for the current required version.
+- User roles and MFA requirements have been reviewed.
 - Access review procedures exist.
-- Incident response is documented.
+- Incident-response procedures exist.
 - Legal and compliance review is complete.
 
-## Remaining Repository Work
+## Remaining Linux Work
 
-The following Linux work remains a project priority:
+The primary remaining Linux deployment work includes:
 
-- Add a hardened `carequeue-api.service`
-- Add a Linux production installer
-- Add environment generation and permission handling
-- Add versioned release installation
-- Add upgrade and rollback scripts
-- Add production smoke tests
-- Add private certificate guidance
-- Add distribution-specific validation
-- Add uninstall procedures
-- Add complete Linux recovery activation instructions
-- Test reboot and failure behavior
+- Automated rollback to a previous trusted application release
+- Broader tested distribution and operating-system coverage
+- Additional automated release-package smoke testing
+- Expanded disaster-recovery activation testing and documentation
+- Validation of reboot, interrupted-upgrade, and service-failure scenarios across supported systems
+- Continued hardening and documentation of private certificate distribution and lifecycle management
+- Better support for deployments that use an application hostname other than the packaged `carequeue.local` model
 
-Until those pieces are implemented and tested, Linux deployment should be treated as a foundation rather than a finished deployment path.
+The packaged Linux installation path should still be validated on the exact target environment before introducing sensitive production data.
 
 ## Screenshots
 
-Screenshots should be added after the Linux workflow is implemented and validated.
+Documentation screenshots should use synthetic data only.
 
-Useful screenshots may include:
+Useful Linux deployment screenshots may include:
 
-- `systemctl status` for the API
-- `systemctl status` for Caddy
-- `systemctl status` for the backup timer
+- `systemctl status carequeue-api.service`
+- `systemctl status carequeue-caddy.service`
+- `systemctl status carequeue-backup.timer`
 - Successful HTTPS health response
-- Successful backup service result
-- CareQueue login page over HTTPS
-
-Use synthetic data only.
+- Successful backup result
+- CareQueue login page over trusted HTTPS
+- Governance attestation screen using synthetic organization information
 
 Before committing screenshots:
 
 - Remove personal usernames and hostnames where practical.
 - Do not show environment-file contents.
-- Do not show keys or credentials.
-- Do not show real records.
+- Do not show keys, tokens, or credentials.
+- Do not show real patient or authorization records.
 - Review terminal history visible in the screenshot.

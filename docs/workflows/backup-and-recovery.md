@@ -10,9 +10,14 @@ Backup creation, restore staging, recovery staging, and recovery activation are 
 
 ## Scope
 
-This guide covers encrypted database backups, restore validation, staged recovery, recovery activation, and post-recovery checks.
+This guide covers encrypted database backups, restore validation, staged recovery, recovery activation, and post-recovery checks for packaged Windows and Linux deployments.
 
-It does not cover the full Windows installer workflow. For installer modes, payload building, and clean-machine installation testing, see [Windows Deployment](../deployment/windows.md).
+It does not replace the deployment guides. For installation, upgrade, repair, and uninstall behavior, see:
+
+```text
+docs/deployment/windows.md
+docs/deployment/linux.md
+```
 
 ## Protection Layers
 
@@ -79,6 +84,31 @@ C:\ProgramData\CareQueue\Config\carequeue.env
 
 The packaged Windows installer removes application files during uninstall but preserves runtime data under `C:\ProgramData\CareQueue`, including the production environment file, database, backups, restore files, recovery files, and installer logs.
 
+
+### Linux production
+
+```text
+Application files:
+/opt/carequeue
+
+Configuration:
+/etc/carequeue
+
+Database and runtime data:
+/var/lib/carequeue
+
+Backups:
+/var/lib/carequeue/backups
+
+Environment:
+/etc/carequeue/carequeue.env
+
+Logs:
+/var/log/carequeue
+```
+
+The packaged Linux uninstall removes the application files and CareQueue systemd units while preserving `/etc/carequeue`, `/var/lib/carequeue`, and `/var/log/carequeue`.
+
 ### Development
 
 ```text
@@ -133,6 +163,40 @@ C:\ProgramData\CareQueue\Backups
 ```
 
 The runner loads the protected production environment and returns a nonzero exit code when creation or retention fails.
+
+## Create a Linux Production Backup
+
+The packaged Linux deployment installs:
+
+```text
+carequeue-backup.service
+carequeue-backup.timer
+```
+
+Run an encrypted backup immediately with:
+
+```bash
+sudo systemctl start carequeue-backup.service
+```
+
+Review the result:
+
+```bash
+sudo systemctl status carequeue-backup.service
+sudo journalctl -u carequeue-backup.service --since today
+```
+
+The packaged service writes backups to:
+
+```text
+/var/lib/carequeue/backups
+```
+
+The service runs as the dedicated `carequeue` account and loads the protected production environment from:
+
+```text
+/etc/carequeue/carequeue.env
+```
 
 ## Custom Backup Directory
 
@@ -425,6 +489,8 @@ The application remains stopped after activation for review.
 
 ## Activate on Windows
 
+Recovery activation is an offline administrative operation.
+
 Stop services:
 
 ```powershell
@@ -461,6 +527,52 @@ ACTIVATE RECOVERY
 ```
 
 exactly.
+
+
+## Activate on Linux
+
+Recovery activation is supported on Linux through the same backend activation script.
+
+Stop the HTTPS and API services:
+
+```bash
+sudo systemctl stop carequeue-caddy.service
+sudo systemctl stop carequeue-api.service
+```
+
+Confirm the API service is stopped and port `8000` is free.
+
+Load the production environment into the shell used for activation:
+
+```bash
+set -a
+source /etc/carequeue/carequeue.env
+set +a
+```
+
+Then run:
+
+```bash
+cd /opt/carequeue/backend
+
+sudo -E ./.venv/bin/python \
+  ./scripts/activate_staged_recovery.py \
+  --service-name carequeue-api.service \
+  --api-host 127.0.0.1 \
+  --api-port 8000
+```
+
+Review the printed plan before confirming activation.
+
+Enter:
+
+```text
+ACTIVATE RECOVERY
+```
+
+exactly when the selected staged recovery and paths have been verified.
+
+CareQueue remains stopped after successful activation so the resulting database state can be reviewed before services are restarted.
 
 ## Recovery Preflight
 
@@ -504,12 +616,14 @@ Keep CareQueue stopped until the final state is understood.
 
 Before restarting:
 
-- Confirm active database exists.
-- Confirm rollback database exists.
-- Confirm safety backup exists.
-- Confirm pending manifest is gone.
+- Confirm the active database exists.
+- Confirm the rollback database exists.
+- Confirm the safety backup exists.
+- Confirm the pending manifest is gone.
 - Confirm no unexpected sidecars exist.
 - Review activation output.
+
+### Windows
 
 Start the API:
 
@@ -537,16 +651,46 @@ Invoke-RestMethod `
     -Uri "https://carequeue.local/api/health/ready"
 ```
 
-Then verify:
+### Linux
+
+Start the API:
+
+```bash
+sudo systemctl start carequeue-api.service
+```
+
+Check direct readiness:
+
+```bash
+curl --fail --silent --show-error   http://127.0.0.1:8000/api/health/ready
+```
+
+Start Caddy:
+
+```bash
+sudo systemctl start carequeue-caddy.service
+```
+
+Check HTTPS readiness:
+
+```bash
+curl --fail --silent --show-error   https://carequeue.local/api/health/ready
+```
+
+### Application validation
+
+After the services are healthy, verify:
 
 - Login
+- Current governance status
 - Representative authorization records
 - Timeline events
 - Registered options
-- Audit continuity
+- Audit continuity and integrity status
 - Dashboard summaries
+- Backup scheduling
 
-See [Health Checks](../operations/health-checks.md#post-recovery-smoke-test).
+See [Health Checks](../operations/health-checks.md) for broader post-recovery validation.
 
 ## Rollback and Safety Backup
 
@@ -617,12 +761,17 @@ CareQueue does not currently upload backups externally by itself.
 Monitor:
 
 - Last successful backup
-- File size
-- Scheduled-task result
+- Backup file size
+- Windows scheduled-task status where applicable
+- Linux backup timer status where applicable
+- Backup-service failures
 - Retention failures
 - Available storage
+- Last backup verification
 - Last restore test
 - Last key-recovery test
+
+A successful schedule or timer status does not prove that the most recent backup is recoverable. Periodic verification and recovery drills remain necessary.
 
 ## Common Failures
 
@@ -656,9 +805,27 @@ Free space through approved retention or archival procedures.
 
 Do not delete the only recent verified backup.
 
-### Scheduled task fails
+### Windows scheduled task fails
 
 Run the installed backup runner manually and check permissions, environment loading, script paths, and task history.
+
+### Linux backup service or timer fails
+
+Check:
+
+```bash
+sudo systemctl status carequeue-backup.service
+sudo systemctl status carequeue-backup.timer
+sudo journalctl -u carequeue-backup.service --since today
+```
+
+Confirm that:
+
+- `/etc/carequeue/carequeue.env` exists.
+- `/var/lib/carequeue/backups` exists.
+- The `carequeue` service account can write to the backup directory.
+- The required encryption keys are present in the protected production environment.
+- The installed backend and virtual environment are intact.
 
 ### Unsafe restore path
 
@@ -668,7 +835,21 @@ Do not bypass path validation merely to make the command succeed.
 
 ### Service or port still active during recovery
 
-Stop Caddy, stop the API, confirm port 8000 is free, and retry.
+Stop the CareQueue HTTPS service first, then stop the API service, confirm port `8000` is free, and retry.
+
+Windows services:
+
+```text
+CareQueueCaddy
+CareQueueApi
+```
+
+Linux services:
+
+```text
+carequeue-caddy.service
+carequeue-api.service
+```
 
 ### Database locked
 
@@ -735,17 +916,8 @@ Before declaring success:
 - HTTPS readiness passed.
 - Login succeeded.
 - Representative records were reviewed.
-- Audit continuity was reviewed.
+- Audit continuity and integrity status were reviewed.
+- Governance status was reviewed.
+- Backup scheduling was confirmed after restart.
 - Recovery owner accepted the result.
 - Recovery record was completed.
-
-## Related Documentation
-
-```text
-docs/operations/health-checks.md
-docs/operations/upgrades.md
-docs/deployment/windows.md
-docs/deployment/linux.md
-docs/administration/audit-log.md
-docs/troubleshooting/index.md
-```

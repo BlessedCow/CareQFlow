@@ -2,7 +2,7 @@
 
 CareQueue is a local-first healthcare workflow application intended for private development, testing, and controlled deployment.
 
-It includes authentication, role-based authorization, session controls, CSRF protection, encrypted storage options, encrypted backups, audit logging, log sanitization, isolated PDF extraction, private HTTPS deployment, browser security headers, dependency checks, and backup scheduling support.
+It includes authentication, role-based authorization, TOTP multi-factor authentication, remembered-device MFA, single-session enforcement, inactivity-based session controls, CSRF protection, versioned governance attestation, encrypted storage options, encrypted backups, audit logging, log sanitization, isolated PDF extraction, private HTTPS deployment, browser security headers, dependency checks, and backup scheduling support.
 
 Those controls do not make CareQueue HIPAA compliant by themselves. Any organization using CareQueue with protected health information remains responsible for its own administrative, physical, technical, contractual, legal, and operational safeguards.
 
@@ -139,12 +139,25 @@ CareQueue currently includes:
 - Failed-login tracking and temporary account lockout
 - Local user authentication
 - Role-based access control
+- TOTP multi-factor authentication
+- Short-lived server-side MFA login challenges
+- Optional time-limited remembered devices for MFA
+- Trusted-device revocation during security-sensitive account changes
+- Single active authenticated session per account
 - Server-side sessions
 - Hashed session-token persistence
 - Secure browser-managed session cookies
 - CSRF protection for authenticated state-changing requests
-- Session expiration, warning, renewal, and token rotation
+- Configurable inactivity timeout with a 20-minute default
+- Sliding authenticated-session expiration
+- Session expiration warning and explicit renewal
+- Session and CSRF token rotation during renewal
+- Cross-tab session expiration and logout synchronization
 - Frontend state clearing after logout or expiration
+- Versioned organization governance attestation before protected application access
+- Admin-only governance acceptance
+- Append-only governance attestation history
+- Audit logging for governance acceptance
 - Field-level encryption for selected sensitive values
 - Optional SQLCipher database encryption
 - Separately encrypted database backups
@@ -158,11 +171,11 @@ CareQueue currently includes:
 - Backend dependency audit checks with `pip-audit`
 - Frontend dependency audit checks with `npm audit`
 - Static security scanning with Bandit
-- Windows and Linux backup scheduling helpers
-- Private Windows HTTPS through Caddy
+- Windows and Linux backup scheduling
+- Private HTTPS through Caddy for packaged Windows and Linux deployments
 - Content Security Policy and related browser security headers
 - Loopback-only first-time Admin setup
-- Loopback-only API binding in the Windows production deployment
+- Loopback-only API binding in packaged production deployments
 - Restricted production runtime directories
 - Service-aware production upgrades
 
@@ -195,6 +208,38 @@ security.login_locked
 ```
 
 Successful authentication clears the failed-login state.
+
+### Multi-Factor Authentication
+
+CareQueue supports TOTP multi-factor authentication.
+
+When MFA is enabled for a user, a successful username/password check does not immediately create an authenticated application session unless a valid remembered-device token is accepted. Otherwise, CareQueue creates a short-lived server-side MFA challenge and requires a valid TOTP code before creating the authenticated session.
+
+MFA secrets are encrypted before persistence and must never be logged, returned after enrollment is complete, or included in audit metadata.
+
+MFA login challenge tokens are generated from cryptographically secure random values. The backend persists a keyed digest rather than the raw challenge token.
+
+Administrators may reset MFA for another user through the approved user-management workflow. Security-sensitive account changes that invalidate authentication state must also revoke affected sessions and remembered devices where implemented.
+
+### Remembered Devices
+
+After successful MFA verification, a user may choose to remember the current device.
+
+The remembered-device control:
+
+- Is optional.
+- Is separate from the authenticated session.
+- Uses an HttpOnly, Secure browser cookie in production.
+- Stores only a keyed digest of the raw trusted-device token.
+- Has a limited lifetime.
+- Does not extend the authenticated session lifetime.
+- Does not bypass password authentication.
+- Can be revoked.
+- Is invalidated during supported security-sensitive account changes.
+
+The current trusted-device lifetime is 30 days.
+
+A remembered device suppresses the TOTP step only while its trusted-device record and cookie remain valid. It does not create a persistent authenticated session.
 
 ## Roles and Authorization
 
@@ -242,18 +287,33 @@ revocation time
 hashed token
 ```
 
+CareQueue enforces one active authenticated session per account. Creating a new authenticated session revokes any previous non-revoked sessions for that user.
+
+Authenticated sessions use an inactivity timeout rather than a long-lived browser login. The default inactivity window is 20 minutes and is configurable through:
+
+```env
+AUTHSTATUS_SESSION_INACTIVITY_MINUTES=20
+```
+
 The configured session flow includes:
 
-- A fixed authenticated session duration
-- A mandatory expiration warning
-- Active-session renewal
+- Server-authoritative inactivity expiration
+- Sliding expiration while authenticated activity continues
+- Atomic activity updates that do not revive an already expired session
+- A mandatory frontend expiration warning
+- Explicit active-session renewal
 - Session and CSRF token rotation during renewal
-- Cookie lifetime refresh
+- Browser-session cookies for the authenticated session and CSRF state
+- Cross-tab synchronization of logout and expiration state
 - Frontend state clearing after logout or expiration
 
-The renewal endpoint requires both an active authenticated session and valid CSRF protection.
+The frontend sends throttled activity updates for supported user interaction rather than renewing continuously on every browser event.
 
-The frontend may display an optional countdown, but the backend remains authoritative for session validity and expiration.
+The activity and renewal endpoints require an active authenticated session and valid CSRF protection. An expired session cannot be renewed or revived by later browser activity.
+
+The backend remains authoritative for session validity and expiration. Frontend timers and cross-tab synchronization are usability and coordination controls, not the security boundary.
+
+Remembered-device MFA is intentionally separate from authenticated session lifetime. A remembered device may suppress the TOTP step at a later login, but it does not keep an authenticated CareQueue session alive.
 
 ## Cookie Security
 
@@ -284,9 +344,42 @@ CSRF protection must remain enabled for authenticated operations such as:
 - Logout
 - Password change
 - Session renewal
+- Session activity updates
+- Governance attestation acceptance
 - Administrative changes
 
 Authentication cookies alone are not sufficient protection for state-changing requests.
+
+## Governance Attestation
+
+CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
+
+After initial Admin setup and login, an Admin must complete the current attestation version. Non-Admin users cannot accept organization-level governance terms.
+
+The attestation records:
+
+```text
+attestation version
+organization name
+deployment mode
+accepting user
+acceptance time
+CareQueue application version
+```
+
+Governance history is append-only through the application. Previous accepted records remain available to authorized administrators when a later governance version requires re-attestation.
+
+Acceptance records an audit event:
+
+```text
+governance.attestation_accepted
+```
+
+The governance audit event identifies the governance record and safe version/deployment metadata without placing the organization name into audit metadata.
+
+The governance attestation version is independent from the CareQueue application version. Updating CareQueue does not by itself require re-attestation. Re-attestation occurs when the required governance attestation version changes.
+
+The governance workflow is an application control intended to support organizational accountability. It does not itself execute a Business Associate Agreement, establish HIPAA compliance, replace legal review, or replace required administrative, physical, and technical safeguards.
 
 ## Encryption Model
 
@@ -570,45 +663,46 @@ Detailed debugging belongs in controlled development environments using syntheti
 
 Production tracebacks and internal exception details should not be returned to clients.
 
-## Private Windows HTTPS Deployment
+## Private HTTPS Deployment
 
-The Windows production deployment uses:
+Packaged Windows and Linux production deployments place Caddy in front of a loopback-only CareQueue API.
 
-```text
-CareQueueApi
-CareQueueCaddy
-```
-
-`CareQueueApi` runs FastAPI on:
+The API listens on:
 
 ```text
 127.0.0.1:8000
 ```
 
-`CareQueueCaddy` serves the frontend and proxies `/api` through private HTTPS.
+Caddy serves the built frontend and proxies `/api` through HTTPS.
 
 The Caddy configuration also applies browser security headers, including Content Security Policy, frame denial, content-type sniffing protection, referrer policy, permissions policy, and HSTS.
 
-A local installation may use a private hostname such as:
+The packaged private deployment uses:
 
 ```text
 https://carequeue.local
 ```
 
+with Caddy's internal certificate authority.
+
 Security assumptions for this deployment include:
 
 - The API remains bound to loopback.
-- Users access the application through the HTTPS origin.
-- The local hostname resolves only where intended.
+- Users access the application through the approved HTTPS origin.
+- The private hostname resolves only where intended.
 - The Caddy local root certificate is trusted only on approved systems.
-- Runtime files under `C:\ProgramData\CareQueue` have restricted permissions.
+- Production configuration, database, backup, recovery, and log locations have restricted permissions.
 - The production environment file is not readable by ordinary users.
-- Windows services run under an approved account.
+- Services run under approved restricted accounts.
 - Firewall and network policy prevent unintended exposure.
 
-The built-in Windows configuration is for private or restricted-network use. It is not a public internet deployment template.
+On Windows, runtime data is stored under `C:\ProgramData\CareQueue`.
 
-A public deployment would require additional review of DNS, certificates, firewall rules, service accounts, remote access, monitoring, patching, and incident response.
+On Linux, packaged deployment uses the dedicated `carequeue` service account and stores production configuration, data, and logs under restricted system paths documented in `docs/deployment/linux.md`.
+
+The built-in configurations are for private or restricted-network use. They are not public internet deployment templates.
+
+A public deployment would require separate review of DNS, publicly trusted certificates, firewall rules, service accounts, remote access, monitoring, patching, incident response, and the Caddy/hostname configuration.
 
 ## Service Accounts and Permissions
 
@@ -631,34 +725,28 @@ The Caddy service requires access to:
 
 Interactive user accounts should not receive production data access unless they are approved administrators.
 
-Permission changes should be tested after upgrades because inherited Windows ACLs can behave differently from explicit service-account grants.
+Permission changes should be tested after upgrades. Windows ACL inheritance and Linux ownership/mode changes can both produce permissions that differ from the intended service-account grants.
 
 ## Upgrade Security
 
-The Windows production installer preserves the production environment file and encryption keys during forced upgrades.
+Packaged Windows and Linux upgrade workflows preserve the existing production environment configuration and encryption keys rather than generating replacement keys during an ordinary upgrade.
 
-When running services are detected, the installer:
-
-- Stops Caddy first
-- Stops the API second
-- Replaces application files
-- Rebuilds the production backend environment
-- Validates the installed backend
-- Reapplies runtime permissions
-- Restarts the API
-- Restarts Caddy
-
-Only services that were previously running are restored.
+The deployment workflows replace application/runtime files, rebuild or refresh the production backend environment, validate the installed backend, reapply deployment configuration and permissions, and restart the required services.
 
 Before an upgrade:
 
 - Confirm a recent encrypted backup exists.
 - Confirm the backup key is available.
-- Review dependency changes.
+- Review dependency and deployment changes.
 - Test the upgrade in a non-production copy when possible.
-- Keep rollback and recovery instructions available.
+- Keep recovery instructions available.
+- Confirm service health after the upgrade.
+- Confirm backup scheduling remains active.
+- Confirm the application is reachable only through the intended HTTPS origin.
 
-An application upgrade is not a substitute for a database migration or recovery plan.
+Automated application rollback to a previous release is not currently provided for every supported deployment path. Keep the previously trusted release artifact and documented recovery procedures available until the upgrade has been validated.
+
+An application upgrade is not a substitute for a database migration, backup, restore, or disaster-recovery plan.
 
 ## Screenshots and Demonstrations
 
@@ -689,7 +777,9 @@ Examples include:
 
 - Authentication
 - Password handling
+- MFA and trusted-device handling
 - Session logic
+- Governance enforcement
 - CSRF behavior
 - Role dependencies
 - SQL construction
@@ -736,7 +826,8 @@ Before organizational use, complete and document at least:
 - Service-account configuration
 - Access approval and termination procedures
 - Periodic access review
-- Password and authentication policy
+- Password, MFA, and authentication policy
+- Governance attestation ownership and review
 - Device and workstation security
 - Logging and monitoring procedures
 - Audit review procedures

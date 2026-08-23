@@ -18,6 +18,8 @@ CareQueue supports the main parts of an authorization workflow:
 - Filter records by facility, payer, level of care, status, and due date
 - Review information extracted from intake PDFs before saving it
 - Manage users, roles, registered facilities, insurers, and portal details
+- Use TOTP MFA, remembered-device MFA, and server-enforced session controls
+- Complete versioned organization governance attestation before protected application access
 - Create encrypted backups and stage safe recoveries
 
 ## Screens and Workflow
@@ -30,8 +32,8 @@ The frontend includes:
 - Read-only detail views for reviewing a record without opening an edit form
 - Timeline event management
 - PDF intake review with confidence and needs-review indicators
-- Administrative pages for users and audit activity
-- Settings for facilities, insurers, portals, dashboard cards, and workflow preferences
+- Administrative pages for users, audit activity, governance status, and system health
+- Settings for facilities, insurers, portals, dashboard cards, MFA, and workflow preferences
 - Dark mode and local display preferences
 
 ## Security at a Glance
@@ -42,14 +44,21 @@ CareQueue includes several layers of application security:
 - Shared server-side password policy enforcement
 - Failed-login tracking and temporary account lockout
 - Role-based access for Admin, UR, and Read Only users
+- TOTP multi-factor authentication
+- Optional time-limited remembered devices for MFA
+- Single active authenticated session per account
 - Server-side sessions with hashed session tokens
 - Secure browser cookies
 - CSRF protection for authenticated changes
-- Session expiration and renewal controls
+- Configurable inactivity timeout with sliding session expiration
+- Session expiration warnings and explicit renewal
+- Cross-tab logout and expiration synchronization
+- Versioned organization governance attestation before protected application access
+- Append-only governance attestation history
 - Field-level encryption for selected sensitive values
 - SQLCipher support for encrypted database storage
 - Separately encrypted database backups
-- Audit logging for security and authorization activity
+- Tamper-evident audit chaining and integrity verification
 - Production log sanitization intended to keep credentials, tokens, and sensitive field values out of logs
 - Local PDF extraction through an isolated worker with timeout handling
 - Private HTTPS security headers, including Content Security Policy
@@ -63,9 +72,10 @@ CareQueue uses:
 
 - **Backend:** Python, FastAPI, Pydantic, SQLite, and SQLCipher
 - **Frontend:** React, TypeScript, Vite, and Tailwind CSS
-- **Authentication:** Secure cookie sessions, CSRF protection, and Argon2id
-- **Testing:** Pytest, Vitest, Testing Library, and Ruff
+- **Authentication:** Secure cookie sessions, CSRF protection, Argon2id, and TOTP MFA
+- **Testing:** Pytest, Vitest, Testing Library, Ruff, Bandit, and dependency audits
 - **Windows deployment:** WinSW services and Caddy for private HTTPS
+- **Linux deployment:** systemd services, Caddy, and versioned release archives
 
 ## Project Layout
 
@@ -81,7 +91,7 @@ CareQueue/
 │   └── src/                # React application
 ├── deployment/
 │   ├── windows/            # Production installer, services, Caddy, and backup tasks
-│   └── linux/              # Linux service and scheduling files
+│   └── linux/              # Release packaging, installer, Caddy, and systemd services
 ├── docs/                   # Longer workflow and operating documentation
 ├── ARCHITECTURE.md
 ├── SECURITY.md
@@ -99,7 +109,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for a technical description of how these 
 - Node.js and npm
 - A SQLCipher-compatible Python package when using SQLCipher mode
 
-The project is currently developed and tested on Windows. Other platforms may require small command or deployment changes.
+PowerShell examples in this README assume Windows development. Packaged production deployment is available for Windows and supported Debian-based Linux systems.
 
 ### Backend
 
@@ -154,15 +164,19 @@ http://localhost:5173
 
 The development environment file points the frontend directly to the local FastAPI server. Production builds use same-origin `/api` requests through the reverse proxy.
 
-## Create the First Admin
+## First-Time Setup
 
 CareQueue does not include public account registration.
 
 For a packaged Windows installation, the installer can launch the first-time Admin setup window after installation completes. The setup window creates the first Admin through the local CareQueue API without passing the password through command-line arguments.
 
-The first-time setup flow is available only while no users exist. After any user exists, the backend disables the initial Admin setup endpoint and the setup window will report that setup is already complete.
+The first-time setup flow is available only while no users exist. After any user exists, the backend disables the initial Admin setup endpoint and the setup utility reports that setup is already complete.
 
-For development or maintenance workflows, an Admin can also be created from the backend script.
+After the first Admin signs in, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available. The attestation records the organization, deployment mode, accepting Admin, acceptance time, CareQueue application version, and governance attestation version.
+
+The governance workflow supports organizational accountability. Accepting it does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
+
+For development or approved maintenance workflows, an Admin can also be created from the backend script.
 
 With the backend environment active and the root `.env` configured:
 
@@ -200,7 +214,8 @@ The current Windows deployment can:
 - Offer installer modes for Install, Upgrade, Repair, and Uninstall
 - Preserve runtime data during uninstall
 - Launch the first-time Admin setup GUI after installation
-- Run post-installation validation for services and loopback health
+- Require organization governance attestation after first Admin login
+- Run post-installation validation for services and application health
 - Install scheduled encrypted backups
 
 The packaged Windows installer is intended to be the normal private Windows installation path. The lower-level PowerShell scripts remain useful for development, troubleshooting, and direct validation of installer modes.
@@ -208,6 +223,39 @@ The packaged Windows installer is intended to be the normal private Windows inst
 The production installer is intended for private or restricted-network use. It should not be treated as a public internet deployment template without additional review and hardening.
 
 Technical deployment details belong in the deployment scripts and [ARCHITECTURE.md](ARCHITECTURE.md). Security responsibilities and limitations are covered in [SECURITY.md](SECURITY.md).
+
+## Linux Release Package
+
+CareQueue also includes a packaged Linux installation workflow under:
+
+```text
+deployment/linux/
+```
+
+The Linux release is distributed as a versioned archive:
+
+```text
+CareQueue-Linux-Setup-<version>.tar.gz
+```
+
+The packaged Linux workflow supports:
+
+- Install, Upgrade, Repair, and Uninstall modes
+- Supported Ubuntu and Debian validation
+- A dedicated `carequeue` service account
+- Production Python environment and frontend installation
+- Protected production configuration and encryption-key setup
+- CareQueue API and Caddy systemd services
+- Private HTTPS through `carequeue.local`
+- Caddy internal certificate trust setup
+- Encrypted backup service and timer
+- First-time Admin setup
+- Post-install frontend, liveness, and readiness validation
+- Preservation of production configuration and runtime data during upgrade and repair
+
+The Linux deployment is more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
+
+See [docs/deployment/linux.md](docs/deployment/linux.md) for installation and operational details.
 
 ## Backups and Recovery
 
@@ -264,8 +312,8 @@ python -m ruff check . --fix
 Additional security checks used during development include:
 
 ```powershell
-bandit -r authstatus_api
-pip-audit
+bandit -r authstatus_api scripts -c pyproject.toml
+python -m pip_audit -r requirements.txt
 ```
 
 ### Frontend
@@ -305,18 +353,23 @@ Use synthetic data in tests, screenshots, examples, and public documentation.
 
 ## Documentation
 
+- [docs/README.md](docs/README.md) is the documentation index.
 - [ARCHITECTURE.md](ARCHITECTURE.md) explains the technical structure and request flow.
 - [SECURITY.md](SECURITY.md) documents security controls, reporting, deployment assumptions, and limitations.
 - [ROADMAP.md](ROADMAP.md) tracks completed work and planned priorities.
 - [DISCLAIMER.md](DISCLAIMER.md) explains privacy, compliance, and use limitations.
 - [CONTRIBUTING.md](CONTRIBUTING.md) covers contribution and testing expectations.
+- [docs/deployment/windows.md](docs/deployment/windows.md) covers packaged Windows deployment.
+- [docs/deployment/linux.md](docs/deployment/linux.md) covers packaged Linux deployment.
+- [docs/administration/users-and-security.md](docs/administration/users-and-security.md) covers accounts, MFA, sessions, and governance.
+- [docs/administration/audit-log.md](docs/administration/audit-log.md) covers audit events and integrity verification.
 - [docs/workflows/backup-and-recovery.md](docs/workflows/backup-and-recovery.md) covers backup scheduling, restoration, and recovery.
 
 ## Status
 
-CareQueue is under active development. The core authorization workflow, authentication, encrypted storage options, encrypted backups, PDF-assisted intake, frontend testing, and private Windows deployment are implemented.
+CareQueue is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage options, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, private Windows deployment, and packaged Linux deployment are implemented.
 
-The roadmap still includes additional deployment documentation, upgrade and rollback improvements, broader browser-level testing, accessibility work, Linux deployment work, and a separate synthetic-data demo environment.
+Current roadmap priorities include clean-machine release validation, release signing and artifact trust, production smoke-test tooling, stronger upgrade and rollback handling, formal database migrations, broader end-to-end browser testing, accessibility work, and continued operational hardening.
 
 ## License
 
