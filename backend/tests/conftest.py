@@ -28,17 +28,28 @@ def isolate_test_settings(monkeypatch, tmp_path):
         "test",
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_APP_ENVIRONMENT",
-        "test",
-    )
-    monkeypatch.setenv(
         "AUTHSTATUS_DATABASE_ENCRYPTION",
         "plaintext",
     )
-    monkeypatch.setenv("AUTHSTATUS_DATABASE_ENCRYPTION", "plaintext")
     monkeypatch.setenv("AUTHSTATUS_SQLCIPHER_KEY", "")
     get_settings.cache_clear()
 
     yield
 
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def assume_current_governance_for_unrelated_tests(
+    monkeypatch,
+    request,
+):
+    test_path = Path(str(request.node.path))
+
+    if "governance" in test_path.parts:
+        return
+
+    monkeypatch.setattr(
+        "authstatus_api.security.dependencies.is_governance_attestation_current",
+        lambda: True,
+    )

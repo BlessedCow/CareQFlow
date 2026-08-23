@@ -36,6 +36,12 @@ import {
   type StagedRecovery,
   type SystemInfo,
 } from "../api/system";
+import {
+  fetchGovernanceAttestationHistory,
+  fetchGovernanceStatus,
+  type GovernanceAttestation,
+  type GovernanceStatus,
+} from "../api/governance";
 import { cn } from "../utils/cn";
 
 interface AdminSystemPageProps {
@@ -120,23 +126,41 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
     string | null
   >(null);
 
+  const [governanceStatus, setGovernanceStatus] =
+    useState<GovernanceStatus | null>(null);
+
+  const [governanceHistory, setGovernanceHistory] = useState<
+    GovernanceAttestation[]
+  >([]);
+
   const loadSystemData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const [health, info, readiness, backups, recoveryStatus] =
-        await Promise.all([
-          fetchApplicationHealth(),
-          fetchSystemInfo(),
-          fetchDatabaseReadiness(),
-          fetchRestorePoints(),
-          fetchRecoveryStatus(),
-        ]);
+      const [
+        health,
+        info,
+        readiness,
+        backups,
+        recoveryStatus,
+        governance,
+        governanceHistoryResult,
+      ] = await Promise.all([
+        fetchApplicationHealth(),
+        fetchSystemInfo(),
+        fetchDatabaseReadiness(),
+        fetchRestorePoints(),
+        fetchRecoveryStatus(),
+        fetchGovernanceStatus(),
+        fetchGovernanceAttestationHistory(),
+      ]);
 
       setApplicationHealth(health);
       setSystemInfo(info);
       setDatabaseReadiness(readiness);
+      setGovernanceStatus(governance);
+      setGovernanceHistory(governanceHistoryResult);
       setRestorePoints(backups);
       setStagedRecovery(
         recoveryStatus.pending ? recoveryStatus.recovery : null
@@ -801,6 +825,239 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
               </table>
             </div>
           )}
+        </section>
+      )}
+
+      {governanceStatus?.current && governanceStatus.attestation && (
+        <section
+          className={cardClass}
+          aria-labelledby="governance-attestation-heading"
+        >
+          <div className="mb-5 flex items-center gap-3">
+            <ShieldCheck className="h-6 w-6 text-blue-500" />
+
+            <div>
+              <h2
+                id="governance-attestation-heading"
+                className="text-lg font-semibold"
+              >
+                Governance Attestation
+              </h2>
+
+              <p
+                className={cn(
+                  "text-sm",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}
+              >
+                Recorded organization governance acknowledgment
+              </p>
+            </div>
+          </div>
+
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Status
+              </dt>
+
+              <dd className="mt-1 flex items-center gap-2 font-medium">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                Completed
+              </dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Organization
+              </dt>
+
+              <dd className="mt-1 break-words">
+                {governanceStatus.attestation.organization_name}
+              </dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Deployment
+              </dt>
+
+              <dd className="mt-1">
+                {governanceStatus.attestation.deployment_mode === "self_hosted"
+                  ? "Self-hosted"
+                  : "Managed deployment"}
+              </dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Attestation version
+              </dt>
+
+              <dd className="mt-1">
+                {governanceStatus.attestation.attestation_version}
+              </dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Accepted by
+              </dt>
+
+              <dd className="mt-1 break-all">
+                {governanceStatus.attestation.accepted_by_username}
+              </dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                Accepted
+              </dt>
+
+              <dd className="mt-1">
+                {formatDate(governanceStatus.attestation.accepted_at)}
+              </dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                CareQueue version
+              </dt>
+
+              <dd className="mt-1">
+                {governanceStatus.attestation.app_version}
+              </dd>
+            </div>
+          </dl>
+
+          <p
+            className={cn(
+              "mt-5 text-sm",
+              darkMode ? "text-gray-400" : "text-gray-600"
+            )}
+          >
+            Attestation history is retained as an append-only governance record
+            and acceptance is also recorded in the protected audit log.
+          </p>
+        </section>
+      )}
+
+      {governanceHistory.length > 0 && (
+        <section
+          className={cardClass}
+          aria-labelledby="governance-history-heading"
+        >
+          <div className="mb-5">
+            <h2
+              id="governance-history-heading"
+              className="text-lg font-semibold"
+            >
+              Governance Attestation History
+            </h2>
+
+            <p
+              className={cn(
+                "mt-1 text-sm",
+                darkMode ? "text-gray-400" : "text-gray-600"
+              )}
+            >
+              Historical governance acknowledgments are retained as read-only
+              records.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead>
+                <tr
+                  className={cn(
+                    "border-b",
+                    darkMode
+                      ? "border-gray-800 text-gray-400"
+                      : "border-gray-200 text-gray-600"
+                  )}
+                >
+                  <th className="px-3 py-3 font-medium">Version</th>
+                  <th className="px-3 py-3 font-medium">Organization</th>
+                  <th className="px-3 py-3 font-medium">Deployment</th>
+                  <th className="px-3 py-3 font-medium">Accepted by</th>
+                  <th className="px-3 py-3 font-medium">Accepted</th>
+                  <th className="px-3 py-3 font-medium">CareQueue version</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {governanceHistory.map((attestation) => (
+                  <tr
+                    key={attestation.id}
+                    className={cn(
+                      "border-b last:border-b-0",
+                      darkMode ? "border-gray-800" : "border-gray-100"
+                    )}
+                  >
+                    <td className="px-3 py-4 font-medium">
+                      {attestation.attestation_version}
+                    </td>
+
+                    <td className="max-w-xs break-words px-3 py-4">
+                      {attestation.organization_name}
+                    </td>
+
+                    <td className="px-3 py-4">
+                      {attestation.deployment_mode === "self_hosted"
+                        ? "Self-hosted"
+                        : "Managed deployment"}
+                    </td>
+
+                    <td className="break-all px-3 py-4">
+                      {attestation.accepted_by_username}
+                    </td>
+
+                    <td className="px-3 py-4">
+                      {formatDate(attestation.accepted_at)}
+                    </td>
+
+                    <td className="px-3 py-4">{attestation.app_version}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

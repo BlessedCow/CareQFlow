@@ -22,6 +22,10 @@ import {
   verifyRestorePoint,
 } from "../../api/system";
 import { AdminSystemPage } from "../AdminSystemPage";
+import {
+  fetchGovernanceStatus,
+  fetchGovernanceAttestationHistory,
+} from "../../api/governance";
 
 vi.mock("../../api/system", () => ({
   cancelDatabaseRecovery: vi.fn(),
@@ -36,6 +40,10 @@ vi.mock("../../api/system", () => ({
   stageDatabaseRecovery: vi.fn(),
   verifyAuditIntegrity: vi.fn(),
   verifyRestorePoint: vi.fn(),
+}));
+vi.mock("../../api/governance", () => ({
+  fetchGovernanceStatus: vi.fn(),
+  fetchGovernanceAttestationHistory: vi.fn(),
 }));
 
 const mockedFetchApplicationHealth = vi.mocked(fetchApplicationHealth);
@@ -52,6 +60,10 @@ const mockedFetchRecoveryStatus = vi.mocked(fetchRecoveryStatus);
 const mockedStageDatabaseRecovery = vi.mocked(stageDatabaseRecovery);
 const mockedCancelDatabaseRecovery = vi.mocked(cancelDatabaseRecovery);
 const mockedVerifyAuditIntegrity = vi.mocked(verifyAuditIntegrity);
+const mockedFetchGovernanceStatus = vi.mocked(fetchGovernanceStatus);
+const mockedFetchGovernanceAttestationHistory = vi.mocked(
+  fetchGovernanceAttestationHistory
+);
 
 const existingBackup = {
   filename: "auth_tracker_20260728.db.enc",
@@ -144,6 +156,47 @@ describe("AdminSystemPage", () => {
         probeable: false,
       },
     ]);
+    mockedFetchGovernanceStatus.mockReset();
+
+    mockedFetchGovernanceStatus.mockResolvedValue({
+      required_version: 1,
+      current: true,
+      attestation: {
+        id: 1,
+        attestation_version: 1,
+        organization_name: "Example Facility",
+        deployment_mode: "self_hosted",
+        accepted_by_user_id: 1,
+        accepted_by_username: "admin@example.com",
+        accepted_at: "2026-08-23T09:00:00+00:00",
+        app_version: "0.2.0",
+      },
+    });
+
+    mockedFetchGovernanceAttestationHistory.mockReset();
+
+    mockedFetchGovernanceAttestationHistory.mockResolvedValue([
+      {
+        id: 2,
+        attestation_version: 2,
+        organization_name: "Example Facility",
+        deployment_mode: "managed",
+        accepted_by_user_id: 1,
+        accepted_by_username: "admin@example.com",
+        accepted_at: "2026-08-23T10:00:00+00:00",
+        app_version: "0.3.0",
+      },
+      {
+        id: 1,
+        attestation_version: 1,
+        organization_name: "Example Facility",
+        deployment_mode: "self_hosted",
+        accepted_by_user_id: 1,
+        accepted_by_username: "admin@example.com",
+        accepted_at: "2026-08-23T09:00:00+00:00",
+        app_version: "0.2.0",
+      },
+    ]);
   });
 
   it("shows a successful audit integrity verification", async () => {
@@ -155,20 +208,20 @@ describe("AdminSystemPage", () => {
       failed_event_id: null,
       reason: null,
     });
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Verify Integrity",
       })
     );
-  
+
     expect(await screen.findByText("Integrity verified")).toBeInTheDocument();
-  
+
     expect(screen.getByText("42")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
-  
+
     expect(mockedVerifyAuditIntegrity).toHaveBeenCalledTimes(1);
   });
 
@@ -181,23 +234,23 @@ describe("AdminSystemPage", () => {
       failed_event_id: 8,
       reason: "Audit event integrity check failed.",
     });
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Verify Integrity",
       })
     );
-  
+
     expect(
       await screen.findByText("Integrity failure detected")
     ).toBeInTheDocument();
-  
+
     expect(
       screen.getByText("Audit event integrity check failed.")
     ).toBeInTheDocument();
-  
+
     expect(screen.getByText(/Failed event ID:/)).toBeInTheDocument();
     expect(screen.getByText(/Failed event ID:/)).toHaveTextContent("8");
   });
@@ -215,19 +268,19 @@ describe("AdminSystemPage", () => {
       max_failures_single_ip: 2,
       severity: "normal",
     });
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Refresh Monitoring",
       })
     );
-  
+
     expect(
       await screen.findByText("Security activity normal")
     ).toBeInTheDocument();
-  
+
     expect(screen.getByText("Last 24 hours")).toBeInTheDocument();
     expect(screen.getByText("Total failures")).toBeInTheDocument();
   });
@@ -245,22 +298,22 @@ describe("AdminSystemPage", () => {
       max_failures_single_ip: 5,
       severity: "elevated",
     });
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Refresh Monitoring",
       })
     );
-  
+
     expect(
       await screen.findByText("Elevated security activity")
     ).toBeInTheDocument();
-  
-    expect(
-      screen.getByText(/Highest failures from one IP:/)
-    ).toHaveTextContent("5");
+
+    expect(screen.getByText(/Highest failures from one IP:/)).toHaveTextContent(
+      "5"
+    );
   });
 
   it("shows high security monitoring activity", async () => {
@@ -276,19 +329,19 @@ describe("AdminSystemPage", () => {
       max_failures_single_ip: 5,
       severity: "high",
     });
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Refresh Monitoring",
       })
     );
-  
+
     expect(
       await screen.findByText("High security activity")
     ).toBeInTheDocument();
-  
+
     expect(
       screen.getByText(/Highest failures for one username:/)
     ).toHaveTextContent("5");
@@ -298,19 +351,19 @@ describe("AdminSystemPage", () => {
     mockedFetchSecurityMonitoringSummary.mockRejectedValue(
       new Error("Security monitoring is unavailable.")
     );
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Refresh Monitoring",
       })
     );
-  
+
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Security monitoring is unavailable."
     );
-  
+
     expect(
       screen.queryByText("Security activity normal")
     ).not.toBeInTheDocument();
@@ -325,19 +378,19 @@ describe("AdminSystemPage", () => {
       failed_event_id: null,
       reason: null,
     });
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Verify Integrity",
       })
     );
-  
+
     expect(
       await screen.findByText("Protected audit chain not initialized")
     ).toBeInTheDocument();
-  
+
     expect(screen.getByText("5")).toBeInTheDocument();
   });
 
@@ -345,22 +398,20 @@ describe("AdminSystemPage", () => {
     mockedVerifyAuditIntegrity.mockRejectedValue(
       new Error("Unable to verify audit log integrity.")
     );
-  
+
     render(<AdminSystemPage darkMode={false} />);
-  
+
     fireEvent.click(
       await screen.findByRole("button", {
         name: "Verify Integrity",
       })
     );
-  
-    expect(
-      await screen.findByRole("alert")
-    ).toHaveTextContent("Unable to verify audit log integrity.");
-  
-    expect(
-      screen.queryByText("Integrity verified")
-    ).not.toBeInTheDocument();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to verify audit log integrity."
+    );
+
+    expect(screen.queryByText("Integrity verified")).not.toBeInTheDocument();
   });
 
   it("shows that no recovery is currently staged", async () => {
@@ -908,5 +959,42 @@ describe("AdminSystemPage", () => {
         name: "Verified",
       })
     ).toBeDisabled();
+  });
+
+  it("shows the completed governance attestation", async () => {
+    render(<AdminSystemPage darkMode={false} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Governance Attestation",
+      })
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getAllByText("Example Facility").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Self-hosted").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("0.2.0").length).toBeGreaterThan(0);
+
+    expect(mockedFetchGovernanceStatus).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getAllByText("admin@example.com").length
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows governance attestation history", async () => {
+    render(<AdminSystemPage darkMode={false} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Governance Attestation History",
+      })
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("Managed deployment")).toBeInTheDocument();
+    expect(screen.getAllByText("Self-hosted").length).toBeGreaterThan(0);
+    expect(screen.getByText("0.3.0")).toBeInTheDocument();
+    expect(screen.getAllByText("0.2.0").length).toBeGreaterThan(0);
+
+    expect(mockedFetchGovernanceAttestationHistory).toHaveBeenCalledTimes(1);
   });
 });

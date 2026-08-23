@@ -4,6 +4,9 @@ from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request, Response, status
 
+from authstatus_api.governance.repository import (
+    is_governance_attestation_current,
+)
 from authstatus_api.security.csrf import validate_csrf_request
 from authstatus_api.security.sessions import touch_session
 from authstatus_api.security.users import get_user_for_session_token
@@ -64,6 +67,12 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Password change required.",
+        )
+
+    if not is_governance_attestation_current():
+        raise HTTPException(
+            status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+            detail="Governance attestation required.",
         )
 
     return authenticated_user

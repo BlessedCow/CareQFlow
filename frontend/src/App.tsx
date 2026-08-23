@@ -8,6 +8,10 @@ import {
   subscribeToSessionLogout,
 } from "./api/client";
 
+// Governance
+import { fetchGovernanceStatus, type GovernanceStatus } from "./api/governance";
+import { resolveGovernanceAccess } from "./governance/resolveGovernanceAccess";
+
 // Security
 import {
   fetchCurrentUser,
@@ -18,6 +22,7 @@ import {
 
 // Components
 import { LoginPage } from "./components/LoginPage";
+import { GovernanceAttestationPage } from "./components/GovernanceAttestationPage";
 import { RequiredPasswordChangePage } from "./components/RequiredPasswordChangePage";
 import { SessionTimeoutManager } from "./components/SessionTimeoutManager";
 
@@ -58,6 +63,9 @@ function App() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [governanceStatus, setGovernanceStatus] =
+    useState<GovernanceStatus | null>(null);
+  const [governanceError, setGovernanceError] = useState<string | null>(null);
 
   useSessionActivity(currentUser !== null);
 
@@ -92,8 +100,19 @@ function App() {
     handleRemoveWebPortal,
   } = useRegisteredOptions(
     authRequests,
-    Boolean(currentUser && !currentUser.must_change_password)
+    Boolean(
+      currentUser &&
+        !currentUser.must_change_password &&
+        governanceStatus?.current
+    )
   );
+
+  const governanceAccessState = resolveGovernanceAccess({
+    currentUser,
+    governanceStatus,
+    governanceError,
+    isCheckingSession,
+  });
 
   const { workflowViewMode, setWorkflowViewMode } = useWorkflowViewMode();
 
@@ -182,25 +201,60 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    if (!currentUser || currentUser.must_change_password) {
+      setGovernanceStatus(null);
+      setGovernanceError(null);
+
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    async function loadGovernanceStatus() {
+      try {
+        setGovernanceError(null);
+
+        const status = await fetchGovernanceStatus();
+
+        if (isMounted) {
+          setGovernanceStatus(status);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setGovernanceStatus(null);
+          setGovernanceError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load governance status."
+          );
+        }
+      }
+    }
+
+    void loadGovernanceStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
     return subscribeToSessionExpiration((expiresAt) => {
       setSessionExpiresAt((currentExpiration) => {
         if (!currentExpiration) {
           return expiresAt;
         }
-  
+
         const currentTime = Date.parse(currentExpiration);
         const updatedTime = Date.parse(expiresAt);
-  
-        if (
-          Number.isNaN(currentTime) ||
-          Number.isNaN(updatedTime)
-        ) {
+
+        if (Number.isNaN(currentTime) || Number.isNaN(updatedTime)) {
           return currentExpiration;
         }
-  
-        return updatedTime > currentTime
-          ? expiresAt
-          : currentExpiration;
+
+        return updatedTime > currentTime ? expiresAt : currentExpiration;
       });
     });
   }, []);
@@ -215,7 +269,11 @@ function App() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!currentUser || currentUser.must_change_password) {
+    if (
+      !currentUser ||
+      currentUser.must_change_password ||
+      !governanceStatus?.current
+    ) {
       setIsLoadingAuths(false);
       setAuthsError(null);
 
@@ -254,7 +312,7 @@ function App() {
     return () => {
       isMounted = false;
     };
-  }, [currentUser]);
+  }, [currentUser, governanceStatus?.current]);
 
   const {
     showAddAuthForm,
@@ -374,12 +432,16 @@ function App() {
   const handleLogin = (authSession: AuthSession) => {
     setCurrentUser(authSession.user);
     setSessionExpiresAt(authSession.session.expires_at);
+    setGovernanceStatus(null);
+    setGovernanceError(null);
     setActivePage("dashboard");
   };
 
   const clearAuthenticatedState = useCallback(() => {
     setCurrentUser(null);
     setSessionExpiresAt(null);
+    setGovernanceStatus(null);
+    setGovernanceError(null);
     setAuthRequests([]);
     clearAuthEvents();
     handleCancelAuthForm();
@@ -425,7 +487,7 @@ function App() {
     );
   }, []);
 
-  if (isCheckingSession) {
+  if (governanceAccessState === "loading") {
     return (
       <div
         className={
@@ -435,11 +497,11 @@ function App() {
     );
   }
 
-  if (!currentUser) {
+  if (governanceAccessState === "unauthenticated") {
     return <LoginPage darkMode={darkMode} onLogin={handleLogin} />;
   }
 
-  if (currentUser.must_change_password) {
+  if (governanceAccessState === "password_change_required" && currentUser) {
     return (
       <RequiredPasswordChangePage
         darkMode={darkMode}
@@ -447,6 +509,74 @@ function App() {
         onPasswordChanged={handleRequiredPasswordChanged}
         onLogout={handleLogout}
       />
+    );
+  }
+
+  if (governanceAccessState === "error") {
+    return (
+      <main
+        className={
+          darkMode
+            ? "flex min-h-screen items-center justify-center bg-gray-950 px-4 text-gray-100"
+            : "flex min-h-screen items-center justify-center bg-gray-50 px-4 text-gray-900"
+        }
+      >
+        <div className="w-full max-w-lg text-center">
+          <h1 className="mb-2 text-xl font-semibold">
+            Unable to load governance status
+          </h1>
+
+          <p className="mb-6 text-sm opacity-75">
+            {governanceError ?? "Unable to load governance status."}
+          </p>
+
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
+          >
+            Sign out
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (
+    governanceAccessState === "attestation_required" &&
+    governanceStatus &&
+    currentUser
+  ) {
+    return (
+      <>
+        <GovernanceAttestationPage
+          darkMode={darkMode}
+          username={currentUser.username}
+          requiredVersion={governanceStatus.required_version}
+          canAccept={currentUser.role === "Admin"}
+          onAccepted={(attestation) => {
+            setGovernanceStatus({
+              required_version: governanceStatus.required_version,
+              current: true,
+              attestation,
+            });
+          }}
+          onLogout={handleLogout}
+        />
+
+        {sessionExpiresAt && (
+          <SessionTimeoutManager
+            darkMode={darkMode}
+            expiresAt={sessionExpiresAt}
+            showTimer={showSessionTimer}
+            onSessionRenewed={setSessionExpiresAt}
+            onSessionExpired={handleSessionExpired}
+            onLogout={() => {
+              void handleLogout();
+            }}
+          />
+        )}
+      </>
     );
   }
 
@@ -458,6 +588,13 @@ function App() {
       clearAuthenticatedState();
     }
   };
+
+  if (
+    governanceAccessState !== "ready" ||
+    !currentUser
+  ) {
+    return null;
+  }
 
   const canManageAuthorizations =
     currentUser.role === "Admin" || currentUser.role === "UR";

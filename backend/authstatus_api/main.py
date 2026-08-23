@@ -10,6 +10,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from authstatus_api.backups.router import router as backups_router
 from authstatus_api.errors import register_exception_handlers
+from authstatus_api.governance.router import router as governance_router
 from authstatus_api.observability.logging import (
     configure_application_logging,
 )
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     api.include_router(security_router)
+    api.include_router(governance_router)
     api.include_router(backups_router)
     api.include_router(system_router)
     api.include_router(auths_router)

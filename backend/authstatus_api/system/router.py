@@ -32,6 +32,10 @@ INITIAL_SETUP_ENDPOINTS = {
     ("POST", "/api/security/setup-initial-admin"),
 }
 
+AUTHENTICATED_ENDPOINTS = {
+    ("GET", "/api/governance/status"),
+}
+
 ADMIN_UR_ENDPOINTS = {
     ("DELETE", "/api/auths/{auth_id}"),
     ("DELETE", "/api/auths/{auth_id}/documents/{document_id}"),
@@ -57,6 +61,7 @@ ADMIN_ENDPOINTS = {
     ("POST", "/api/admin/system/backups"),
     ("POST", "/api/admin/system/backups/recovery/stage"),
     ("POST", "/api/admin/system/backups/verify"),
+    ("POST", "/api/governance/attestations"),
     ("POST", "/api/registered-options"),
     ("POST", "/api/security/audit-events/verify-integrity"),
     ("POST", "/api/security/users"),
@@ -83,6 +88,9 @@ def _endpoint_access(
 
     if endpoint in INITIAL_SETUP_ENDPOINTS:
         return "initial_setup"
+
+    if endpoint in AUTHENTICATED_ENDPOINTS:
+        return "authenticated"
 
     if endpoint in ADMIN_UR_ENDPOINTS:
         return "admin_ur"
