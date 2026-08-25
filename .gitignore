@@ -82,3 +82,10 @@ backend/wheelhouse/
 
 # Local Windows installer source assets
 local_installer_assets/
+
+# Generated software bills of materials
+carequeue-backend.cdx.json
+carequeue-frontend.cdx.json
+
+# Local Safety CLI project metadata
+backend/.safety-project.ini

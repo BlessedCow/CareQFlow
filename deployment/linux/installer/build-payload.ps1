@@ -100,9 +100,11 @@ $frontendDestination = Join-Path `
     $stagingDirectory `
     "frontend\dist"
 
+<#
 $deploymentDestination = Join-Path `
     $stagingDirectory `
     "deployment"
+#>
 
 Write-Host "Copying backend production files..."
 
@@ -234,8 +236,18 @@ $hash = Get-FileHash `
     -LiteralPath $packagePath `
     -Algorithm SHA256
 
+$checksumPath = "$packagePath.sha256"
+
+"{0}  {1}" -f `
+    $hash.Hash.ToLowerInvariant(), `
+    $package.Name |
+Set-Content `
+    -LiteralPath $checksumPath `
+    -Encoding ascii
+
 Write-Host ""
 Write-Host "CareQueue Linux installer package created successfully."
-Write-Host "Package: $($package.FullName)"
-Write-Host "Size: $($package.Length) bytes"
-Write-Host "SHA256: $($hash.Hash)"
+Write-Host "Package:  $($package.FullName)"
+Write-Host "Size:     $($package.Length) bytes"
+Write-Host "SHA256:   $($hash.Hash)"
+Write-Host "Checksum: $checksumPath"
