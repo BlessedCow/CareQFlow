@@ -249,7 +249,17 @@ $installerHash = Get-FileHash `
     -LiteralPath $resolvedInstallerPath `
     -Algorithm SHA256
 
+$installerChecksumPath = "$resolvedInstallerPath.sha256"
+
+"{0}  {1}" -f `
+    $installerHash.Hash.ToLowerInvariant(), `
+    $installerItem.Name |
+Set-Content `
+    -LiteralPath $installerChecksumPath `
+    -Encoding ascii
+
 Write-Status ("Installer SHA256: {0}" -f $installerHash.Hash)
+Write-Status ("Installer checksum: {0}" -f $installerChecksumPath)
 
 if ($SkipInstalledAppChecks) {
     Write-Status "Skipping installed application checks."
@@ -264,9 +274,15 @@ Assert-ServiceRunning -Name "CareQueueCaddy"
 
 Write-Status "Checking API health endpoint..."
 
+$applicationUri = [Uri]$ApplicationUrl
+$trustedHostHeader = $applicationUri.Authority
+
 $healthResponse = Invoke-RestMethod `
     -Method Get `
     -Uri $ApiHealthUrl `
+    -Headers @{
+        Host = $trustedHostHeader
+    } `
     -TimeoutSec 10
 
 if ($healthResponse.status -ne "ok") {

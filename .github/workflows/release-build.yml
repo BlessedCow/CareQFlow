@@ -1,0 +1,275 @@
+name: Release build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  linux:
+    name: Linux release package
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Linux release package
+        shell: pwsh
+        run: .\deployment\linux\installer\build-payload.ps1
+
+      - name: Verify Linux release checksum
+        shell: pwsh
+        run: |
+          $checksumFile = Get-ChildItem `
+              .\build\linux\installer\*.sha256 |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 1
+
+          if (-not $checksumFile) {
+              throw "Linux release checksum file was not generated."
+          }
+
+          $packageFile = $checksumFile.FullName -replace '\.sha256$'
+
+          $expectedHash = (
+              Get-Content $checksumFile.FullName
+          ).Split(" ")[0]
+
+          $actualHash = (
+              Get-FileHash `
+                  -Algorithm SHA256 `
+                  $packageFile
+          ).Hash.ToLowerInvariant()
+
+          if ($actualHash -ne $expectedHash) {
+              throw "Linux release package checksum verification failed."
+          }
+
+          Write-Host "Linux release package checksum verified."
+
+      - name: Attest Linux release package
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: build/linux/installer/CareQueue-Linux-Setup-*.tar.gz
+
+      - name: Upload Linux release package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: carequeue-linux-release
+          path: |
+            build/linux/installer/CareQueue-Linux-Setup-*.tar.gz
+            build/linux/installer/CareQueue-Linux-Setup-*.tar.gz.sha256
+          if-no-files-found: error
+
+  windows:
+    name: Windows release package
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Download and verify embedded Python
+        shell: pwsh
+        run: |
+          $assetDirectory = Join-Path $env:RUNNER_TEMP "carequeue-assets"
+
+          New-Item `
+              -ItemType Directory `
+              -Path $assetDirectory `
+              -Force |
+          Out-Null
+
+          $pythonArchive = Join-Path `
+              $assetDirectory `
+              "python-3.14.6-embed-amd64.zip"
+
+          Invoke-WebRequest `
+              -Uri "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip" `
+              -OutFile $pythonArchive
+
+          $expectedHash = "df901e84a896ff1ee720ad03377e0c8d8c2244fda79808aeeaff6316df1cb75c"
+
+          $actualHash = (
+              Get-FileHash `
+                  -LiteralPath $pythonArchive `
+                  -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+
+          if ($actualHash -ne $expectedHash) {
+              throw "Embedded Python SHA256 verification failed."
+          }
+
+          Write-Host "Embedded Python SHA256 verified."
+
+      - name: Download and verify Inno Setup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assetDirectory = Join-Path $env:RUNNER_TEMP "carequeue-assets"
+
+          gh release download is-7_0_2 `
+              --repo jrsoftware/issrc `
+              --pattern "innosetup-7.0.2-x64.exe" `
+              --dir $assetDirectory
+
+          $innoInstaller = Join-Path `
+              $assetDirectory `
+              "innosetup-7.0.2-x64.exe"
+
+          gh release verify-asset `
+              $innoInstaller `
+              --repo jrsoftware/issrc
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Inno Setup release attestation verification failed."
+          }
+
+          Write-Host "Inno Setup release attestation verified."
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $assetDirectory = Join-Path $env:RUNNER_TEMP "carequeue-assets"
+
+          $innoInstaller = Join-Path `
+              $assetDirectory `
+              "innosetup-7.0.2-x64.exe"
+
+          $innoDirectory = Join-Path `
+              $env:RUNNER_TEMP `
+              "InnoSetup"
+
+          $process = Start-Process `
+              -FilePath $innoInstaller `
+              -ArgumentList @(
+                  "/VERYSILENT",
+                  "/SUPPRESSMSGBOXES",
+                  "/NORESTART",
+                  "/DIR=$innoDirectory"
+              ) `
+              -Wait `
+              -PassThru
+
+          if ($process.ExitCode -ne 0) {
+              throw (
+                  "Inno Setup installation failed with exit code " +
+                  $process.ExitCode
+              )
+          }
+
+          $compiler = Join-Path `
+              $innoDirectory `
+              "ISCC.exe"
+
+          if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+              throw "ISCC.exe was not found after installing Inno Setup."
+          }
+
+          Write-Host "Inno Setup installed successfully."
+
+      - name: Build Windows payload
+        shell: pwsh
+        run: |
+          $pythonArchive = Join-Path `
+              $env:RUNNER_TEMP `
+              "carequeue-assets\python-3.14.6-embed-amd64.zip"
+
+          .\deployment\windows\installer\build-payload.ps1 `
+              -EmbeddedPythonArchive $pythonArchive
+
+      - name: Compile Windows installer
+        shell: pwsh
+        run: |
+          $compiler = Join-Path `
+              $env:RUNNER_TEMP `
+              "InnoSetup\ISCC.exe"
+
+          & $compiler `
+              ".\deployment\windows\installer\CareQueue.iss"
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Inno Setup compilation failed."
+          }
+
+      - name: Validate Windows release package
+        shell: pwsh
+        run: >
+          .\deployment\windows\installer\validate-release-package.ps1
+          -SkipInstalledAppChecks
+
+      - name: Verify Windows release checksum
+        shell: pwsh
+        run: |
+          $checksumFile = Get-ChildItem `
+              .\build\windows\installer\*.exe.sha256 |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 1
+
+          if (-not $checksumFile) {
+              throw "Windows release checksum file was not generated."
+          }
+
+          $packageFile = $checksumFile.FullName -replace '\.sha256$'
+
+          $expectedHash = (
+              Get-Content $checksumFile.FullName
+          ).Split(" ")[0]
+
+          $actualHash = (
+              Get-FileHash `
+                  -LiteralPath $packageFile `
+                  -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+
+          if ($actualHash -ne $expectedHash) {
+              throw "Windows release package checksum verification failed."
+          }
+
+          Write-Host "Windows release package checksum verified."
+
+      - name: Attest Windows release package
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: build/windows/installer/CareQueue-Setup-*.exe
+
+      - name: Upload Windows release package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: carequeue-windows-release
+          path: |
+            build/windows/installer/CareQueue-Setup-*.exe
+            build/windows/installer/CareQueue-Setup-*.exe.sha256
+          if-no-files-found: error

@@ -125,7 +125,7 @@ def test_admin_can_get_system_info(client):
     assert response.status_code == 200
     assert response.json() == {
         "app": "AuthStatus API",
-        "version": "0.2.0",
+        "version": get_settings().app_version,
     }
 
 

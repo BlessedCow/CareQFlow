@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.14"
           cache: pip
@@ -41,6 +41,30 @@ jobs:
       - name: Run pip-audit
         run: python -m pip_audit -r backend\requirements.txt
 
+      - name: Run Safety
+        if: >
+          github.event_name != 'pull_request' ||
+          (
+            github.actor != 'dependabot[bot]' &&
+            github.event.pull_request.head.repo.full_name == github.repository
+          )
+        env:
+          SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
+        run: safety --key "$env:SAFETY_API_KEY" scan --target backend
+
+      - name: Generate backend SBOM
+        run: >
+          cyclonedx-py environment
+          --output-reproducible
+          --output-file carequeue-backend.cdx.json
+
+      - name: Upload backend SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: carequeue-backend-sbom
+          path: carequeue-backend.cdx.json
+          if-no-files-found: error
+
       - name: Run backend tests
         run: pytest backend\tests -n auto -q
 
@@ -50,10 +74,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "24"
           cache: npm
@@ -66,6 +90,20 @@ jobs:
       - name: Run npm audit
         working-directory: frontend
         run: npm audit
+
+      - name: Generate frontend SBOM
+        working-directory: frontend
+        run: >
+          npx @cyclonedx/cyclonedx-npm
+          --output-reproducible
+          --output-file ..\carequeue-frontend.cdx.json
+
+      - name: Upload frontend SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: carequeue-frontend-sbom
+          path: carequeue-frontend.cdx.json
+          if-no-files-found: error
 
       - name: Run frontend tests
         working-directory: frontend
