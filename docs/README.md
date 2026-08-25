@@ -73,6 +73,27 @@ Use it for:
 - Logging and audit boundaries
 - Production responsibilities
 
+### Threat Model and Risk Register
+
+See:
+
+```text
+security/threat-model-and-risk-register.md
+```
+
+Use it for:
+
+- Protected assets and security objectives
+- Threat actors and attacker capabilities
+- Application and deployment trust boundaries
+- Representative abuse cases
+- Existing security controls
+- Residual security risks
+- Risk likelihood and impact assessment
+- Planned mitigations and remediation priorities
+- Security review triggers
+- Security roadmap risk mapping
+
 ### Roadmap
 
 See:
@@ -411,6 +432,8 @@ docs/
 ├── operations/
 │   ├── health-checks.md
 │   └── upgrades.md
+├── security/
+│   └── threat-model-and-risk-register.md
 ├── troubleshooting/
 │   └── index.md
 └── workflows/

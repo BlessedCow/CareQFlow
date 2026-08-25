@@ -812,6 +812,30 @@ npm run build
 
 PowerShell, Caddy, WinSW, systemd, and certificate changes also require platform-specific manual validation.
 
+## Threat Model and Risk Register
+
+CareQueue maintains a formal threat model and risk register covering application, deployment, operational, and supply-chain risks.
+
+See:
+
+```text
+docs/security/threat-model-and-risk-register.md
+```
+
+The threat model documents:
+
+- Protected assets and security objectives
+- Threat actors and attacker capabilities
+- Application and deployment trust boundaries
+- Representative abuse cases
+- Existing security controls
+- Residual risks
+- Risk likelihood and impact
+- Planned mitigations and remediation priorities
+- Security review triggers
+
+The risk register should be reviewed when security boundaries, authentication behavior, encryption, deployment architecture, privileged workflows, external dependencies, or release processes materially change.
+
 ## Production Readiness
 
 CareQueue is not independently production-ready or HIPAA compliant.
