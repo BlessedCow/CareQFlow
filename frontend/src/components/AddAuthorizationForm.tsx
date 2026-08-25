@@ -209,6 +209,7 @@ export function AddAuthorizationForm({
   };
   return (
     <form
+      data-walkthrough="authorization-form"
       onSubmit={handleSubmit}
       noValidate
       className={cn(
@@ -220,6 +221,7 @@ export function AddAuthorizationForm({
     >
       {allowPdfIntake && (
         <section
+          data-walkthrough="pdf-intake"
           className={cn(
             "rounded-xl border p-4 md:col-span-2",
             darkMode

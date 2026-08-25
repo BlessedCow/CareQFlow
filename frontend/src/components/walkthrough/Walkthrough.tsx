@@ -16,99 +16,110 @@ interface WalkthroughStep {
   description: string;
   page: AppPage;
   target?: string;
+  requiredAction?: "click" | "count-increase-if-empty";
 }
 
 const WALKTHROUGH_STEPS: WalkthroughStep[] = [
-  {
-    title: "Welcome to CareQueue",
-    description:
-      "This walkthrough introduces the main workflow areas in CareQueue. You can move backward or forward at any time, or skip the walkthrough entirely.",
-    page: "dashboard",
-  },
-  {
-    title: "Dashboard",
-    description:
-      "The Dashboard gives you a high-level view of authorization workload, upcoming reviews, trends, and recent activity.",
-    page: "dashboard",
-    target: '[data-walkthrough="nav-dashboard"]',
-  },
-  {
-    title: "Authorizations",
-    description:
-      "The Authorizations page is the main work queue. This is where authorization records are created, reviewed, edited, and followed over time.",
-    page: "authorizations",
-    target: '[data-walkthrough="nav-authorizations"]',
-  },
-  {
-    title: "Add an authorization",
-    description:
-      "Use Add Authorization to create a new authorization record. The form includes client, payer, facility, level of care, authorization dates, submission details, and workflow information.",
-    page: "authorizations",
-    target: '[data-walkthrough="add-authorization"]',
-  },
-  {
-    title: "PDF intake",
-    description:
-      "When creating a new initial authorization, CareQueue can review a PDF and propose values for the form. The PDF is processed in memory and the extracted information must be reviewed before it is applied.",
-    page: "authorizations",
-    target: '[data-walkthrough="add-authorization"]',
-  },
-  {
-    title: "Concurrent reviews and level of care changes",
-    description:
-      "Existing authorization records can be continued through timeline events and concurrent review workflow. Level of care changes create a new authorization record linked to the prior workflow context.",
-    page: "authorizations",
-    target: '[data-walkthrough="nav-authorizations"]',
-  },
-  {
-    title: "Denials, P2P, appeals, and retro follow-up",
-    description:
-      "Use this workflow to track denials, peer-to-peer reviews, appeals, retro authorizations, follow-up dates, and related outcomes.",
-    page: "denials-pipeline",
-    target: '[data-walkthrough="nav-denials-pipeline"]',
-  },
-  {
-    title: "Calendar",
-    description:
-      "The Calendar helps you track review dates, LCDs, and upcoming authorization activity across your work queue.",
-    page: "calendar",
-    target: '[data-walkthrough="nav-calendar"]',
-  },
-  {
-    title: "Settings",
-    description:
-      "Settings contains the registered options used throughout CareQueue, along with workflow display, security, and account preferences.",
-    page: "settings",
-    target: '[data-walkthrough="nav-settings"]',
-  },
-  {
-    title: "Registered Facilities",
-    description:
-      "Add the facilities your organization works with here. These facilities become available when creating authorization records.",
-    page: "settings",
-    target: '[data-walkthrough="registered-facilities"]',
-  },
-  {
-    title: "Registered Insurances",
-    description:
-      "Add payer and insurance names here before creating authorization records. These values populate the insurance selections throughout the application.",
-    page: "settings",
-    target: '[data-walkthrough="registered-insurances"]',
-  },
-  {
-    title: "Web Portals",
-    description:
-      "Register payer portal names here. These options can then be selected when documenting web portal submissions.",
-    page: "settings",
-    target: '[data-walkthrough="registered-web-portals"]',
-  },
-  {
-    title: "You're ready to use CareQueue",
-    description:
-      "You can now begin configuring your facilities and payers, creating authorizations, tracking reviews, and managing follow-up work.",
-    page: "dashboard",
-  },
-];
+    {
+      title: "Welcome to CareQueue",
+      description:
+        "This walkthrough will guide you through the basic CareQueue setup and authorization workflow. You can skip the walkthrough at any time.",
+      page: "dashboard",
+    },
+    {
+      title: "Dashboard",
+      description:
+        "The Dashboard gives you a high-level view of authorization workload, upcoming reviews, trends, and recent activity.",
+      page: "dashboard",
+      target: '[data-walkthrough="nav-dashboard"]',
+    },
+    {
+      title: "Settings",
+      description:
+        "Start in Settings by configuring the facilities and insurance plans used by your organization.",
+      page: "settings",
+      target: '[data-walkthrough="nav-settings"]',
+    },
+    {
+      title: "Add your facilities",
+      description:
+        "Facilities are used when creating authorization records. If no facilities are registered yet, add at least one facility before continuing.",
+      page: "settings",
+      target: '[data-walkthrough="registered-facilities"]',
+      requiredAction: "count-increase-if-empty",
+    },
+    {
+      title: "Add your insurances",
+      description:
+        "Insurance names registered here become available when creating and filtering authorization records. If none are registered yet, add at least one before continuing.",
+      page: "settings",
+      target: '[data-walkthrough="registered-insurances"]',
+      requiredAction: "count-increase-if-empty",
+    },
+    {
+      title: "Web Portals",
+      description:
+        "You can also register payer web portals here. Add the portals your organization uses when applicable. This setup is optional.",
+      page: "settings",
+      target: '[data-walkthrough="registered-web-portals"]',
+    },
+    {
+      title: "Authorizations",
+      description:
+        "The Authorizations page is the main work queue. This is where authorization records are created, reviewed, edited, and followed over time.",
+      page: "authorizations",
+      target: '[data-walkthrough="nav-authorizations"]',
+    },
+    {
+      title: "Add an authorization",
+      description:
+        'Click "Add Authorization" to open the authorization form. The walkthrough will wait here until you open it.',
+      page: "authorizations",
+      target: '[data-walkthrough="add-authorization"]',
+      requiredAction: "click",
+    },
+    {
+      title: "Authorization form",
+      description:
+        "This form contains the information used to track an authorization, including the client, facility, insurance, level of care, authorization dates, and payer workflow details.",
+      page: "authorizations",
+      target: '[data-walkthrough="authorization-form"]',
+    },
+    {
+      title: "PDF intake",
+      description:
+        "For a new initial authorization, you can optionally select a supported PDF and ask CareQueue to propose values for the form. The PDF is processed in memory and you review the extracted values before applying them.",
+      page: "authorizations",
+      target: '[data-walkthrough="pdf-intake"]',
+    },
+    {
+      title: "Concurrent reviews and level of care changes",
+      description:
+        "Existing authorization workflows can later be continued through concurrent reviews, timeline events, and level of care changes. The walkthrough will cover these workflows separately.",
+      page: "authorizations",
+      target: '[data-walkthrough="authorization-form"]',
+    },
+    {
+      title: "Denials, P2P, appeals, and retro follow-up",
+      description:
+        "CareQueue also includes a dedicated workflow for denials, peer-to-peer reviews, appeals, retro authorizations, and follow-up activity.",
+      page: "denials-pipeline",
+      target: '[data-walkthrough="nav-denials-pipeline"]',
+    },
+    {
+      title: "Calendar",
+      description:
+        "The Calendar helps you track review dates, LCDs, and upcoming authorization activity across your work queue.",
+      page: "calendar",
+      target: '[data-walkthrough="nav-calendar"]',
+    },
+    {
+      title: "You're ready to use CareQueue",
+      description:
+        "The basic setup walkthrough is complete. You can now create and manage authorization workflows using the facilities and payers you configured.",
+      page: "dashboard",
+    },
+  ];
 
 export function Walkthrough({
   darkMode,
@@ -122,10 +133,14 @@ export function Walkthrough({
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [requiredActionCompleted, setRequiredActionCompleted] = useState(false);
+
 
   const step = WALKTHROUGH_STEPS[stepIndex];
   const isFirstStep = stepIndex === 0;
   const isLastStep = stepIndex === WALKTHROUGH_STEPS.length - 1;
+  const requiresAction = step.requiredAction !== undefined;
+  const canContinue = !requiresAction || requiredActionCompleted;
 
   useEffect(() => {
     if (activePage !== step.page) {
@@ -134,46 +149,99 @@ export function Walkthrough({
   }, [activePage, onPageChange, step.page]);
 
   useEffect(() => {
+    setRequiredActionCompleted(false);
+  }, [stepIndex]);
+
+  useEffect(() => {
     let timeoutId: number | undefined;
-
-    const updateTarget = () => {
-      if (!step.target) {
-        setTargetRect(null);
-        return;
+    let target: HTMLElement | null = null;
+    let countObserver: MutationObserver | null = null;
+  
+    const handleRequiredAction = () => {
+      if (step.requiredAction === "click") {
+        setRequiredActionCompleted(true);
       }
-
-      const target = document.querySelector<HTMLElement>(step.target);
-
+    };
+  
+    const updateTargetRect = () => {
       if (!target) {
         setTargetRect(null);
         return;
       }
-
-      target.scrollIntoView({
-        block: "center",
-        inline: "nearest",
-      });
-
-      timeoutId = window.setTimeout(() => {
-        setTargetRect(target.getBoundingClientRect());
-      }, 50);
+  
+      setTargetRect(target.getBoundingClientRect());
     };
-
-    updateTarget();
-
-    window.addEventListener("resize", updateTarget);
-    window.addEventListener("scroll", updateTarget, true);
-
+  
+    if (!step.target) {
+      setTargetRect(null);
+    } else {
+      target = document.querySelector<HTMLElement>(step.target);
+  
+      if (!target) {
+        setTargetRect(null);
+      } else {
+        if (typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({
+            block: "center",
+            inline: "nearest",
+          });
+        }
+  
+        if (step.requiredAction === "click") {
+          target.addEventListener("click", handleRequiredAction);
+        }
+  
+        if (step.requiredAction === "count-increase-if-empty") {
+          const initialCount = Number(target.dataset.walkthroughCount ?? "0");
+  
+          if (initialCount > 0) {
+            setRequiredActionCompleted(true);
+          } else {
+            countObserver = new MutationObserver(() => {
+              if (!target) {
+                return;
+              }
+  
+              const currentCount = Number(
+                target.dataset.walkthroughCount ?? "0"
+              );
+  
+              if (currentCount > initialCount) {
+                setRequiredActionCompleted(true);
+              }
+            });
+  
+            countObserver.observe(target, {
+              attributes: true,
+              attributeFilter: ["data-walkthrough-count"],
+            });
+          }
+        }
+  
+        timeoutId = window.setTimeout(() => {
+          updateTargetRect();
+        }, 50);
+      }
+    }
+  
+    window.addEventListener("resize", updateTargetRect);
+    window.addEventListener("scroll", updateTargetRect, true);
+  
     return () => {
       if (timeoutId !== undefined) {
         window.clearTimeout(timeoutId);
       }
-
-      window.removeEventListener("resize", updateTarget);
-      window.removeEventListener("scroll", updateTarget, true);
+  
+      countObserver?.disconnect();
+  
+      if (target && step.requiredAction === "click") {
+        target.removeEventListener("click", handleRequiredAction);
+      }
+  
+      window.removeEventListener("resize", updateTargetRect);
+      window.removeEventListener("scroll", updateTargetRect, true);
     };
-  }, [activePage, step.target]);
-
+  }, [activePage, step.requiredAction, step.target]);
   const handleNext = async () => {
     setError(null);
 
@@ -309,6 +377,29 @@ export function Walkthrough({
           {step.description}
         </p>
 
+        {requiresAction && (
+          <div
+            className={cn(
+              "mt-3 rounded-lg border px-3 py-2 text-sm",
+              requiredActionCompleted
+                ? darkMode
+                  ? "border-green-900 bg-green-950/40 text-green-200"
+                  : "border-green-200 bg-green-50 text-green-700"
+                : darkMode
+                ? "border-blue-900 bg-blue-950/40 text-blue-200"
+                : "border-blue-200 bg-blue-50 text-blue-700"
+            )}
+          >
+            {requiredActionCompleted
+              ? step.requiredAction === "count-increase-if-empty"
+                  ? "This section is configured. Press Next to continue."
+                  : "Step completed. Press Next to continue."
+              : step.requiredAction === "count-increase-if-empty"
+                  ? "Add at least one item in the highlighted section to continue."
+                  : "Complete the highlighted action to continue."}
+          </div>
+        )}
+
         {role === "Read Only" && step.page === "authorizations" && (
           <p
             className={cn(
@@ -373,11 +464,11 @@ export function Walkthrough({
 
             <button
               type="button"
-              disabled={isSaving}
+              disabled={isSaving || !canContinue}
               onClick={() => void handleNext()}
               className={cn(
                 "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700",
-                isSaving && "cursor-not-allowed opacity-50"
+                (isSaving || !canContinue) && "cursor-not-allowed opacity-50"
               )}
             >
               {isSaving ? "Saving..." : isLastStep ? "Finish" : "Next"}

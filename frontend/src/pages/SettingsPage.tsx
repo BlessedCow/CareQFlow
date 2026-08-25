@@ -164,6 +164,7 @@ function RegisteredListCard({
           ? "registered-insurances"
           : "registered-web-portals"
       }
+      data-walkthrough-count={items.length}
       className={cn(
         "rounded-xl border p-6",
         darkMode ? "border-gray-800 bg-gray-900/50" : "border-gray-200 bg-white"

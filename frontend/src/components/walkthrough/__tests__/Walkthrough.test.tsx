@@ -40,7 +40,7 @@ describe("Walkthrough", () => {
       })
     ).toBeInTheDocument();
 
-    expect(screen.getByText("Step 1 of 13")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 14")).toBeInTheDocument();
   });
 
   it("moves forward and backward through steps", () => {
@@ -90,7 +90,7 @@ describe("Walkthrough", () => {
       })
     );
 
-    expect(onPageChange).toHaveBeenCalledWith("authorizations");
+    expect(onPageChange).toHaveBeenCalledWith("settings");
   });
 
   it("allows the walkthrough to be skipped", async () => {
@@ -135,5 +135,157 @@ describe("Walkthrough", () => {
         name: "Welcome to CareQueue",
       })
     ).toBeInTheDocument();
+  });
+
+  it("requires the highlighted action before continuing", async () => {
+    const facilitiesCard = document.createElement("div");
+    facilitiesCard.dataset.walkthrough = "registered-facilities";
+    facilitiesCard.dataset.walkthroughCount = "1";
+    document.body.appendChild(facilitiesCard);
+
+    const insurancesCard = document.createElement("div");
+    insurancesCard.dataset.walkthrough = "registered-insurances";
+    insurancesCard.dataset.walkthroughCount = "1";
+    document.body.appendChild(insurancesCard);
+
+    const addAuthorizationButton = document.createElement("button");
+    addAuthorizationButton.dataset.walkthrough = "add-authorization";
+    addAuthorizationButton.textContent = "Add Authorization";
+    document.body.appendChild(addAuthorizationButton);
+
+    renderWalkthrough();
+
+    const advance = () => {
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Next",
+        })
+      );
+    };
+
+    advance();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Dashboard",
+      })
+    ).toBeInTheDocument();
+
+    advance();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Settings",
+      })
+    ).toBeInTheDocument();
+
+    advance();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("This section is configured. Press Next to continue.")
+      ).toBeInTheDocument();
+    });
+
+    advance();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("This section is configured. Press Next to continue.")
+      ).toBeInTheDocument();
+    });
+
+    advance();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Web Portals",
+      })
+    ).toBeInTheDocument();
+
+    advance();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Authorizations",
+      })
+    ).toBeInTheDocument();
+
+    advance();
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Add an authorization",
+      })
+    ).toBeInTheDocument();
+
+    const nextButton = screen.getByRole("button", {
+      name: "Next",
+    });
+
+    expect(nextButton).toBeDisabled();
+
+    fireEvent.click(addAuthorizationButton);
+
+    expect(
+      screen.getByText("Step completed. Press Next to continue.")
+    ).toBeInTheDocument();
+
+    expect(nextButton).toBeEnabled();
+
+    facilitiesCard.remove();
+    insurancesCard.remove();
+    addAuthorizationButton.remove();
+  });
+
+  it("unlocks a configuration step when an item is added", async () => {
+    const addAuthorizationButton = document.createElement("button");
+    addAuthorizationButton.dataset.walkthrough = "add-authorization";
+    document.body.appendChild(addAuthorizationButton);
+
+    const facilitiesCard = document.createElement("div");
+    facilitiesCard.dataset.walkthrough = "registered-facilities";
+    facilitiesCard.dataset.walkthroughCount = "0";
+    document.body.appendChild(facilitiesCard);
+
+    renderWalkthrough();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    fireEvent.click(addAuthorizationButton);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Add your facilities",
+      })
+    ).toBeInTheDocument();
+
+    const nextButton = screen.getByRole("button", {
+      name: "Next",
+    });
+
+    expect(nextButton).toBeDisabled();
+
+    facilitiesCard.dataset.walkthroughCount = "1";
+
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+
+    expect(
+      screen.getByText("This section is configured. Press Next to continue.")
+    ).toBeInTheDocument();
+
+    addAuthorizationButton.remove();
+    facilitiesCard.remove();
   });
 });
