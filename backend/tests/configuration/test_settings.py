@@ -503,6 +503,39 @@ def test_production_rejects_invalid_field_encryption_key():
         )
 
 
+def test_production_accepts_valid_previous_field_encryption_key():
+    previous_encryption_key = encryption_key()
+
+    settings = valid_production_settings(
+        AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY=previous_encryption_key,
+    )
+
+    assert settings.previous_encryption_key == previous_encryption_key
+
+
+def test_production_rejects_invalid_previous_field_encryption_key():
+    with pytest.raises(
+        ValidationError,
+        match="valid AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY="invalid-key",
+        )
+
+
+def test_production_requires_current_and_previous_field_keys_to_differ():
+    shared_key = encryption_key()
+
+    with pytest.raises(
+        ValidationError,
+        match="current and previous field encryption keys must be different",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_ENCRYPTION_KEY=shared_key,
+            AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY=shared_key,
+        )
+
+
 def test_production_requires_backup_encryption_key():
     with pytest.raises(
         ValidationError,

@@ -116,7 +116,12 @@ class Settings(BaseSettings):
         validation_alias="AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS",
     )
     encryption_key: str = Field(
-        default="", validation_alias="AUTHSTATUS_ENCRYPTION_KEY"
+        default="",
+        validation_alias="AUTHSTATUS_ENCRYPTION_KEY",
+    )
+    previous_encryption_key: str = Field(
+        default="",
+        validation_alias="AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
     )
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
@@ -391,6 +396,23 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Production requires a valid AUTHSTATUS_ENCRYPTION_KEY."
             ) from exc
+
+        previous_encryption_key = self.previous_encryption_key.strip()
+
+        if previous_encryption_key:
+            try:
+                Fernet(previous_encryption_key.encode("utf-8"))
+            except ValueError as exc:
+                raise ValueError(
+                    "Production requires a valid "
+                    "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY when configured."
+                ) from exc
+
+            if previous_encryption_key == encryption_key:
+                raise ValueError(
+                    "Production current and previous field encryption "
+                    "keys must be different."
+                )
 
         backup_encryption_key = self.backup_encryption_key.strip()
 

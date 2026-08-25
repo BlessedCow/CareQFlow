@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
+from cryptography.fernet import Fernet, InvalidToken
 
 from authstatus_api import crypto
 from authstatus_api.authorizations.documents import (
@@ -16,6 +17,7 @@ from authstatus_api.authorizations.documents import (
     get_auth_document,
     get_auth_document_pdf,
     list_auth_documents,
+    rotate_encrypted_pdf_bytes,
 )
 from authstatus_api.authorizations.records import create_auth, get_auth
 from authstatus_api.settings import get_settings
@@ -115,6 +117,170 @@ def test_get_auth_document_pdf_returns_decrypted_bytes():
     metadata, returned_pdf = result
     assert metadata["id"] == document["id"]
     assert returned_pdf == pdf_bytes
+
+
+def test_decrypt_pdf_bytes_accepts_previous_encryption_key(monkeypatch):
+    current_key = crypto.generate_encryption_key()
+    previous_key = crypto.generate_encryption_key()
+    pdf_bytes = b"%PDF-1.7\nlegacy approval"
+
+    encrypted_pdf = b"enc:" + Fernet(previous_key.encode("utf-8")).encrypt(pdf_bytes)
+
+    monkeypatch.setenv(
+        "AUTHSTATUS_ENCRYPTION_KEY",
+        current_key,
+    )
+    monkeypatch.setenv(
+        "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+        previous_key,
+    )
+    get_settings.cache_clear()
+
+    from authstatus_api.authorizations.documents import decrypt_pdf_bytes
+
+    assert decrypt_pdf_bytes(encrypted_pdf) == pdf_bytes
+
+
+def test_new_pdf_encryption_uses_current_key_during_rotation(monkeypatch):
+    current_key = crypto.generate_encryption_key()
+    previous_key = crypto.generate_encryption_key()
+    pdf_bytes = b"%PDF-1.7\nnew approval"
+
+    monkeypatch.setenv(
+        "AUTHSTATUS_ENCRYPTION_KEY",
+        current_key,
+    )
+    monkeypatch.setenv(
+        "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+        previous_key,
+    )
+    get_settings.cache_clear()
+
+    from authstatus_api.authorizations.documents import encrypt_pdf_bytes
+
+    encrypted_pdf = encrypt_pdf_bytes(pdf_bytes)
+    token = encrypted_pdf.removeprefix(b"enc:")
+
+    current_fernet = Fernet(current_key.encode("utf-8"))
+    previous_fernet = Fernet(previous_key.encode("utf-8"))
+
+    assert current_fernet.decrypt(token) == pdf_bytes
+
+    with pytest.raises(InvalidToken):
+        previous_fernet.decrypt(token)
+
+
+def test_rotate_encrypted_pdf_bytes_reencrypts_previous_key_value(
+    monkeypatch,
+):
+    current_key = crypto.generate_encryption_key()
+    previous_key = crypto.generate_encryption_key()
+    pdf_bytes = b"%PDF-1.7\nlegacy approval"
+
+    previous_fernet = Fernet(previous_key.encode("utf-8"))
+    encrypted_pdf = b"enc:" + previous_fernet.encrypt(pdf_bytes)
+
+    monkeypatch.setenv(
+        "AUTHSTATUS_ENCRYPTION_KEY",
+        current_key,
+    )
+    monkeypatch.setenv(
+        "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+        previous_key,
+    )
+    get_settings.cache_clear()
+
+    rotated, changed = rotate_encrypted_pdf_bytes(encrypted_pdf)
+
+    assert changed is True
+    assert rotated != encrypted_pdf
+
+    token = rotated.removeprefix(b"enc:")
+    current_fernet = Fernet(current_key.encode("utf-8"))
+
+    assert current_fernet.decrypt(token) == pdf_bytes
+
+    with pytest.raises(InvalidToken):
+        previous_fernet.decrypt(token)
+
+
+def test_rotate_encrypted_pdf_bytes_leaves_current_key_value_unchanged(
+    monkeypatch,
+):
+    current_key = crypto.generate_encryption_key()
+    previous_key = crypto.generate_encryption_key()
+    pdf_bytes = b"%PDF-1.7\ncurrent approval"
+
+    current_fernet = Fernet(current_key.encode("utf-8"))
+    encrypted_pdf = b"enc:" + current_fernet.encrypt(pdf_bytes)
+
+    monkeypatch.setenv(
+        "AUTHSTATUS_ENCRYPTION_KEY",
+        current_key,
+    )
+    monkeypatch.setenv(
+        "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+        previous_key,
+    )
+    get_settings.cache_clear()
+
+    rotated, changed = rotate_encrypted_pdf_bytes(encrypted_pdf)
+
+    assert changed is False
+    assert rotated == encrypted_pdf
+
+
+def test_rotate_encrypted_pdf_bytes_rejects_unknown_key(
+    monkeypatch,
+):
+    current_key = crypto.generate_encryption_key()
+    previous_key = crypto.generate_encryption_key()
+    unknown_key = crypto.generate_encryption_key()
+    pdf_bytes = b"%PDF-1.7\nunknown"
+
+    encrypted_pdf = b"enc:" + Fernet(unknown_key.encode("utf-8")).encrypt(pdf_bytes)
+
+    monkeypatch.setenv(
+        "AUTHSTATUS_ENCRYPTION_KEY",
+        current_key,
+    )
+    monkeypatch.setenv(
+        "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+        previous_key,
+    )
+    get_settings.cache_clear()
+
+    with pytest.raises(
+        crypto.DecryptionError,
+        match="during encryption key rotation",
+    ):
+        rotate_encrypted_pdf_bytes(encrypted_pdf)
+
+
+def test_rotate_encrypted_pdf_bytes_requires_previous_key_for_legacy_value(
+    monkeypatch,
+):
+    current_key = crypto.generate_encryption_key()
+    legacy_key = crypto.generate_encryption_key()
+    pdf_bytes = b"%PDF-1.7\nlegacy"
+
+    encrypted_pdf = b"enc:" + Fernet(legacy_key.encode("utf-8")).encrypt(pdf_bytes)
+
+    monkeypatch.setenv(
+        "AUTHSTATUS_ENCRYPTION_KEY",
+        current_key,
+    )
+    monkeypatch.delenv(
+        "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+        raising=False,
+    )
+    get_settings.cache_clear()
+
+    with pytest.raises(
+        crypto.DecryptionError,
+        match="without a previous encryption key",
+    ):
+        rotate_encrypted_pdf_bytes(encrypted_pdf)
 
 
 def test_list_auth_documents_returns_auth_documents_only():

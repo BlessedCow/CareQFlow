@@ -6,7 +6,11 @@ from cryptography.fernet import InvalidToken
 
 from authstatus_api.authorizations.records import get_auth
 from authstatus_api.authorizations.state import current_timestamp
-from authstatus_api.crypto import DecryptionError, get_fernet
+from authstatus_api.crypto import (
+    DecryptionError,
+    get_fernet,
+    get_previous_fernet,
+)
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 
@@ -94,8 +98,57 @@ def decrypt_pdf_bytes(encrypted_pdf: bytes) -> bytes:
 
     try:
         return get_fernet().decrypt(token)
+    except InvalidToken as current_key_error:
+        previous_fernet = get_previous_fernet()
+
+        if previous_fernet is None:
+            raise DecryptionError(
+                "Unable to decrypt stored PDF."
+            ) from current_key_error
+
+        try:
+            return previous_fernet.decrypt(token)
+        except InvalidToken as previous_key_error:
+            raise DecryptionError(
+                "Unable to decrypt stored PDF."
+            ) from previous_key_error
+
+
+def rotate_encrypted_pdf_bytes(
+    encrypted_pdf: bytes,
+) -> tuple[bytes, bool]:
+    if not encrypted_pdf:
+        return b"", False
+
+    if not encrypted_pdf.startswith(ENCRYPTED_BYTES_PREFIX):
+        return encrypted_pdf, False
+
+    token = encrypted_pdf.removeprefix(ENCRYPTED_BYTES_PREFIX)
+    current_fernet = get_fernet()
+
+    try:
+        current_fernet.decrypt(token)
+        return encrypted_pdf, False
+    except InvalidToken:
+        pass
+
+    previous_fernet = get_previous_fernet()
+
+    if previous_fernet is None:
+        raise DecryptionError(
+            "Unable to rotate stored PDF without a previous encryption key."
+        )
+
+    try:
+        plaintext = previous_fernet.decrypt(token)
     except InvalidToken as exc:
-        raise DecryptionError("Unable to decrypt stored PDF.") from exc
+        raise DecryptionError(
+            "Unable to decrypt stored PDF during encryption key rotation."
+        ) from exc
+
+    rotated_token = current_fernet.encrypt(plaintext)
+
+    return ENCRYPTED_BYTES_PREFIX + rotated_token, True
 
 
 def _document_row_to_dict(row: Any) -> dict[str, Any]:
