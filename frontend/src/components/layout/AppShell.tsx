@@ -97,7 +97,8 @@ const PAGE_TITLES: Record<AppPage, string> = {
 const PAGE_DESCRIPTIONS: Record<AppPage, string> = {
   dashboard: "Authorization performance and workload overview",
   authorizations: "View and manage authorization records",
-  "denials-pipeline": "Track denials, peer reviews, appeals, and retro auth follow-up",
+  "denials-pipeline":
+    "Track denials, peer reviews, appeals, and retro auth follow-up",
   calendar: "Track review dates and LCDs",
   settings: "Configure CareQueue preferences",
   adminUsers: "Manage local CareQueue users and roles",
@@ -145,6 +146,7 @@ export function AppShell({
               <button
                 key={item.page}
                 type="button"
+                data-walkthrough={`nav-${item.page}`}
                 onClick={() => onPageChange(item.page)}
                 className={cn(
                   "flex w-full items-center rounded-lg px-3 py-2 text-left transition-colors",

@@ -9,6 +9,7 @@ export interface CurrentUser {
   password_changed_at: string;
   must_change_password: boolean;
   mfa_enabled: boolean;
+  walkthrough_status: "pending" | "completed" | "skipped";
 }
 
 export interface SessionInfo {
@@ -282,6 +283,10 @@ export interface TrustedDeviceRevokeResponse {
   trusted_devices_revoked: number;
 }
 
+export interface WalkthroughStatusResponse {
+  walkthrough_status: "pending" | "completed" | "skipped";
+}
+
 export interface MfaEnrollmentStartResponse {
   secret: string;
   provisioning_uri: string;
@@ -395,6 +400,65 @@ export async function fetchCurrentUser(): Promise<AuthSession> {
   const data = (await response.json()) as CurrentUserResponse;
 
   return data;
+}
+
+export async function completeWalkthrough(): Promise<WalkthroughStatusResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/walkthrough/complete`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to complete walkthrough.");
+  }
+
+  return (await response.json()) as WalkthroughStatusResponse;
+}
+
+export async function skipWalkthrough(): Promise<WalkthroughStatusResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/walkthrough/skip`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to skip walkthrough.");
+  }
+
+  return (await response.json()) as WalkthroughStatusResponse;
+}
+
+export async function restartUserWalkthrough(
+  userId: number
+): Promise<WalkthroughStatusResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/users/${userId}/walkthrough/restart`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (!response.ok) {
+    let message = "Unable to restart walkthrough.";
+
+    try {
+      const data = (await response.json()) as { detail?: string };
+
+      if (data.detail) {
+        message = data.detail;
+      }
+    } catch {
+      // Keep the generic message when the response is not JSON.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as WalkthroughStatusResponse;
 }
 
 export async function renewCurrentSession(): Promise<SessionInfo> {

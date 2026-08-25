@@ -19,6 +19,7 @@ from authstatus_api.security.users import (
     list_users,
     update_user,
     update_user_password,
+    update_user_walkthrough_status,
 )
 from authstatus_api.settings import get_settings
 
@@ -117,6 +118,65 @@ def test_create_user_can_require_password_change():
     )
 
     assert user["must_change_password"] is True
+
+
+def test_create_user_defaults_walkthrough_to_pending():
+    user = create_user(
+        "walkthrough@example.com",
+        "password value",
+        role="UR",
+    )
+
+    assert user["walkthrough_status"] == "pending"
+
+
+@pytest.mark.parametrize(
+    "walkthrough_status",
+    [
+        "completed",
+        "skipped",
+        "pending",
+    ],
+)
+def test_update_user_walkthrough_status(
+    walkthrough_status: str,
+):
+    user = create_user(
+        "walkthrough-status@example.com",
+        "password value",
+        role="UR",
+    )
+
+    updated = update_user_walkthrough_status(
+        user["id"],
+        walkthrough_status,
+    )
+
+    assert updated is not None
+    assert updated["walkthrough_status"] == walkthrough_status
+
+
+def test_update_user_walkthrough_status_rejects_invalid_status():
+    user = create_user(
+        "invalid-walkthrough@example.com",
+        "password value",
+        role="UR",
+    )
+
+    with pytest.raises(ValueError, match="Invalid walkthrough status."):
+        update_user_walkthrough_status(
+            user["id"],
+            "invalid",
+        )
+
+    unchanged = get_user_by_id(user["id"])
+
+    assert unchanged is not None
+    assert unchanged["walkthrough_status"] == "pending"
+
+
+def test_update_user_walkthrough_status_returns_none_for_missing_user():
+    assert update_user_walkthrough_status(999, "completed") is None
 
 
 def test_update_user_password_sets_forced_change_state():

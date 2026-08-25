@@ -16,6 +16,7 @@ from authstatus_api.security.mfa import enable_user_mfa, store_user_mfa_secret
 from authstatus_api.security.users import (
     create_user,
     get_user_by_username,
+    update_user_walkthrough_status,
 )
 from authstatus_api.settings import get_settings
 
@@ -112,6 +113,7 @@ def test_login_returns_user_without_session_token(client):
             "password_changed_at": data["user"]["password_changed_at"],
             "must_change_password": False,
             "mfa_enabled": False,
+            "walkthrough_status": "pending",
         },
         "session": {
             "expires_at": data["session"]["expires_at"],
@@ -2298,6 +2300,309 @@ def test_reset_user_mfa_writes_safe_audit_event(client):
     assert "sessions_revoked" in row["metadata"]
 
 
+def test_current_user_exposes_walkthrough_status(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.get(
+        "/api/security/me",
+        headers=auth_headers_for(
+            client,
+            user["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["walkthrough_status"] == "pending"
+
+
+def test_user_can_complete_walkthrough(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.post(
+        "/api/security/walkthrough/complete",
+        headers=auth_headers_for(
+            client,
+            user["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "walkthrough_status": "completed",
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT walkthrough_status
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["walkthrough_status"] == "completed"
+
+
+def test_user_can_skip_walkthrough(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.post(
+        "/api/security/walkthrough/skip",
+        headers=auth_headers_for(
+            client,
+            user["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "walkthrough_status": "skipped",
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT walkthrough_status
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["walkthrough_status"] == "skipped"
+
+
+def test_walkthrough_updates_write_audit_events(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    headers = auth_headers_for(
+        client,
+        user["username"],
+        "correct horse battery staple",
+    )
+
+    complete_response = client.post(
+        "/api/security/walkthrough/complete",
+        headers=headers,
+    )
+    skip_response = client.post(
+        "/api/security/walkthrough/skip",
+        headers=headers,
+    )
+
+    assert complete_response.status_code == 200
+    assert skip_response.status_code == 200
+
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT action, resource_id
+            FROM audit_events
+            WHERE action IN (
+                'walkthrough.complete',
+                'walkthrough.skip'
+            )
+            ORDER BY id
+            """).fetchall()
+
+    assert [(row["action"], row["resource_id"]) for row in rows] == [
+        ("walkthrough.complete", user["id"]),
+        ("walkthrough.skip", user["id"]),
+    ]
+
+
+def test_admin_can_restart_user_walkthrough(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    assert (
+        update_user_walkthrough_status(
+            user["id"],
+            "completed",
+        )
+        is not None
+    )
+
+    response = client.post(
+        f"/api/security/users/{user['id']}/walkthrough/restart",
+        headers=auth_headers_for(
+            client,
+            admin["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "walkthrough_status": "pending",
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT walkthrough_status
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["walkthrough_status"] == "pending"
+
+
+def test_admin_can_restart_own_walkthrough(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    assert (
+        update_user_walkthrough_status(
+            admin["id"],
+            "skipped",
+        )
+        is not None
+    )
+
+    response = client.post(
+        f"/api/security/users/{admin['id']}/walkthrough/restart",
+        headers=auth_headers_for(
+            client,
+            admin["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "walkthrough_status": "pending",
+    }
+
+
+def test_non_admin_cannot_restart_walkthrough(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+    target_user = create_user(
+        "target@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.post(
+        f"/api/security/users/{target_user['id']}/walkthrough/restart",
+        headers=auth_headers_for(
+            client,
+            user["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Operation not permitted for this role.",
+    }
+
+
+def test_restart_walkthrough_returns_not_found_for_missing_user(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    response = client.post(
+        "/api/security/users/999/walkthrough/restart",
+        headers=auth_headers_for(
+            client,
+            admin["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "User not found.",
+    }
+
+
+def test_restart_walkthrough_writes_audit_event(client):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    assert (
+        update_user_walkthrough_status(
+            user["id"],
+            "completed",
+        )
+        is not None
+    )
+
+    response = client.post(
+        f"/api/security/users/{user['id']}/walkthrough/restart",
+        headers=auth_headers_for(
+            client,
+            admin["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT action, resource_id, metadata
+            FROM audit_events
+            WHERE action = 'walkthrough.restart'
+            """).fetchone()
+
+    assert row is not None
+    assert row["action"] == "walkthrough.restart"
+    assert row["resource_id"] == user["id"]
+    assert '"previous_status": "completed"' in row["metadata"]
+
+
 def test_login_and_logout_write_audit_events(client):
     create_user("user@example.com", "correct horse battery staple", role="UR")
 
@@ -2772,6 +3077,7 @@ def test_setup_initial_admin_creates_admin_when_no_users_exist(client):
     assert data["user"]["is_active"] is True
     assert data["user"]["must_change_password"] is False
     assert data["user"]["mfa_enabled"] is False
+    assert data["user"]["walkthrough_status"] == "pending"
 
     login_response = client.post(
         "/api/security/login",

@@ -254,6 +254,7 @@ export function AuthorizationsPage({
             {(canManageAuthorizations || showAddAuthForm || viewingAuth) && (
               <button
                 type="button"
+                data-walkthrough="add-authorization"
                 onClick={() => {
                   if (viewingAuth) {
                     onCloseViewAuth();

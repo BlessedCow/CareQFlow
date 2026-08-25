@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 
 UserRole = Literal["Admin", "UR", "Read Only"]
 
+WalkthroughStatus = Literal["pending", "completed", "skipped"]
+
 
 class LoginRequest(BaseModel):
     username: str
@@ -72,6 +74,10 @@ class TrustedDeviceRevokeResponse(BaseModel):
     trusted_devices_revoked: int
 
 
+class WalkthroughStatusResponse(BaseModel):
+    walkthrough_status: WalkthroughStatus
+
+
 class MfaLoginVerifyRequest(BaseModel):
     challenge_token: str
     code: str
@@ -107,6 +113,7 @@ class UserResponse(BaseModel):
     password_changed_at: str
     must_change_password: bool
     mfa_enabled: bool
+    walkthrough_status: WalkthroughStatus
 
 
 class AdminUserCreateResponse(BaseModel):

@@ -23,6 +23,14 @@ from authstatus_api.security.username_policy import normalize_username
 FAILED_LOGIN_LOCK_THRESHOLD = 5
 FAILED_LOGIN_LOCK_MINUTES = 15
 
+WALKTHROUGH_STATUSES = frozenset(
+    {
+        "pending",
+        "completed",
+        "skipped",
+    }
+)
+
 
 class UserLockedError(Exception):
     """Raised when a user is temporarily locked after repeated failed logins."""
@@ -202,6 +210,39 @@ def update_user(
                 return get_user_by_id(user_id)
     except sqlite3.IntegrityError:
         raise
+
+    if cursor.rowcount == 0:
+        return None
+
+    return get_user_by_id(user_id)
+
+
+def update_user_walkthrough_status(
+    user_id: int,
+    status: str,
+) -> dict[str, Any] | None:
+    if status not in WALKTHROUGH_STATUSES:
+        raise ValueError("Invalid walkthrough status.")
+
+    init_db()
+
+    now = format_datetime(utc_now())
+
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE users
+            SET
+                walkthrough_status = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                status,
+                now,
+                user_id,
+            ),
+        )
 
     if cursor.rowcount == 0:
         return None

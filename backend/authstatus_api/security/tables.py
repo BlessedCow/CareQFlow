@@ -20,12 +20,14 @@ def initialize_security_tables(conn: Any) -> None:
             must_change_password INTEGER NOT NULL DEFAULT 0,
             mfa_enabled INTEGER NOT NULL DEFAULT 0,
             mfa_secret TEXT,
+            walkthrough_status TEXT NOT NULL DEFAULT 'pending',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             CHECK (role IN ('Admin', 'UR', 'Read Only')),
             CHECK (is_active IN (0, 1)),
             CHECK (must_change_password IN (0, 1)),
-            CHECK (failed_login_count >= 0)
+            CHECK (failed_login_count >= 0),
+            CHECK (walkthrough_status IN ('pending', 'completed', 'skipped'))
         )
         """)
 
@@ -99,6 +101,12 @@ def initialize_security_tables(conn: Any) -> None:
         "users",
         "mfa_secret",
         "TEXT",
+    )
+    ensure_column(
+        conn,
+        "users",
+        "walkthrough_status",
+        "TEXT NOT NULL DEFAULT 'pending'",
     )
 
     ensure_column(conn, "sessions", "ip_address", "TEXT")

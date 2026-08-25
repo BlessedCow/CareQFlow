@@ -14,17 +14,19 @@ import { resolveGovernanceAccess } from "./governance/resolveGovernanceAccess";
 
 // Security
 import {
+  completeWalkthrough,
   fetchCurrentUser,
   logoutUser,
+  skipWalkthrough,
   type AuthSession,
   type CurrentUser,
 } from "./api/security";
-
 // Components
 import { LoginPage } from "./components/LoginPage";
 import { GovernanceAttestationPage } from "./components/GovernanceAttestationPage";
 import { RequiredPasswordChangePage } from "./components/RequiredPasswordChangePage";
 import { SessionTimeoutManager } from "./components/SessionTimeoutManager";
+import { Walkthrough } from "./components/walkthrough/Walkthrough";
 
 // Pages
 import { DashboardPage } from "./pages/DashboardPage";
@@ -487,6 +489,32 @@ function App() {
     );
   }, []);
 
+  const handleWalkthroughComplete = useCallback(async () => {
+    const result = await completeWalkthrough();
+
+    setCurrentUser((currentValue) =>
+      currentValue
+        ? {
+            ...currentValue,
+            walkthrough_status: result.walkthrough_status,
+          }
+        : currentValue
+    );
+  }, []);
+
+  const handleWalkthroughSkip = useCallback(async () => {
+    const result = await skipWalkthrough();
+
+    setCurrentUser((currentValue) =>
+      currentValue
+        ? {
+            ...currentValue,
+            walkthrough_status: result.walkthrough_status,
+          }
+        : currentValue
+    );
+  }, []);
+
   if (governanceAccessState === "loading") {
     return (
       <div
@@ -839,6 +867,17 @@ function App() {
           <AdminSystemPage darkMode={darkMode} />
         )}
       </AppShell>
+
+      {currentUser.walkthrough_status === "pending" && (
+        <Walkthrough
+          darkMode={darkMode}
+          role={currentUser.role}
+          activePage={activePage}
+          onPageChange={setActivePage}
+          onComplete={handleWalkthroughComplete}
+          onSkip={handleWalkthroughSkip}
+        />
+      )}
 
       {sessionExpiresAt && (
         <SessionTimeoutManager

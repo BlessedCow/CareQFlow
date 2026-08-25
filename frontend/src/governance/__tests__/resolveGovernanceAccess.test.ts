@@ -11,6 +11,7 @@ const user: CurrentUser = {
     is_active: true,
     must_change_password: false,
     mfa_enabled: false,
+    walkthrough_status: "pending",
     last_login_at: "2026-08-23T09:00:00+00:00",
     password_changed_at: "2026-08-23T09:00:00+00:00",
   };

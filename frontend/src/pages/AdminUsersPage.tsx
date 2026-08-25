@@ -4,6 +4,7 @@ import {
   fetchUsers,
   resetUserMfa,
   resetUserPassword,
+  restartUserWalkthrough,
   updateUser,
   type CurrentUser,
 } from "../api/security";
@@ -36,6 +37,8 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
   const [resettingMfaUserId, setResettingMfaUserId] = useState<number | null>(
     null
   );
+  const [restartingWalkthroughUserId, setRestartingWalkthroughUserId] =
+    useState<number | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
     null
   );
@@ -194,6 +197,42 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
       );
     } finally {
       setResettingMfaUserId(null);
+    }
+  };
+
+  const handleRestartWalkthrough = async (user: CurrentUser) => {
+    const confirmed = window.confirm(
+      `Restart the walkthrough for ${user.username}? This only resets their walkthrough progress and does not remove application data.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRestartingWalkthroughUserId(user.id);
+    setUsersError(null);
+
+    try {
+      const result = await restartUserWalkthrough(user.id);
+
+      setUsers((currentUsers) =>
+        currentUsers.map((currentUserItem) =>
+          currentUserItem.id === user.id
+            ? {
+                ...currentUserItem,
+                walkthrough_status: result.walkthrough_status,
+              }
+            : currentUserItem
+        )
+      );
+    } catch (error) {
+      setUsersError(
+        error instanceof Error
+          ? error.message
+          : "Unable to restart walkthrough."
+      );
+    } finally {
+      setRestartingWalkthroughUserId(null);
     }
   };
 
@@ -533,6 +572,28 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                               ? "MFA enabled"
                               : "MFA not enabled"}
                           </span>
+                          <span
+                            className={cn(
+                              "rounded-full px-2.5 py-1 text-xs font-medium",
+                              user.walkthrough_status === "pending"
+                                ? darkMode
+                                  ? "bg-amber-950 text-amber-300"
+                                  : "bg-amber-100 text-amber-700"
+                                : user.walkthrough_status === "completed"
+                                ? darkMode
+                                  ? "bg-green-950 text-green-300"
+                                  : "bg-green-100 text-green-700"
+                                : darkMode
+                                ? "bg-gray-800 text-gray-400"
+                                : "bg-gray-100 text-gray-600"
+                            )}
+                          >
+                            {user.walkthrough_status === "pending"
+                              ? "Walkthrough pending"
+                              : user.walkthrough_status === "completed"
+                              ? "Walkthrough completed"
+                              : "Walkthrough skipped"}
+                          </span>
                         </div>
                       </td>
                       <td
@@ -623,6 +684,35 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                             {resettingMfaUserId === user.id
                               ? "Resetting MFA..."
                               : "Reset MFA"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              isUpdating ||
+                              resettingUserId !== null ||
+                              resettingMfaUserId !== null ||
+                              restartingWalkthroughUserId !== null ||
+                              !user.is_active ||
+                              user.walkthrough_status === "pending"
+                            }
+                            onClick={() => void handleRestartWalkthrough(user)}
+                            className={cn(
+                              "rounded-lg border px-3 py-2 text-sm font-medium",
+                              darkMode
+                                ? "border-gray-700 text-gray-200 hover:bg-gray-800"
+                                : "border-gray-300 text-gray-700 hover:bg-gray-100",
+                              (isUpdating ||
+                                resettingUserId !== null ||
+                                resettingMfaUserId !== null ||
+                                restartingWalkthroughUserId !== null ||
+                                !user.is_active ||
+                                user.walkthrough_status === "pending") &&
+                                "cursor-not-allowed opacity-50"
+                            )}
+                          >
+                            {restartingWalkthroughUserId === user.id
+                              ? "Restarting..."
+                              : "Restart walkthrough"}
                           </button>
                         </div>
                       </td>
