@@ -224,6 +224,10 @@ export function AppShell({
 
             <button
               type="button"
+              data-walkthrough="theme-toggle"
+              aria-label={
+                darkMode ? "Switch to light mode" : "Switch to dark mode"
+              }
               onClick={onToggleDarkMode}
               className={cn(
                 "rounded-full p-2 transition-colors",

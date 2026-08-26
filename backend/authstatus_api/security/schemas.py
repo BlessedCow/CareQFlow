@@ -76,6 +76,13 @@ class TrustedDeviceRevokeResponse(BaseModel):
 
 class WalkthroughStatusResponse(BaseModel):
     walkthrough_status: WalkthroughStatus
+    walkthrough_step: str | None = None
+
+
+class WalkthroughStepUpdateRequest(BaseModel):
+    walkthrough_step: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class MfaLoginVerifyRequest(BaseModel):
@@ -114,6 +121,7 @@ class UserResponse(BaseModel):
     must_change_password: bool
     mfa_enabled: bool
     walkthrough_status: WalkthroughStatus
+    walkthrough_step: str | None = None
 
 
 class AdminUserCreateResponse(BaseModel):

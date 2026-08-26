@@ -28,7 +28,10 @@ export function FollowUpDashboard({
 
   return (
     <>
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
+      <div
+        data-walkthrough="denials-summary"
+        className="mb-6 grid gap-4 md:grid-cols-4"
+      >
         <SummaryCard label="Denials" value={denialCount} darkMode={darkMode} />
         <SummaryCard label="P2P" value={p2pCount} darkMode={darkMode} />
         <SummaryCard label="Appeals" value={appealCount} darkMode={darkMode} />
@@ -41,6 +44,7 @@ export function FollowUpDashboard({
 
       {!selectedAuth && (
         <section
+          data-walkthrough="denials-follow-up-dashboard"
           className={cn(
             "mb-6 rounded-xl border p-4",
             darkMode

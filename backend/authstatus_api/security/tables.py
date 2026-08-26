@@ -21,6 +21,7 @@ def initialize_security_tables(conn: Any) -> None:
             mfa_enabled INTEGER NOT NULL DEFAULT 0,
             mfa_secret TEXT,
             walkthrough_status TEXT NOT NULL DEFAULT 'pending',
+            walkthrough_step TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             CHECK (role IN ('Admin', 'UR', 'Read Only')),
@@ -107,6 +108,12 @@ def initialize_security_tables(conn: Any) -> None:
         "users",
         "walkthrough_status",
         "TEXT NOT NULL DEFAULT 'pending'",
+    )
+    ensure_column(
+        conn,
+        "users",
+        "walkthrough_step",
+        "TEXT",
     )
 
     ensure_column(conn, "sessions", "ip_address", "TEXT")

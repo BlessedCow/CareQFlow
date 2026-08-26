@@ -75,6 +75,7 @@ from authstatus_api.security.schemas import (
     UserResponse,
     UserUpdateRequest,
     WalkthroughStatusResponse,
+    WalkthroughStepUpdateRequest,
 )
 from authstatus_api.security.sessions import (
     get_active_session_by_token,
@@ -103,6 +104,7 @@ from authstatus_api.security.users import (
     update_user,
     update_user_password,
     update_user_walkthrough_status,
+    update_user_walkthrough_step,
     user_exists,
 )
 from authstatus_api.settings import get_settings
@@ -152,6 +154,7 @@ def _user_response(user: dict) -> UserResponse:
         must_change_password=user["must_change_password"],
         mfa_enabled=user["mfa_enabled"],
         walkthrough_status=user["walkthrough_status"],
+        walkthrough_step=user["walkthrough_step"],
     )
 
 
@@ -763,6 +766,16 @@ def restart_managed_user_walkthrough(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found.",
         )
+    updated_user = update_user_walkthrough_step(
+        user_id,
+        None,
+    )
+
+    if updated_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
 
     record_audit_event(
         action="walkthrough.restart",
@@ -777,6 +790,7 @@ def restart_managed_user_walkthrough(
 
     return WalkthroughStatusResponse(
         walkthrough_status=updated_user["walkthrough_status"],
+        walkthrough_step=updated_user["walkthrough_step"],
     )
 
 
@@ -1117,6 +1131,31 @@ def read_current_user(
     )
 
 
+@router.put(
+    "/walkthrough/step",
+    response_model=WalkthroughStatusResponse,
+)
+def update_walkthrough_step(
+    payload: WalkthroughStepUpdateRequest,
+    current_user: dict = CurrentUserDependency,
+) -> WalkthroughStatusResponse:
+    updated_user = update_user_walkthrough_step(
+        current_user["id"],
+        payload.walkthrough_step,
+    )
+
+    if updated_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    return WalkthroughStatusResponse(
+        walkthrough_status=updated_user["walkthrough_status"],
+        walkthrough_step=updated_user["walkthrough_step"],
+    )
+
+
 @router.post(
     "/walkthrough/complete",
     response_model=WalkthroughStatusResponse,
@@ -1136,6 +1175,17 @@ def complete_walkthrough(
             detail="User not found.",
         )
 
+    updated_user = update_user_walkthrough_step(
+        current_user["id"],
+        None,
+    )
+
+    if updated_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
     record_audit_event(
         action="walkthrough.complete",
         resource_type="user",
@@ -1146,6 +1196,7 @@ def complete_walkthrough(
 
     return WalkthroughStatusResponse(
         walkthrough_status=updated_user["walkthrough_status"],
+        walkthrough_step=updated_user["walkthrough_step"],
     )
 
 
@@ -1167,6 +1218,16 @@ def skip_walkthrough(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found.",
         )
+    updated_user = update_user_walkthrough_step(
+        current_user["id"],
+        None,
+    )
+
+    if updated_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
 
     record_audit_event(
         action="walkthrough.skip",
@@ -1178,6 +1239,7 @@ def skip_walkthrough(
 
     return WalkthroughStatusResponse(
         walkthrough_status=updated_user["walkthrough_status"],
+        walkthrough_step=updated_user["walkthrough_step"],
     )
 
 

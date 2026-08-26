@@ -18,9 +18,11 @@ import {
   fetchCurrentUser,
   logoutUser,
   skipWalkthrough,
+  updateWalkthroughStep,
   type AuthSession,
   type CurrentUser,
 } from "./api/security";
+
 // Components
 import { LoginPage } from "./components/LoginPage";
 import { GovernanceAttestationPage } from "./components/GovernanceAttestationPage";
@@ -49,6 +51,7 @@ import { useAuthorizationMutations } from "./hooks/useAuthorizationMutations";
 import { useWorkflowViewMode } from "./hooks/useWorkflowViewMode";
 import { useSessionTimerPreference } from "./hooks/useSessionTimerPreference";
 import { useSessionActivity } from "./hooks/useSessionActivity";
+import { useThemePreference } from "./hooks/useThemePreference";
 
 // AppShell
 import { AppShell } from "./components/layout/AppShell";
@@ -58,7 +61,7 @@ import type { AppPage } from "./types/navigation";
 import { AuthRequest } from "./types/auth";
 
 function App() {
-  const [darkMode, setDarkMode] = useState(true);
+  const { darkMode, setDarkMode } = useThemePreference();
   const [activePage, setActivePage] = useState<AppPage>("dashboard");
   const [selectedDenialFollowUpAuthId, setSelectedDenialFollowUpAuthId] =
     useState<string | null>(null);
@@ -489,14 +492,29 @@ function App() {
     );
   }, []);
 
-  const handleWalkthroughComplete = useCallback(async () => {
-    const result = await completeWalkthrough();
-
+  const handleWalkthroughStepChange = useCallback(async (stepId: string) => {
+    const result = await updateWalkthroughStep(stepId);
+  
     setCurrentUser((currentValue) =>
       currentValue
         ? {
             ...currentValue,
             walkthrough_status: result.walkthrough_status,
+            walkthrough_step: result.walkthrough_step,
+          }
+        : currentValue
+    );
+  }, []);
+
+  const handleWalkthroughComplete = useCallback(async () => {
+    const result = await completeWalkthrough();
+  
+    setCurrentUser((currentValue) =>
+      currentValue
+        ? {
+            ...currentValue,
+            walkthrough_status: result.walkthrough_status,
+            walkthrough_step: result.walkthrough_step,
           }
         : currentValue
     );
@@ -504,12 +522,13 @@ function App() {
 
   const handleWalkthroughSkip = useCallback(async () => {
     const result = await skipWalkthrough();
-
+  
     setCurrentUser((currentValue) =>
       currentValue
         ? {
             ...currentValue,
             walkthrough_status: result.walkthrough_status,
+            walkthrough_step: result.walkthrough_step,
           }
         : currentValue
     );
@@ -873,7 +892,9 @@ function App() {
           darkMode={darkMode}
           role={currentUser.role}
           activePage={activePage}
+          initialStepId={currentUser.walkthrough_step}
           onPageChange={setActivePage}
+          onStepChange={handleWalkthroughStepChange}
           onComplete={handleWalkthroughComplete}
           onSkip={handleWalkthroughSkip}
         />

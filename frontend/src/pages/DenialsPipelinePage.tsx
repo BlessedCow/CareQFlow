@@ -57,7 +57,7 @@ export function DenialsPipelinePage({
     handleClearRetro,
   } = useFollowUpForms({ selectedAuth, onAuthUpdated });
   return (
-    <div className="h-full overflow-auto p-6">
+    <div data-walkthrough="denials-workspace-header" className="mb-6">
       <div className="mb-6">
         <h2 className="text-2xl font-semibold">Denials / P2P / Retro</h2>
         <p

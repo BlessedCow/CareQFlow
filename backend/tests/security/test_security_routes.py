@@ -17,6 +17,7 @@ from authstatus_api.security.users import (
     create_user,
     get_user_by_username,
     update_user_walkthrough_status,
+    update_user_walkthrough_step,
 )
 from authstatus_api.settings import get_settings
 
@@ -2318,6 +2319,46 @@ def test_current_user_exposes_walkthrough_status(client):
 
     assert response.status_code == 200
     assert response.json()["user"]["walkthrough_status"] == "pending"
+    assert response.json()["user"]["walkthrough_step"] is None
+
+
+def test_user_can_update_walkthrough_step(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    response = client.put(
+        "/api/security/walkthrough/step",
+        json={
+            "walkthrough_step": "add-authorization",
+        },
+        headers=auth_headers_for(
+            client,
+            user["username"],
+            "correct horse battery staple",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "walkthrough_status": "pending",
+        "walkthrough_step": "add-authorization",
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT walkthrough_step
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["walkthrough_step"] == "add-authorization"
 
 
 def test_user_can_complete_walkthrough(client):
@@ -2325,6 +2366,13 @@ def test_user_can_complete_walkthrough(client):
         "user@example.com",
         "correct horse battery staple",
         role="UR",
+    )
+    assert (
+        update_user_walkthrough_step(
+            user["id"],
+            "pdf-intake",
+        )
+        is not None
     )
 
     response = client.post(
@@ -2339,12 +2387,13 @@ def test_user_can_complete_walkthrough(client):
     assert response.status_code == 200
     assert response.json() == {
         "walkthrough_status": "completed",
+        "walkthrough_step": None,
     }
 
     with get_conn() as conn:
         row = conn.execute(
             """
-            SELECT walkthrough_status
+            SELECT walkthrough_status, walkthrough_step
             FROM users
             WHERE id = ?
             """,
@@ -2353,6 +2402,7 @@ def test_user_can_complete_walkthrough(client):
 
     assert row is not None
     assert row["walkthrough_status"] == "completed"
+    assert row["walkthrough_step"] is None
 
 
 def test_user_can_skip_walkthrough(client):
@@ -2360,6 +2410,14 @@ def test_user_can_skip_walkthrough(client):
         "user@example.com",
         "correct horse battery staple",
         role="UR",
+    )
+
+    assert (
+        update_user_walkthrough_step(
+            user["id"],
+            "settings",
+        )
+        is not None
     )
 
     response = client.post(
@@ -2374,12 +2432,13 @@ def test_user_can_skip_walkthrough(client):
     assert response.status_code == 200
     assert response.json() == {
         "walkthrough_status": "skipped",
+        "walkthrough_step": None,
     }
 
     with get_conn() as conn:
         row = conn.execute(
             """
-            SELECT walkthrough_status
+            SELECT walkthrough_status, walkthrough_step
             FROM users
             WHERE id = ?
             """,
@@ -2388,6 +2447,7 @@ def test_user_can_skip_walkthrough(client):
 
     assert row is not None
     assert row["walkthrough_status"] == "skipped"
+    assert row["walkthrough_step"] is None
 
 
 def test_walkthrough_updates_write_audit_events(client):
@@ -2452,6 +2512,14 @@ def test_admin_can_restart_user_walkthrough(client):
         is not None
     )
 
+    assert (
+        update_user_walkthrough_step(
+            user["id"],
+            "add-authorization",
+        )
+        is not None
+    )
+
     response = client.post(
         f"/api/security/users/{user['id']}/walkthrough/restart",
         headers=auth_headers_for(
@@ -2464,12 +2532,13 @@ def test_admin_can_restart_user_walkthrough(client):
     assert response.status_code == 200
     assert response.json() == {
         "walkthrough_status": "pending",
+        "walkthrough_step": None,
     }
 
     with get_conn() as conn:
         row = conn.execute(
             """
-            SELECT walkthrough_status
+            SELECT walkthrough_status, walkthrough_step
             FROM users
             WHERE id = ?
             """,
@@ -2478,6 +2547,7 @@ def test_admin_can_restart_user_walkthrough(client):
 
     assert row is not None
     assert row["walkthrough_status"] == "pending"
+    assert row["walkthrough_step"] is None
 
 
 def test_admin_can_restart_own_walkthrough(client):
@@ -2507,6 +2577,7 @@ def test_admin_can_restart_own_walkthrough(client):
     assert response.status_code == 200
     assert response.json() == {
         "walkthrough_status": "pending",
+        "walkthrough_step": None,
     }
 
 
@@ -3078,6 +3149,7 @@ def test_setup_initial_admin_creates_admin_when_no_users_exist(client):
     assert data["user"]["must_change_password"] is False
     assert data["user"]["mfa_enabled"] is False
     assert data["user"]["walkthrough_status"] == "pending"
+    assert data["user"]["walkthrough_step"] is None
 
     login_response = client.post(
         "/api/security/login",

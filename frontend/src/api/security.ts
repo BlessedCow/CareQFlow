@@ -10,6 +10,7 @@ export interface CurrentUser {
   must_change_password: boolean;
   mfa_enabled: boolean;
   walkthrough_status: "pending" | "completed" | "skipped";
+  walkthrough_step?: string | null;
 }
 
 export interface SessionInfo {
@@ -285,6 +286,7 @@ export interface TrustedDeviceRevokeResponse {
 
 export interface WalkthroughStatusResponse {
   walkthrough_status: "pending" | "completed" | "skipped";
+  walkthrough_step: string | null;
 }
 
 export interface MfaEnrollmentStartResponse {
@@ -400,6 +402,29 @@ export async function fetchCurrentUser(): Promise<AuthSession> {
   const data = (await response.json()) as CurrentUserResponse;
 
   return data;
+}
+
+export async function updateWalkthroughStep(
+  walkthroughStep: string | null
+): Promise<WalkthroughStatusResponse> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/walkthrough/step`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        walkthrough_step: walkthroughStep,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to save walkthrough progress.");
+  }
+
+  return (await response.json()) as WalkthroughStatusResponse;
 }
 
 export async function completeWalkthrough(): Promise<WalkthroughStatusResponse> {

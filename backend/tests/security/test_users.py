@@ -20,6 +20,7 @@ from authstatus_api.security.users import (
     update_user,
     update_user_password,
     update_user_walkthrough_status,
+    update_user_walkthrough_step,
 )
 from authstatus_api.settings import get_settings
 
@@ -177,6 +178,66 @@ def test_update_user_walkthrough_status_rejects_invalid_status():
 
 def test_update_user_walkthrough_status_returns_none_for_missing_user():
     assert update_user_walkthrough_status(999, "completed") is None
+
+
+def test_user_walkthrough_step_defaults_to_none():
+    user = create_user(
+        "walkthrough-step@example.com",
+        "password value",
+        role="UR",
+    )
+
+    assert user["walkthrough_step"] is None
+
+
+def test_update_user_walkthrough_step():
+    user = create_user(
+        "walkthrough-step@example.com",
+        "password value",
+        role="UR",
+    )
+
+    updated = update_user_walkthrough_step(
+        user["id"],
+        "add-authorization",
+    )
+
+    assert updated is not None
+    assert updated["walkthrough_step"] == "add-authorization"
+
+
+def test_update_user_walkthrough_step_can_be_cleared():
+    user = create_user(
+        "walkthrough-step@example.com",
+        "password value",
+        role="UR",
+    )
+
+    assert (
+        update_user_walkthrough_step(
+            user["id"],
+            "settings",
+        )
+        is not None
+    )
+
+    updated = update_user_walkthrough_step(
+        user["id"],
+        None,
+    )
+
+    assert updated is not None
+    assert updated["walkthrough_step"] is None
+
+
+def test_update_user_walkthrough_step_returns_none_for_missing_user():
+    assert (
+        update_user_walkthrough_step(
+            999,
+            "dashboard",
+        )
+        is None
+    )
 
 
 def test_update_user_password_sets_forced_change_state():

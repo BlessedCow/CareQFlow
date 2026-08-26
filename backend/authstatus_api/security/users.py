@@ -250,6 +250,41 @@ def update_user_walkthrough_status(
     return get_user_by_id(user_id)
 
 
+def update_user_walkthrough_step(
+    user_id: int,
+    step: str | None,
+) -> dict[str, Any] | None:
+    normalized_step = step.strip() if step is not None else None
+
+    if normalized_step == "":
+        normalized_step = None
+
+    init_db()
+
+    now = format_datetime(utc_now())
+
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE users
+            SET
+                walkthrough_step = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                normalized_step,
+                now,
+                user_id,
+            ),
+        )
+
+    if cursor.rowcount == 0:
+        return None
+
+    return get_user_by_id(user_id)
+
+
 def update_user_password(
     user_id: int,
     *,

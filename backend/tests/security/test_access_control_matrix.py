@@ -62,6 +62,10 @@ EXPECTED_API_ENDPOINTS = {
     ("POST", "/api/security/users"),
     ("POST", "/api/security/users/{user_id}/reset-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-password"),
+    ("POST", "/api/security/users/{user_id}/walkthrough/restart"),
+    ("POST", "/api/security/walkthrough/complete"),
+    ("POST", "/api/security/walkthrough/skip"),
+    ("PUT", "/api/security/walkthrough/step"),
 }
 
 PUBLIC_ENDPOINTS = {
@@ -92,6 +96,9 @@ AUTHENTICATED_ENDPOINTS = {
     ("POST", "/api/security/mfa/enroll/confirm"),
     ("POST", "/api/security/session/activity"),
     ("POST", "/api/security/session/renew"),
+    ("POST", "/api/security/walkthrough/complete"),
+    ("POST", "/api/security/walkthrough/skip"),
+    ("PUT", "/api/security/walkthrough/step"),
 }
 
 READ_ONLY_SAFE_GET_ENDPOINTS = {
@@ -131,6 +138,7 @@ ADMIN_ENDPOINTS = {
     ("POST", "/api/security/users"),
     ("POST", "/api/security/users/{user_id}/reset-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-password"),
+    ("POST", "/api/security/users/{user_id}/walkthrough/restart"),
 }
 
 

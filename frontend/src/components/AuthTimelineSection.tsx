@@ -167,6 +167,7 @@ export function AuthTimelineSection({
 
   return (
     <div
+      data-walkthrough="auth-timeline"
       className={cn(
         "rounded-2xl border p-4",
         darkMode
@@ -245,6 +246,7 @@ export function AuthTimelineSection({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              data-walkthrough="start-continued-stay"
               onClick={onStartContinuedStay}
               className={cn(
                 "rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
@@ -318,6 +320,7 @@ export function AuthTimelineSection({
             Event Type
           </label>
           <select
+            data-walkthrough="timeline-event-type"
             value={eventForm.eventType}
             onChange={(event) =>
               onEventFieldChange("eventType", event.target.value)
@@ -522,6 +525,7 @@ export function AuthTimelineSection({
       <div className="mt-3 flex justify-end">
         <button
           type="button"
+          data-walkthrough="save-timeline-event"
           onClick={() => handleSubmitEvent()}
           disabled={isSavingEvent || !eventForm.eventDate.trim()}
           className={cn(
@@ -536,6 +540,7 @@ export function AuthTimelineSection({
             : editingEventId
             ? "Save Timeline Event"
             : "+ Add Timeline Event"}
+            
         </button>
 
         <button
