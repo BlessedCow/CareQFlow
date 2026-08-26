@@ -406,6 +406,8 @@ Do not reuse one key for multiple layers.
 - Rotate keys only through a tested migration process.
 - Verify recovery before retiring an old key.
 
+For the full CareQueue key custody, rotation, compromise response, recovery, and retirement procedure, see [Encryption Key Lifecycle](docs/security/encryption-key-lifecycle.md).
+
 Key loss can make protected data unreadable:
 
 - Losing the field-level key may make encrypted field values unreadable.

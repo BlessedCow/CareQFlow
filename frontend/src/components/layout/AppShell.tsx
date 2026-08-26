@@ -253,7 +253,14 @@ export function AppShell({
         </header>
 
         <div className="flex-1 overflow-auto p-6">
-          <div className="mx-auto max-w-7xl space-y-6">{children}</div>
+          <div
+            className={cn(
+              "mx-auto space-y-6",
+              activePage === "adminAudit" ? "max-w-[1500px]" : "max-w-7xl"
+            )}
+          >
+            {children}
+          </div>
         </div>
       </main>
     </div>

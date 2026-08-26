@@ -6,6 +6,7 @@ import sqlite3
 
 import pytest
 
+import authstatus_api.backups.service as backup_service
 from authstatus_api.backups.service import (
     PENDING_RECOVERY_MANIFEST,
     BackupConfigError,
@@ -316,6 +317,105 @@ def test_create_encrypted_database_backup_rejects_missing_database(tmp_path):
         create_encrypted_database_backup(database_path=missing_database_path)
 
 
+def test_create_encrypted_database_backup_reports_directory_creation_failure(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+
+    init_db()
+
+    original_mkdir = backup_service.Path.mkdir
+
+    def fail_backup_directory_mkdir(
+        path,
+        *args,
+        **kwargs,
+    ):
+        if path == backup_directory:
+            raise PermissionError("permission denied")
+
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        backup_service.Path,
+        "mkdir",
+        fail_backup_directory_mkdir,
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Unable to create backup directory",
+    ):
+        create_encrypted_database_backup(
+            database_path=database_path,
+            backup_directory=backup_directory,
+        )
+
+    assert not backup_directory.exists()
+
+
+def test_create_encrypted_database_backup_reports_atomic_write_failure(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+
+    init_db()
+
+    def fail_fsync(_fd):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(
+        backup_service.os,
+        "fsync",
+        fail_fsync,
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Unable to write encrypted backup",
+    ):
+        create_encrypted_database_backup(
+            database_path=database_path,
+            backup_directory=backup_directory,
+        )
+
+    assert not list(backup_directory.glob("*.db.enc"))
+
+
+def test_failed_backup_write_removes_partial_and_snapshot_files(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+
+    init_db()
+
+    def fail_fsync(_fd):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(
+        backup_service.os,
+        "fsync",
+        fail_fsync,
+    )
+
+    with pytest.raises(BackupError):
+        create_encrypted_database_backup(
+            database_path=database_path,
+            backup_directory=backup_directory,
+        )
+
+    assert not list(backup_directory.glob("*.db.enc"))
+    assert not list(backup_directory.glob(".*.snapshot.*"))
+    assert not list(backup_directory.glob("*.tmp"))
+    assert not list(backup_directory.glob(".*.tmp"))
+
+
 def test_encrypt_backup_bytes_requires_backup_key(monkeypatch):
     monkeypatch.setenv("AUTHSTATUS_BACKUP_ENCRYPTION_KEY", "")
     get_settings.cache_clear()
@@ -389,6 +489,134 @@ def test_restore_rejects_decrypted_file_that_is_not_a_carequeue_database(
 
     assert not list(restore_directory.glob("*.restored.db"))
     assert not list(restore_directory.glob("*.tmp"))
+
+
+def test_restore_encrypted_database_backup_reports_directory_creation_failure(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    original_mkdir = backup_service.Path.mkdir
+
+    def fail_restore_directory_mkdir(
+        path,
+        *args,
+        **kwargs,
+    ):
+        if path == restore_directory:
+            raise PermissionError("permission denied")
+
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        backup_service.Path,
+        "mkdir",
+        fail_restore_directory_mkdir,
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Unable to create restore directory",
+    ):
+        restore_encrypted_database_backup(
+            backup_path=backup_path,
+            restore_directory=restore_directory,
+        )
+
+    assert not restore_directory.exists()
+
+
+def test_restore_encrypted_database_backup_reports_atomic_write_failure(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    def fail_fsync(_fd):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(
+        backup_service.os,
+        "fsync",
+        fail_fsync,
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="Unable to write restored database",
+    ):
+        restore_encrypted_database_backup(
+            backup_path=backup_path,
+            restore_directory=restore_directory,
+        )
+
+    assert not list(restore_directory.glob("*.restored.db"))
+    assert not list(restore_directory.glob("*.tmp"))
+    assert not list(restore_directory.glob(".*.tmp"))
+
+
+def test_stage_recovery_manifest_write_failure_removes_staged_database(
+    tmp_path,
+    monkeypatch,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    backup_directory = tmp_path / "backups"
+    restore_directory = tmp_path / "restores"
+
+    init_db()
+
+    backup_path = create_encrypted_database_backup(
+        database_path=database_path,
+        backup_directory=backup_directory,
+    )
+
+    original_atomic_write = backup_service._atomic_write_bytes
+
+    def fail_manifest_write(destination_path, data):
+        if destination_path.name == PENDING_RECOVERY_MANIFEST:
+            raise BackupError("manifest write failed")
+
+        return original_atomic_write(destination_path, data)
+
+    monkeypatch.setattr(
+        backup_service,
+        "_atomic_write_bytes",
+        fail_manifest_write,
+    )
+
+    with pytest.raises(
+        BackupError,
+        match="manifest write failed",
+    ):
+        stage_encrypted_database_recovery(
+            filename=backup_path.name,
+            backup_directory=backup_directory,
+            restore_directory=restore_directory,
+        )
+
+    assert not (restore_directory / PENDING_RECOVERY_MANIFEST).exists()
+    assert not list(restore_directory.glob("*.restored.db"))
+    assert not list(restore_directory.glob("*.tmp"))
+    assert not list(restore_directory.glob(".*.tmp"))
 
 
 def test_list_encrypted_database_backups_returns_newest_first(

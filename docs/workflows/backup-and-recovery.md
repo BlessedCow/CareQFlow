@@ -55,6 +55,8 @@ Do not store keys:
 
 Document ownership, approved retrieval, rotation, and recovery testing.
 
+For the full lifecycle procedure for field-level, SQLCipher, and backup encryption keys, see [Encryption Key Lifecycle](../security/encryption-key-lifecycle.md).
+
 ## Standard Paths
 
 ### Windows production

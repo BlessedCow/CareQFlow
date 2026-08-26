@@ -488,6 +488,38 @@ def test_validate_active_database_accepts_valid_database():
     validate_active_database()
 
 
+def test_validate_active_database_rejects_corrupt_database(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+    database_path.write_bytes(b"not a sqlite database")
+
+    with pytest.raises(
+        RecoveryActivationError,
+        match="Unable to open and validate the activated database",
+    ):
+        validate_active_database()
+
+
+def test_validate_active_database_rejects_missing_required_tables(
+    tmp_path,
+):
+    database_path = tmp_path / "auth_tracker.db"
+
+    with sqlite3.connect(database_path) as conn:
+        conn.execute("""
+            CREATE TABLE unrelated_table (
+                id INTEGER PRIMARY KEY
+            )
+            """)
+
+    with pytest.raises(
+        RecoveryActivationError,
+        match="missing required CareQueue tables",
+    ):
+        validate_active_database()
+
+
 def test_activate_staged_database_recovery_completes_atomic_cutover(
     tmp_path,
 ):
@@ -773,6 +805,250 @@ def test_activate_staged_database_recovery_rejects_changed_staging(
     assert staged_database.exists()
 
 
+def test_activate_staged_database_recovery_leaves_files_unchanged_when_active_move_fails(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    safety_backup.write_bytes(b"verified backup")
+
+    original_database_bytes = database_path.read_bytes()
+    staged_database_bytes = staged_database.read_bytes()
+
+    real_replace = os.replace
+
+    def fail_active_move(
+        source,
+        destination,
+    ):
+        if Path(source).resolve() == database_path.resolve():
+            raise OSError("active move failed")
+
+        return real_replace(source, destination)
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.os.replace",
+            side_effect=fail_active_move,
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="No recovery database was activated",
+        ):
+            activate_staged_database_recovery(
+                plan=plan,
+                confirmation=RECOVERY_CONFIRMATION_PHRASE,
+            )
+
+    assert database_path.read_bytes() == original_database_bytes
+    assert staged_database.read_bytes() == staged_database_bytes
+    assert not rollback_database.exists()
+    assert (restore_directory / "pending_recovery.json").exists()
+
+
+def test_activate_staged_database_recovery_restores_original_when_manifest_removal_fails(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    manifest_path = restore_directory / "pending_recovery.json"
+
+    safety_backup.write_bytes(b"verified backup")
+
+    original_database_bytes = database_path.read_bytes()
+    staged_database_bytes = staged_database.read_bytes()
+
+    real_unlink = Path.unlink
+
+    def fail_manifest_unlink(
+        path,
+        *args,
+        **kwargs,
+    ):
+        if path.resolve() == manifest_path.resolve():
+            raise PermissionError("manifest removal denied")
+
+        return real_unlink(path, *args, **kwargs)
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.Path.unlink",
+            side_effect=fail_manifest_unlink,
+            autospec=True,
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="could not be finalized",
+        ):
+            activate_staged_database_recovery(
+                plan=plan,
+                confirmation=RECOVERY_CONFIRMATION_PHRASE,
+            )
+
+    assert database_path.read_bytes() == original_database_bytes
+    assert staged_database.read_bytes() == staged_database_bytes
+    assert not rollback_database.exists()
+    assert manifest_path.exists()
+
+
+def test_activate_staged_database_recovery_rejects_missing_safety_backup(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    missing_safety_backup = tmp_path / "backups" / "missing.db.enc"
+
+    original_database_bytes = database_path.read_bytes()
+    staged_database_bytes = staged_database.read_bytes()
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": missing_safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with pytest.raises(
+        RecoveryActivationError,
+        match="verified safety backup no longer exists",
+    ):
+        activate_staged_database_recovery(
+            plan=plan,
+            confirmation=RECOVERY_CONFIRMATION_PHRASE,
+        )
+
+    assert database_path.read_bytes() == original_database_bytes
+    assert staged_database.read_bytes() == staged_database_bytes
+    assert not rollback_database.exists()
+
+
+def test_activate_staged_database_recovery_reports_failed_original_restore(
+    tmp_path,
+):
+    database_path, restore_directory, recovery_info = create_staged_recovery(tmp_path)
+    staged_database = restore_directory / recovery_info["staged_filename"]
+    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
+    safety_backup = tmp_path / "backups" / "safety.db.enc"
+    safety_backup.write_bytes(b"verified backup")
+
+    real_replace = os.replace
+
+    def fail_staged_and_rollback_moves(
+        source,
+        destination,
+    ):
+        source_path = Path(source).resolve()
+        destination_path = Path(destination).resolve()
+
+        if source_path == staged_database.resolve():
+            raise OSError("staged activation failed")
+
+        if (
+            source_path == rollback_database.resolve()
+            and destination_path == database_path.resolve()
+        ):
+            raise OSError("rollback restoration failed")
+
+        return real_replace(source, destination)
+
+    plan = {
+        "active_database": database_path.resolve(),
+        "staged_database": staged_database.resolve(),
+        "rollback_database": rollback_database.resolve(),
+        "safety_backup": safety_backup.resolve(),
+        "sidecars": [],
+        "service_name": None,
+        "api_host": "127.0.0.1",
+        "api_port": 8000,
+    }
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_managed_service_stopped",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation." "verify_api_port_available",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation."
+            "verify_exclusive_database_access",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.os.replace",
+            side_effect=fail_staged_and_rollback_moves,
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Use the verified encrypted safety backup",
+        ):
+            activate_staged_database_recovery(
+                plan=plan,
+                confirmation=RECOVERY_CONFIRMATION_PHRASE,
+            )
+
+    assert not database_path.exists()
+    assert rollback_database.exists()
+    assert staged_database.exists()
+    assert safety_backup.exists()
+
+
 def test_require_same_filesystem_accepts_matching_filesystems(
     tmp_path,
 ):
@@ -949,6 +1225,30 @@ def test_verify_api_port_available_rejects_invalid_port(
         )
 
 
+def test_verify_api_port_available_wraps_unexpected_socket_failure():
+    unexpected_error = OSError(
+        errno.EACCES,
+        "Permission denied",
+    )
+
+    with patch(
+        "authstatus_api.backups.recovery_activation.socket.socket"
+    ) as socket_factory:
+        socket_instance = socket_factory.return_value.__enter__.return_value
+        socket_instance.bind.side_effect = unexpected_error
+
+        with pytest.raises(
+            RecoveryActivationError,
+            match=(
+                "Unable to determine whether the CareQueue API " "port is available"
+            ),
+        ):
+            verify_api_port_available(
+                host="127.0.0.1",
+                port=8000,
+            )
+
+
 def test_verify_managed_service_stopped_skips_when_not_configured():
     with patch(
         "authstatus_api.backups.recovery_activation.subprocess.run"
@@ -1033,6 +1333,128 @@ def test_verify_windows_service_stopped():
         verify_managed_service_stopped(
             service_name="CareQueue",
         )
+
+
+def test_verify_managed_service_wraps_service_manager_launch_failure():
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation.platform.system",
+            return_value="Windows",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.subprocess.run",
+            side_effect=OSError("service manager unavailable"),
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Unable to verify the managed CareQueue service status",
+        ):
+            verify_managed_service_stopped(
+                service_name="CareQueue",
+            )
+
+
+def test_verify_managed_service_wraps_service_manager_timeout():
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation.platform.system",
+            return_value="Windows",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(
+                cmd=["sc.exe", "query", "CareQueue"],
+                timeout=10,
+            ),
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Unable to verify the managed CareQueue service status",
+        ):
+            verify_managed_service_stopped(
+                service_name="CareQueue",
+            )
+
+
+def test_verify_windows_service_rejects_unverifiable_status():
+    result = subprocess.CompletedProcess(
+        args=["sc.exe", "query", "CareQueue"],
+        returncode=0,
+        stdout="SERVICE_NAME: CareQueue\n",
+        stderr="",
+    )
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation.platform.system",
+            return_value="Windows",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.subprocess.run",
+            return_value=result,
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Unable to verify the managed CareQueue service status",
+        ):
+            verify_managed_service_stopped(
+                service_name="CareQueue",
+            )
+
+
+def test_verify_linux_service_rejects_unknown_service():
+    result = subprocess.CompletedProcess(
+        args=[
+            "systemctl",
+            "is-active",
+            "carequeue.service",
+        ],
+        returncode=4,
+        stdout="unknown\n",
+        stderr="Unit carequeue.service could not be found.\n",
+    )
+
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation.platform.system",
+            return_value="Linux",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.subprocess.run",
+            return_value=result,
+        ),
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Unable to verify the managed CareQueue service status",
+        ):
+            verify_managed_service_stopped(
+                service_name="carequeue.service",
+            )
+
+
+def test_verify_managed_service_rejects_unsupported_operating_system():
+    with (
+        patch(
+            "authstatus_api.backups.recovery_activation.platform.system",
+            return_value="Darwin",
+        ),
+        patch(
+            "authstatus_api.backups.recovery_activation.subprocess.run",
+        ) as mocked_run,
+    ):
+        with pytest.raises(
+            RecoveryActivationError,
+            match="Managed service verification is not supported",
+        ):
+            verify_managed_service_stopped(
+                service_name="CareQueue",
+            )
+
+    mocked_run.assert_not_called()
 
 
 def test_verify_windows_service_rejects_running_service():

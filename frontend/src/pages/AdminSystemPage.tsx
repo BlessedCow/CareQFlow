@@ -956,7 +956,7 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                   darkMode ? "text-gray-500" : "text-gray-500"
                 )}
               >
-                CareQueue version
+                CareQueue version at attestation
               </dt>
 
               <dd className="mt-1">
@@ -1017,7 +1017,9 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                   <th className="px-3 py-3 font-medium">Deployment</th>
                   <th className="px-3 py-3 font-medium">Accepted by</th>
                   <th className="px-3 py-3 font-medium">Accepted</th>
-                  <th className="px-3 py-3 font-medium">CareQueue version</th>
+                  <th className="px-3 py-3 font-medium">
+                    CareQueue version at attestation
+                  </th>
                 </tr>
               </thead>
 

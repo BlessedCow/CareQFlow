@@ -569,6 +569,58 @@ def test_production_requires_separate_encryption_keys():
         )
 
 
+def test_production_requires_field_and_sqlcipher_keys_to_differ():
+    shared_key = encryption_key()
+
+    with pytest.raises(
+        ValidationError,
+        match="field and SQLCipher encryption keys must be different",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_ENCRYPTION_KEY=shared_key,
+            AUTHSTATUS_SQLCIPHER_KEY=shared_key,
+        )
+
+
+def test_production_requires_backup_and_sqlcipher_keys_to_differ():
+    shared_key = encryption_key()
+
+    with pytest.raises(
+        ValidationError,
+        match="backup and SQLCipher encryption keys must be different",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_BACKUP_ENCRYPTION_KEY=shared_key,
+            AUTHSTATUS_SQLCIPHER_KEY=shared_key,
+        )
+
+
+def test_production_requires_previous_field_and_backup_keys_to_differ():
+    shared_key = encryption_key()
+
+    with pytest.raises(
+        ValidationError,
+        match="previous field and backup encryption keys must be different",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY=shared_key,
+            AUTHSTATUS_BACKUP_ENCRYPTION_KEY=shared_key,
+        )
+
+
+def test_production_requires_previous_field_and_sqlcipher_keys_to_differ():
+    shared_key = encryption_key()
+
+    with pytest.raises(
+        ValidationError,
+        match="previous field and SQLCipher encryption keys must be different",
+    ):
+        valid_production_settings(
+            AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY=shared_key,
+            AUTHSTATUS_SQLCIPHER_KEY=shared_key,
+        )
+
+
 def test_production_rejects_database_path_outside_data_root():
     with pytest.raises(
         ValidationError,

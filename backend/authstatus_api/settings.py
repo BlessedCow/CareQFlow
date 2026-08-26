@@ -431,6 +431,29 @@ class Settings(BaseSettings):
                 "Production field and backup encryption keys must be different."
             )
 
+        if encryption_key == sqlcipher_key:
+            raise ValueError(
+                "Production field and SQLCipher encryption keys must be different."
+            )
+
+        if backup_encryption_key == sqlcipher_key:
+            raise ValueError(
+                "Production backup and SQLCipher encryption keys must be different."
+            )
+
+        if previous_encryption_key:
+            if previous_encryption_key == backup_encryption_key:
+                raise ValueError(
+                    "Production previous field and backup encryption keys "
+                    "must be different."
+                )
+
+            if previous_encryption_key == sqlcipher_key:
+                raise ValueError(
+                    "Production previous field and SQLCipher encryption keys "
+                    "must be different."
+                )
+
         if not self.session_cookie_secure:
             raise ValueError("Production requires secure session cookies.")
 

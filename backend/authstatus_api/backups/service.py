@@ -70,11 +70,11 @@ def _get_backup_fernet() -> Fernet:
 
 
 def _atomic_write_bytes(destination_path: Path, data: bytes) -> None:
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
-
     temporary_path: Path | None = None
 
     try:
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+
         with tempfile.NamedTemporaryFile(
             mode="wb",
             dir=destination_path.parent,
@@ -82,15 +82,22 @@ def _atomic_write_bytes(destination_path: Path, data: bytes) -> None:
             suffix=".tmp",
             delete=False,
         ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
             temporary_file.write(data)
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
-            temporary_path = Path(temporary_file.name)
 
         temporary_path.replace(destination_path)
+    except OSError as exc:
+        raise BackupError(
+            f"Unable to write encrypted backup: {destination_path.name}"
+        ) from exc
     finally:
         if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
 
 
 def _create_plaintext_snapshot(
@@ -441,10 +448,14 @@ def create_encrypted_database_backup(
     if not source_path.is_file():
         raise BackupError(f"Database path is not a file: {source_path}")
 
-    destination_directory.mkdir(parents=True, exist_ok=True)
+    try:
+        destination_directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise BackupError(
+            f"Unable to create backup directory: {destination_directory}"
+        ) from exc
 
     snapshot_path: Path | None = None
-
     try:
         with tempfile.NamedTemporaryFile(
             dir=destination_directory,
@@ -514,7 +525,12 @@ def restore_encrypted_database_backup(
 
     decrypted_bytes = decrypt_backup_file(backup_path)
 
-    destination_directory.mkdir(parents=True, exist_ok=True)
+    try:
+        destination_directory.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise BackupError(
+            f"Unable to create restore directory: {destination_directory}"
+        ) from exc
 
     restored_name = backup_path.name.removesuffix(".enc").replace(
         ".db",
@@ -537,16 +553,24 @@ def restore_encrypted_database_backup(
             suffix=".tmp",
             delete=False,
         ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
             temporary_file.write(decrypted_bytes)
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
-            temporary_path = Path(temporary_file.name)
 
         _validate_restored_database(temporary_path)
+
         temporary_path.replace(restored_path)
+    except OSError as exc:
+        raise BackupError(
+            f"Unable to write restored database: {restored_path.name}"
+        ) from exc
     finally:
         if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
 
     return restored_path
 
