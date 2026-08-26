@@ -336,7 +336,7 @@ export function AddAuthorizationForm({
           onCancel={handleCancelPdfIntake}
         />
       )}
-      <label className="space-y-1 text-sm">
+      <label data-walkthrough="auth-client-name" className="space-y-1 text-sm">
         <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
           Client Name
         </span>
@@ -461,7 +461,7 @@ export function AddAuthorizationForm({
         </select>
       </label>
 
-      <label className="space-y-1 text-sm">
+      <label data-walkthrough="auth-facility" className="space-y-1 text-sm">
         <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
           Facility
         </span>
@@ -490,7 +490,7 @@ export function AddAuthorizationForm({
         )}
       </label>
 
-      <label className="space-y-1 text-sm">
+      <label data-walkthrough="auth-loc" className="space-y-1 text-sm">
         <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
           LOC
         </span>
@@ -654,7 +654,7 @@ export function AddAuthorizationForm({
         />
       </label>
 
-      <label className="space-y-1 text-sm">
+      <label data-walkthrough="auth-insurance" className="space-y-1 text-sm">
         <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
           Insurance
         </span>
@@ -676,7 +676,7 @@ export function AddAuthorizationForm({
         </select>
       </label>
 
-      <label className="space-y-1 text-sm">
+      <label data-walkthrough="auth-type" className="space-y-1 text-sm">
         <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
           Auth Type
         </span>
@@ -703,7 +703,10 @@ export function AddAuthorizationForm({
         )}
       </label>
 
-      <label className="space-y-1 text-sm">
+      <label
+        data-walkthrough="auth-submission-method"
+        className="space-y-1 text-sm"
+      >
         <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
           Submission Method
         </span>
@@ -1017,7 +1020,10 @@ export function AddAuthorizationForm({
         )}
       </div>
 
-      <div className="flex items-end justify-end gap-2 md:col-span-2">
+      <div
+        data-walkthrough="auth-form-actions"
+        className="flex items-end justify-end gap-2 md:col-span-2"
+      >
         <button
           type="button"
           onClick={onCancel}

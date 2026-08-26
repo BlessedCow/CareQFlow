@@ -86,11 +86,60 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
       target: '[data-walkthrough="authorization-form"]',
     },
     {
+      title: "Client information",
+      description:
+        "Enter the client's identifying information here. Client Name and other required fields must be completed before the authorization can be saved.",
+      page: "authorizations",
+      target: '[data-walkthrough="auth-client-name"]',
+    },
+    {
+      title: "Facility",
+      description:
+        "Select the facility associated with this authorization. These options come from the facilities you registered in Settings.",
+      page: "authorizations",
+      target: '[data-walkthrough="auth-facility"]',
+    },
+    {
+      title: "Level of care",
+      description:
+        "Choose the current level of care for the authorization, such as DTX, RTC, PHP, or IOP.",
+      page: "authorizations",
+      target: '[data-walkthrough="auth-loc"]',
+    },
+    {
+      title: "Insurance",
+      description:
+        "Select the payer for this authorization. These options come from the insurances you registered in Settings.",
+      page: "authorizations",
+      target: '[data-walkthrough="auth-insurance"]',
+    },
+    {
+      title: "Authorization type",
+      description:
+        "Choose the authorization type. Initial is used for a new authorization, LOC Change creates a level of care change workflow, and Retro is used for retro authorization work.",
+      page: "authorizations",
+      target: '[data-walkthrough="auth-type"]',
+    },
+    {
+      title: "Submission method",
+      description:
+        "Choose how the authorization was submitted. CareQueue can show additional fields for web portals, phone calls, voicemail, or fax depending on this selection.",
+      page: "authorizations",
+      target: '[data-walkthrough="auth-submission-method"]',
+    },
+    {
       title: "PDF intake",
       description:
         "For a new initial authorization, you can optionally select a supported PDF and ask CareQueue to propose values for the form. The PDF is processed in memory and you review the extracted values before applying them.",
       page: "authorizations",
       target: '[data-walkthrough="pdf-intake"]',
+    },
+    {
+      title: "Save the authorization",
+      description:
+        "When the required information is complete, use the save button here to create the authorization. You do not need to save a real authorization to complete this walkthrough.",
+      page: "authorizations",
+      target: '[data-walkthrough="auth-form-actions"]',
     },
     {
       title: "Concurrent reviews and level of care changes",

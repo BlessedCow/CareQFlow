@@ -40,7 +40,7 @@ describe("Walkthrough", () => {
       })
     ).toBeInTheDocument();
 
-    expect(screen.getByText("Step 1 of 14")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 21")).toBeInTheDocument();
   });
 
   it("moves forward and backward through steps", () => {
