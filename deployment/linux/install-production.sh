@@ -83,10 +83,10 @@ detect_distribution() {
     DISTRO_VERSION="${VERSION_ID:-unknown}"
 
     case "${DISTRO_ID}" in
-        ubuntu|debian)
+        ubuntu|debian|linuxmint|fedora)
             ;;
         *)
-            fail "Unsupported Linux distribution: ${DISTRO_ID} ${DISTRO_VERSION}. CareQueue currently supports Ubuntu and Debian."
+            fail "Unsupported Linux distribution: ${DISTRO_ID} ${DISTRO_VERSION}."
             ;;
     esac
 
@@ -98,19 +98,38 @@ detect_distribution() {
 install_system_dependencies() {
     printf 'Installing CareQueue system dependencies...\n'
 
-    export DEBIAN_FRONTEND=noninteractive
+    case "${DISTRO_ID}" in
+        ubuntu|debian|linuxmint)
+            export DEBIAN_FRONTEND=noninteractive
 
-    apt-get update
+            apt-get update
 
-    apt-get install -y \
-        ca-certificates \
-        curl \
-        libsqlcipher-dev \
-        python3 \
-        python3-dev \
-        python3-pip \
-        python3-venv \
-        build-essential
+            apt-get install -y \
+                ca-certificates \
+                curl \
+                libsqlcipher-dev \
+                python3 \
+                python3-dev \
+                python3-pip \
+                python3-venv \
+                build-essential
+            ;;
+        fedora)
+            dnf install -y \
+                ca-certificates \
+                curl \
+                sqlcipher-devel \
+                python3 \
+                python3-devel \
+                python3-pip \
+                gcc \
+                gcc-c++ \
+                make
+            ;;
+        *)
+            fail "No dependency installer is configured for ${DISTRO_ID}."
+            ;;
+    esac
 }
 
 ensure_service_account() {
@@ -194,18 +213,18 @@ copy_application_files() {
         "${INSTALL_DIRECTORY}/frontend" \
         "${INSTALL_DIRECTORY}/deployment"
 
-    cp -a \
+    cp -a --no-preserve=context \
         "${SOURCE_DIRECTORY}/backend/." \
         "${INSTALL_DIRECTORY}/backend/"
 
-    cp -a \
+    cp -a --no-preserve=context \
         "${SOURCE_DIRECTORY}/deployment/." \
         "${INSTALL_DIRECTORY}/deployment/"
 
     if [[ -d "${SOURCE_DIRECTORY}/frontend/dist" ]]; then
         mkdir -p "${INSTALL_DIRECTORY}/frontend/dist"
 
-        cp -a \
+        cp -a --no-preserve=context \
             "${SOURCE_DIRECTORY}/frontend/dist/." \
             "${INSTALL_DIRECTORY}/frontend/dist/"
     else
@@ -214,6 +233,10 @@ copy_application_files() {
 
     chown -R root:"${CAREQUEUE_GROUP}" "${INSTALL_DIRECTORY}"
     chmod -R go-w "${INSTALL_DIRECTORY}"
+
+    if command -v restorecon >/dev/null 2>&1; then
+        restorecon -RF "${INSTALL_DIRECTORY}"
+    fi
 }
 
 create_python_environment() {
@@ -426,30 +449,45 @@ install_caddy() {
         return
     fi
 
-    apt-get install -y \
-        debian-keyring \
-        debian-archive-keyring \
-        apt-transport-https \
-        curl \
-        gnupg
+    case "${DISTRO_ID}" in
+        ubuntu|debian|linuxmint)
+            apt-get install -y \
+                debian-keyring \
+                debian-archive-keyring \
+                apt-transport-https \
+                curl \
+                gnupg
 
-    curl -1sLf \
-        'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-        | gpg --dearmor \
-        -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+            curl -1sLf \
+                'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+                | gpg --dearmor \
+                -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 
-    curl -1sLf \
-        'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-        > /etc/apt/sources.list.d/caddy-stable.list
+            curl -1sLf \
+                'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+                > /etc/apt/sources.list.d/caddy-stable.list
 
-    chmod o+r \
-        /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+            chmod o+r \
+                /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 
-    chmod o+r \
-        /etc/apt/sources.list.d/caddy-stable.list
+            chmod o+r \
+                /etc/apt/sources.list.d/caddy-stable.list
 
-    apt-get update
-    apt-get install -y caddy
+            apt-get update
+            apt-get install -y caddy
+            ;;
+        fedora)
+            dnf install -y \
+                'dnf-command(copr)'
+
+            dnf copr enable -y @caddy/caddy
+
+            dnf install -y caddy
+            ;;
+        *)
+            fail "No Caddy installer is configured for ${DISTRO_ID}."
+            ;;
+    esac
 }
 
 disable_default_caddy_service() {
