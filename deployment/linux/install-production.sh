@@ -83,7 +83,7 @@ detect_distribution() {
     DISTRO_VERSION="${VERSION_ID:-unknown}"
 
     case "${DISTRO_ID}" in
-        ubuntu|debian|linuxmint|fedora)
+        ubuntu|debian|linuxmint|fedora|arch)
             ;;
         *)
             fail "Unsupported Linux distribution: ${DISTRO_ID} ${DISTRO_VERSION}."
@@ -125,6 +125,17 @@ install_system_dependencies() {
                 gcc \
                 gcc-c++ \
                 make
+            ;;
+        arch)
+            pacman -Syu --noconfirm
+
+            pacman -S --needed --noconfirm \
+                ca-certificates \
+                curl \
+                sqlcipher \
+                python \
+                python-pip \
+                base-devel
             ;;
         *)
             fail "No dependency installer is configured for ${DISTRO_ID}."
@@ -483,6 +494,9 @@ install_caddy() {
             dnf copr enable -y @caddy/caddy
 
             dnf install -y caddy
+            ;;
+        arch)
+            pacman -S --needed --noconfirm caddy
             ;;
         *)
             fail "No Caddy installer is configured for ${DISTRO_ID}."
