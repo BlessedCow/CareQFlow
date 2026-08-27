@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from authstatus_api.persistence.migrations import ensure_column
-
 
 def initialize_audit_tables(conn: Any) -> None:
     conn.execute("""
@@ -24,18 +22,6 @@ def initialize_audit_tables(conn: Any) -> None:
         )
         """)
 
-    ensure_column(conn, "audit_events", "user_id", "INTEGER")
-    ensure_column(conn, "audit_events", "username", "TEXT")
-    ensure_column(
-        conn,
-        "audit_events",
-        "metadata",
-        "TEXT NOT NULL DEFAULT '{}'",
-    )
-    ensure_column(conn, "audit_events", "ip_address", "TEXT")
-    ensure_column(conn, "audit_events", "user_agent", "TEXT")
-    ensure_column(conn, "audit_events", "previous_hash", "TEXT")
-    ensure_column(conn, "audit_events", "event_hash", "TEXT")
     conn.execute("""
     CREATE TABLE IF NOT EXISTS audit_chain_state (
         id INTEGER PRIMARY KEY CHECK (id = 1),

@@ -11,10 +11,12 @@ export interface GovernanceAttestation {
   accepted_by_username: string;
   accepted_at: string;
   app_version: string;
+  document_revision: string | null;
 }
 
 export interface GovernanceStatus {
   required_version: number;
+  required_document_revision: string;
   current: boolean;
   attestation: GovernanceAttestation | null;
 }

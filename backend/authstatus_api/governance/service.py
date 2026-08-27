@@ -7,10 +7,12 @@ from fastapi import Request
 from authstatus_api.audit.service import record_audit_event
 from authstatus_api.governance.repository import (
     CURRENT_GOVERNANCE_ATTESTATION_VERSION,
+    CURRENT_GOVERNANCE_DOCUMENT_REVISION,
     create_governance_attestation,
     get_current_governance_attestation,
     is_governance_attestation_current,
 )
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.settings import get_settings
 
 
@@ -27,6 +29,7 @@ def get_governance_status() -> dict[str, Any]:
 
     return {
         "required_version": CURRENT_GOVERNANCE_ATTESTATION_VERSION,
+        "required_document_revision": CURRENT_GOVERNANCE_DOCUMENT_REVISION,
         "current": attestation is not None,
         "attestation": attestation,
     }
@@ -51,24 +54,30 @@ def accept_governance_attestation(
 
     settings = get_settings()
 
-    attestation = create_governance_attestation(
-        organization_name=organization_name,
-        deployment_mode=deployment_mode,
-        accepted_by_user_id=user["id"],
-        app_version=settings.app_version,
-    )
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
 
-    record_audit_event(
-        action="governance.attestation_accepted",
-        resource_type="governance_attestation",
-        resource_id=attestation["id"],
-        user=user,
-        metadata={
-            "attestation_version": attestation["attestation_version"],
-            "deployment_mode": attestation["deployment_mode"],
-            "app_version": attestation["app_version"],
-        },
-        request=request,
-    )
+        attestation = create_governance_attestation(
+            organization_name=organization_name,
+            deployment_mode=deployment_mode,
+            accepted_by_user_id=user["id"],
+            app_version=settings.app_version,
+            conn=conn,
+        )
+
+        record_audit_event(
+            action="governance.attestation_accepted",
+            resource_type="governance_attestation",
+            resource_id=attestation["id"],
+            user=user,
+            metadata={
+                "attestation_version": attestation["attestation_version"],
+                "document_revision": attestation["document_revision"],
+                "deployment_mode": attestation["deployment_mode"],
+                "app_version": attestation["app_version"],
+            },
+            request=request,
+            conn=conn,
+        )
 
     return attestation

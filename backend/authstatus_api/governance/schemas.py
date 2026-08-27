@@ -19,10 +19,12 @@ class GovernanceAttestationResponse(BaseModel):
     accepted_by_username: str
     accepted_at: str
     app_version: str
+    document_revision: str | None = None
 
 
 class GovernanceStatusResponse(BaseModel):
     required_version: int
+    required_document_revision: str
     current: bool
     attestation: GovernanceAttestationResponse | None = None
 

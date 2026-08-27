@@ -926,6 +926,22 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                   darkMode ? "text-gray-500" : "text-gray-500"
                 )}
               >
+                Document revision
+              </dt>
+
+              <dd className="mt-1 break-words">
+                {governanceStatus.attestation.document_revision ??
+                  "Legacy record"}
+              </dd>
+            </div>
+
+            <div>
+              <dt
+                className={cn(
+                  "text-xs font-medium uppercase tracking-wide",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
                 Accepted by
               </dt>
 

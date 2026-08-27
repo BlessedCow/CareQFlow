@@ -8,6 +8,8 @@ import authstatus_api.governance.repository as governance_repository
 import authstatus_api.governance.service as governance_service
 from authstatus_api.governance.repository import (
     CURRENT_GOVERNANCE_ATTESTATION_VERSION,
+    CURRENT_GOVERNANCE_DOCUMENT_REVISION,
+    get_current_governance_attestation,
 )
 from authstatus_api.governance.service import (
     GovernanceAttestationAlreadyCurrentError,
@@ -38,6 +40,7 @@ def test_governance_status_reports_incomplete_before_acceptance():
 
     assert status == {
         "required_version": CURRENT_GOVERNANCE_ATTESTATION_VERSION,
+        "required_document_revision": CURRENT_GOVERNANCE_DOCUMENT_REVISION,
         "current": False,
         "attestation": None,
     }
@@ -63,6 +66,8 @@ def test_admin_can_accept_governance_attestation():
         CURRENT_GOVERNANCE_ATTESTATION_VERSION
     )
     assert attestation["app_version"] == get_settings().app_version
+
+    assert attestation["document_revision"] == (CURRENT_GOVERNANCE_DOCUMENT_REVISION)
 
     status = get_governance_status()
 
@@ -158,6 +163,7 @@ def test_governance_acceptance_writes_safe_audit_event():
     assert metadata == {
         "app_version": get_settings().app_version,
         "attestation_version": (CURRENT_GOVERNANCE_ATTESTATION_VERSION),
+        "document_revision": CURRENT_GOVERNANCE_DOCUMENT_REVISION,
         "deployment_mode": "managed",
     }
 
@@ -197,6 +203,7 @@ def test_new_attestation_version_requires_reacceptance(
 
     assert outdated_status == {
         "required_version": 2,
+        "required_document_revision": CURRENT_GOVERNANCE_DOCUMENT_REVISION,
         "current": False,
         "attestation": None,
     }
@@ -262,3 +269,107 @@ def test_reacceptance_preserves_previous_attestation_history(
         (first_attestation["id"], 1),
         (second_attestation["id"], 2),
     ]
+
+
+def test_failed_audit_does_not_leave_governance_attestation(
+    monkeypatch,
+):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    def fail_audit_event(**_kwargs):
+        raise RuntimeError("simulated audit failure")
+
+    monkeypatch.setattr(
+        governance_service,
+        "record_audit_event",
+        fail_audit_event,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="simulated audit failure",
+    ):
+        accept_governance_attestation(
+            organization_name="Example Facility",
+            deployment_mode="self_hosted",
+            user=admin,
+        )
+
+    with get_conn() as conn:
+        attestation_count = conn.execute("""
+            SELECT COUNT(*) AS attestation_count
+            FROM governance_attestations
+            """).fetchone()
+
+    assert attestation_count is not None
+    assert attestation_count["attestation_count"] == 0
+
+
+def test_application_version_change_alone_does_not_require_reattestation(
+    monkeypatch,
+):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    first = accept_governance_attestation(
+        organization_name="Example Facility",
+        deployment_mode="self_hosted",
+        user=admin,
+    )
+
+    assert governance_service.is_governance_attestation_current() is True
+
+    settings = governance_service.get_settings()
+
+    monkeypatch.setattr(
+        settings,
+        "app_version",
+        "999.0.0",
+    )
+
+    assert governance_service.is_governance_attestation_current() is True
+
+    current = get_current_governance_attestation()
+
+    assert current is not None
+    assert current["id"] == first["id"]
+
+
+def test_document_revision_change_requires_reattestation(
+    monkeypatch,
+):
+    admin = create_user(
+        "admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    first_attestation = accept_governance_attestation(
+        organization_name="Example Facility",
+        deployment_mode="self_hosted",
+        user=admin,
+    )
+
+    assert first_attestation["document_revision"] == (
+        CURRENT_GOVERNANCE_DOCUMENT_REVISION
+    )
+    assert get_governance_status()["current"] is True
+
+    monkeypatch.setattr(
+        governance_repository,
+        "CURRENT_GOVERNANCE_DOCUMENT_REVISION",
+        "governance-attestation-v1-revised",
+    )
+
+    status = get_governance_status()
+
+    assert status["required_version"] == (CURRENT_GOVERNANCE_ATTESTATION_VERSION)
+    assert status["current"] is False
+    assert status["attestation"] is None

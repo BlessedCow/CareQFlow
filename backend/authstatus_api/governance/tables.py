@@ -13,6 +13,7 @@ def initialize_governance_tables(conn: Any) -> None:
             accepted_by_user_id INTEGER NOT NULL,
             accepted_at TEXT NOT NULL,
             app_version TEXT NOT NULL,
+            document_revision TEXT,
             FOREIGN KEY (accepted_by_user_id)
                 REFERENCES users (id)
                 ON DELETE RESTRICT,

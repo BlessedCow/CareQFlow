@@ -5,13 +5,22 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from authstatus_api.persistence.migration_steps.audit import (
+    add_audit_event_columns,
+)
 from authstatus_api.persistence.migration_steps.authorizations import (
     add_core_authorization_columns,
     add_denial_follow_up_columns,
 )
+from authstatus_api.persistence.migration_steps.governance import (
+    enforce_append_only_governance_attestations,
+)
 from authstatus_api.persistence.migration_steps.security import (
     add_authentication_and_session_columns,
     add_walkthrough_columns,
+)
+from authstatus_api.persistence.migration_steps.governance_revision import (
+    add_governance_document_revision,
 )
 
 
@@ -134,6 +143,18 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         migration_id="0004_authorization_denial_follow_up_columns",
         apply=add_denial_follow_up_columns,
+    ),
+    Migration(
+        migration_id="0005_governance_append_only_history",
+        apply=enforce_append_only_governance_attestations,
+    ),
+    Migration(
+        migration_id="0006_audit_event_columns",
+        apply=add_audit_event_columns,
+    ),
+    Migration(
+        migration_id="0007_governance_document_revision",
+        apply=add_governance_document_revision,
     ),
 )
 

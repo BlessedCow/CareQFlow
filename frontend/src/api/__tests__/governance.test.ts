@@ -25,6 +25,7 @@ describe("governance API", () => {
       new Response(
         JSON.stringify({
           required_version: 1,
+          required_document_revision: "governance-attestation-v1",
           current: false,
           attestation: null,
         }),
@@ -39,6 +40,7 @@ describe("governance API", () => {
 
     await expect(fetchGovernanceStatus()).resolves.toEqual({
       required_version: 1,
+      required_document_revision: "governance-attestation-v1",
       current: false,
       attestation: null,
     });
@@ -58,12 +60,14 @@ describe("governance API", () => {
       accepted_by_username: "admin@example.com",
       accepted_at: "2026-08-23T09:00:00+00:00",
       app_version: "0.2.0",
+      document_revision: "governance-attestation-v1",
     };
 
     mockedAuthenticatedFetch.mockResolvedValue(
       new Response(
         JSON.stringify({
           required_version: 1,
+          required_document_revision: "governance-attestation-v1",
           current: true,
           attestation,
         }),
@@ -78,6 +82,7 @@ describe("governance API", () => {
 
     await expect(fetchGovernanceStatus()).resolves.toEqual({
       required_version: 1,
+      required_document_revision: "governance-attestation-v1",
       current: true,
       attestation,
     });
@@ -105,6 +110,7 @@ describe("governance API", () => {
           accepted_by_username: "admin@example.com",
           accepted_at: "2026-08-23T09:00:00+00:00",
           app_version: "0.2.0",
+          document_revision: "governance-attestation-v1",
         }),
         {
           status: 201,
@@ -183,6 +189,7 @@ describe("governance API", () => {
         accepted_by_username: "admin@example.com",
         accepted_at: "2026-08-23T10:00:00+00:00",
         app_version: "0.3.0",
+        document_revision: "governance-attestation-v2",
       },
       {
         id: 1,
@@ -193,6 +200,7 @@ describe("governance API", () => {
         accepted_by_username: "admin@example.com",
         accepted_at: "2026-08-23T09:00:00+00:00",
         app_version: "0.2.0",
+        document_revision: "governance-attestation-v1",
       },
     ];
 

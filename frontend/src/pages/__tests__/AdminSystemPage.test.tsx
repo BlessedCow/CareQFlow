@@ -160,6 +160,7 @@ describe("AdminSystemPage", () => {
 
     mockedFetchGovernanceStatus.mockResolvedValue({
       required_version: 1,
+      required_document_revision: "governance-attestation-v1",
       current: true,
       attestation: {
         id: 1,
@@ -170,6 +171,7 @@ describe("AdminSystemPage", () => {
         accepted_by_username: "admin@example.com",
         accepted_at: "2026-08-23T09:00:00+00:00",
         app_version: "0.2.0",
+        document_revision: "governance-attestation-v1",
       },
     });
 
@@ -185,6 +187,7 @@ describe("AdminSystemPage", () => {
         accepted_by_username: "admin@example.com",
         accepted_at: "2026-08-23T10:00:00+00:00",
         app_version: "0.3.0",
+        document_revision: "governance-attestation-v1",
       },
       {
         id: 1,
@@ -195,6 +198,7 @@ describe("AdminSystemPage", () => {
         accepted_by_username: "admin@example.com",
         accepted_at: "2026-08-23T09:00:00+00:00",
         app_version: "0.2.0",
+        document_revision: "governance-attestation-v1",
       },
     ]);
   });

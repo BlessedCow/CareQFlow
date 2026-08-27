@@ -7,6 +7,7 @@ from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 
 CURRENT_GOVERNANCE_ATTESTATION_VERSION = 1
+CURRENT_GOVERNANCE_DOCUMENT_REVISION = "governance-attestation-v1"
 
 SUPPORTED_DEPLOYMENT_MODES = {
     "self_hosted",
@@ -73,10 +74,14 @@ def get_current_governance_attestation() -> dict[str, Any] | None:
             JOIN users
                 ON users.id = governance_attestations.accepted_by_user_id
             WHERE governance_attestations.attestation_version = ?
+                AND governance_attestations.document_revision = ?
             ORDER BY governance_attestations.id DESC
             LIMIT 1
             """,
-            (CURRENT_GOVERNANCE_ATTESTATION_VERSION,),
+            (
+                CURRENT_GOVERNANCE_ATTESTATION_VERSION,
+                CURRENT_GOVERNANCE_DOCUMENT_REVISION,
+            ),
         ).fetchone()
 
     return _row_to_attestation(row)
@@ -92,9 +97,8 @@ def create_governance_attestation(
     deployment_mode: str,
     accepted_by_user_id: int,
     app_version: str,
+    conn: Any | None = None,
 ) -> dict[str, Any]:
-    init_db()
-
     normalized_organization_name = " ".join(organization_name.split())
 
     if not normalized_organization_name:
@@ -105,8 +109,8 @@ def create_governance_attestation(
 
     accepted_at = _now()
 
-    with get_conn() as conn:
-        cursor = conn.execute(
+    def create_with_connection(connection: Any) -> Any:
+        cursor = connection.execute(
             """
             INSERT INTO governance_attestations (
                 attestation_version,
@@ -114,9 +118,10 @@ def create_governance_attestation(
                 deployment_mode,
                 accepted_by_user_id,
                 accepted_at,
-                app_version
+                app_version,
+                document_revision
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 CURRENT_GOVERNANCE_ATTESTATION_VERSION,
@@ -125,12 +130,13 @@ def create_governance_attestation(
                 accepted_by_user_id,
                 accepted_at,
                 app_version,
+                CURRENT_GOVERNANCE_DOCUMENT_REVISION,
             ),
         )
 
         attestation_id = int(cursor.lastrowid)
 
-        row = conn.execute(
+        return connection.execute(
             """
             SELECT
                 governance_attestations.*,
@@ -142,6 +148,14 @@ def create_governance_attestation(
             """,
             (attestation_id,),
         ).fetchone()
+
+    if conn is None:
+        init_db()
+
+        with get_conn() as connection:
+            row = create_with_connection(connection)
+    else:
+        row = create_with_connection(conn)
 
     attestation = _row_to_attestation(row)
 

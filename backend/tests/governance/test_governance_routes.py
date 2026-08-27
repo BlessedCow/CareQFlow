@@ -6,6 +6,9 @@ from fastapi.testclient import TestClient
 import authstatus_api.governance.repository as governance_repository
 import authstatus_api.governance.service as governance_service
 from authstatus_api.crypto import generate_encryption_key
+from authstatus_api.governance.repository import (
+    CURRENT_GOVERNANCE_DOCUMENT_REVISION,
+)
 from authstatus_api.main import create_app
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
@@ -91,6 +94,7 @@ def test_authenticated_user_can_read_incomplete_governance_status(client):
     assert response.status_code == 200
     assert response.json() == {
         "required_version": 1,
+        "required_document_revision": CURRENT_GOVERNANCE_DOCUMENT_REVISION,
         "current": False,
         "attestation": None,
     }
@@ -272,6 +276,7 @@ def test_obsolete_governance_attestation_blocks_protected_access_until_reaccepte
     assert outdated_status.status_code == 200
     assert outdated_status.json() == {
         "required_version": 2,
+        "required_document_revision": CURRENT_GOVERNANCE_DOCUMENT_REVISION,
         "current": False,
         "attestation": None,
     }

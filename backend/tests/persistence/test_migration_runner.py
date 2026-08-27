@@ -11,9 +11,18 @@ from authstatus_api.persistence.migration_runner import (
     get_applied_migration_ids,
     run_migrations,
 )
+from authstatus_api.persistence.migration_steps.audit import (
+    add_audit_event_columns,
+)
 from authstatus_api.persistence.migration_steps.authorizations import (
     add_core_authorization_columns,
     add_denial_follow_up_columns,
+)
+from authstatus_api.persistence.migration_steps.governance import (
+    enforce_append_only_governance_attestations,
+)
+from authstatus_api.persistence.migration_steps.governance_revision import (
+    add_governance_document_revision,
 )
 from authstatus_api.persistence.migration_steps.security import (
     add_authentication_and_session_columns,
@@ -247,6 +256,24 @@ def test_registered_migrations_apply_registered_registry(conn):
         )
         """)
 
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    conn.execute("""
+        CREATE TABLE audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id INTEGER,
+            created_at TEXT NOT NULL
+        )
+        """)
+
     applied = run_registered_migrations(conn)
 
     assert applied == [
@@ -254,13 +281,38 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0002_security_authentication_and_session_columns",
         "0003_authorization_core_columns",
         "0004_authorization_denial_follow_up_columns",
+        "0005_governance_append_only_history",
+        "0006_audit_event_columns",
+        "0007_governance_document_revision",
     ]
     assert get_applied_migration_ids(conn) == {
         "0001_security_walkthrough_columns",
         "0002_security_authentication_and_session_columns",
         "0003_authorization_core_columns",
         "0004_authorization_denial_follow_up_columns",
+        "0005_governance_append_only_history",
+        "0006_audit_event_columns",
+        "0007_governance_document_revision",
     }
+
+    governance_triggers = {row["name"] for row in conn.execute("""
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'trigger'
+              AND tbl_name = 'governance_attestations'
+            """).fetchall()}
+
+    assert governance_triggers == {
+        "governance_attestations_prevent_delete",
+        "governance_attestations_prevent_update",
+    }
+
+    governance_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(governance_attestations)").fetchall()
+    }
+
+    assert "document_revision" in governance_columns
 
     columns = {
         row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()
@@ -291,6 +343,21 @@ def test_registered_migrations_apply_registered_registry(conn):
     assert "requested_days" in event_columns
     assert "auth_start_date" in event_columns
     assert "review_due_date" in event_columns
+
+    audit_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(audit_events)").fetchall()
+    }
+
+    assert {
+        "user_id",
+        "username",
+        "metadata",
+        "ip_address",
+        "user_agent",
+        "previous_hash",
+        "event_hash",
+    }.issubset(audit_columns)
 
 
 def test_schema_migrations_table_is_created_during_init_db(
@@ -567,6 +634,9 @@ def test_init_db_applies_registered_migrations_in_order(
         "0002_security_authentication_and_session_columns",
         "0003_authorization_core_columns",
         "0004_authorization_denial_follow_up_columns",
+        "0005_governance_append_only_history",
+        "0006_audit_event_columns",
+        "0007_governance_document_revision",
     ]
 
     assert user_row is not None
@@ -821,6 +891,9 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
         "0002_security_authentication_and_session_columns",
         "0003_authorization_core_columns",
         "0004_authorization_denial_follow_up_columns",
+        "0005_governance_append_only_history",
+        "0006_audit_event_columns",
+        "0007_governance_document_revision",
     ]
 
     assert user_row is not None
@@ -1628,3 +1701,465 @@ def test_denial_follow_up_migration_accepts_current_schema(conn):
     assert columns.count("p2p_requested") == 1
     assert columns.count("appeal_submitted") == 1
     assert columns.count("retro_requested") == 1
+
+
+def test_governance_append_only_migration_creates_protection_triggers(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0005_governance_append_only_history",
+                apply=enforce_append_only_governance_attestations,
+            )
+        ],
+    )
+
+    trigger_rows = conn.execute("""
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'trigger'
+          AND tbl_name = 'governance_attestations'
+        ORDER BY name
+        """).fetchall()
+
+    assert applied == ["0005_governance_append_only_history"]
+    assert [row["name"] for row in trigger_rows] == [
+        "governance_attestations_prevent_delete",
+        "governance_attestations_prevent_update",
+    ]
+
+
+def test_governance_append_only_migration_blocks_attestation_update(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    conn.execute("""
+        INSERT INTO governance_attestations (
+            id,
+            attestation_version,
+            organization_name
+        )
+        VALUES (1, 1, 'Original Facility')
+        """)
+
+    run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0005_governance_append_only_history",
+                apply=enforce_append_only_governance_attestations,
+            )
+        ],
+    )
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="governance attestations are append-only",
+    ):
+        conn.execute("""
+            UPDATE governance_attestations
+            SET organization_name = 'Changed Facility'
+            WHERE id = 1
+            """)
+
+    row = conn.execute("""
+        SELECT organization_name
+        FROM governance_attestations
+        WHERE id = 1
+        """).fetchone()
+
+    assert row is not None
+    assert row["organization_name"] == "Original Facility"
+
+
+def test_governance_append_only_migration_blocks_attestation_delete(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    conn.execute("""
+        INSERT INTO governance_attestations (
+            id,
+            attestation_version,
+            organization_name
+        )
+        VALUES (1, 1, 'Original Facility')
+        """)
+
+    run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0005_governance_append_only_history",
+                apply=enforce_append_only_governance_attestations,
+            )
+        ],
+    )
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="governance attestations are append-only",
+    ):
+        conn.execute("""
+            DELETE FROM governance_attestations
+            WHERE id = 1
+            """)
+
+    row = conn.execute("""
+        SELECT id
+        FROM governance_attestations
+        WHERE id = 1
+        """).fetchone()
+
+    assert row is not None
+    assert row["id"] == 1
+
+
+def test_governance_append_only_migration_is_idempotent(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    migration = Migration(
+        migration_id="0005_governance_append_only_history",
+        apply=enforce_append_only_governance_attestations,
+    )
+
+    assert run_migrations(conn, [migration]) == ["0005_governance_append_only_history"]
+    assert run_migrations(conn, [migration]) == []
+
+    trigger_count = conn.execute("""
+        SELECT COUNT(*) AS trigger_count
+        FROM sqlite_master
+        WHERE type = 'trigger'
+          AND tbl_name = 'governance_attestations'
+        """).fetchone()
+
+    assert trigger_count is not None
+    assert trigger_count["trigger_count"] == 2
+
+
+def test_audit_event_columns_migration_upgrades_legacy_table(conn):
+    conn.execute("""
+        CREATE TABLE audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id INTEGER,
+            created_at TEXT NOT NULL
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0006_audit_event_columns",
+                apply=add_audit_event_columns,
+            )
+        ],
+    )
+
+    columns = {
+        row["name"]: row
+        for row in conn.execute("PRAGMA table_info(audit_events)").fetchall()
+    }
+
+    assert applied == ["0006_audit_event_columns"]
+
+    assert {
+        "user_id",
+        "username",
+        "metadata",
+        "ip_address",
+        "user_agent",
+        "previous_hash",
+        "event_hash",
+    }.issubset(columns)
+
+    assert columns["metadata"]["notnull"] == 1
+    assert columns["metadata"]["dflt_value"] == "'{}'"
+
+
+def test_audit_event_columns_migration_preserves_existing_data(conn):
+    conn.execute("""
+        CREATE TABLE audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id INTEGER,
+            created_at TEXT NOT NULL
+        )
+        """)
+
+    conn.execute(
+        """
+        INSERT INTO audit_events (
+            action,
+            resource_type,
+            resource_id,
+            created_at
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            "legacy.action",
+            "legacy_resource",
+            42,
+            "2026-01-01T00:00:00+00:00",
+        ),
+    )
+
+    run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0006_audit_event_columns",
+                apply=add_audit_event_columns,
+            )
+        ],
+    )
+
+    row = conn.execute("""
+        SELECT
+            action,
+            resource_type,
+            resource_id,
+            created_at,
+            metadata,
+            user_id,
+            username,
+            ip_address,
+            user_agent,
+            previous_hash,
+            event_hash
+        FROM audit_events
+        WHERE id = 1
+        """).fetchone()
+
+    assert row is not None
+    assert row["action"] == "legacy.action"
+    assert row["resource_type"] == "legacy_resource"
+    assert row["resource_id"] == 42
+    assert row["created_at"] == "2026-01-01T00:00:00+00:00"
+
+    assert row["metadata"] == "{}"
+    assert row["user_id"] is None
+    assert row["username"] is None
+    assert row["ip_address"] is None
+    assert row["user_agent"] is None
+    assert row["previous_hash"] is None
+    assert row["event_hash"] is None
+
+
+def test_audit_event_columns_migration_preserves_current_schema(conn):
+    conn.execute("""
+        CREATE TABLE audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id INTEGER,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT NOT NULL,
+            previous_hash TEXT,
+            event_hash TEXT
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0006_audit_event_columns",
+                apply=add_audit_event_columns,
+            )
+        ],
+    )
+
+    assert applied == ["0006_audit_event_columns"]
+
+    columns = [
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(audit_events)").fetchall()
+    ]
+
+    assert columns == [
+        "id",
+        "user_id",
+        "username",
+        "action",
+        "resource_type",
+        "resource_id",
+        "metadata",
+        "ip_address",
+        "user_agent",
+        "created_at",
+        "previous_hash",
+        "event_hash",
+    ]
+
+
+def test_audit_event_columns_migration_is_idempotent(conn):
+    conn.execute("""
+        CREATE TABLE audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id INTEGER,
+            created_at TEXT NOT NULL
+        )
+        """)
+
+    migration = Migration(
+        migration_id="0006_audit_event_columns",
+        apply=add_audit_event_columns,
+    )
+
+    assert run_migrations(conn, [migration]) == ["0006_audit_event_columns"]
+    assert run_migrations(conn, [migration]) == []
+
+
+def test_governance_document_revision_migration_adds_column(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0007_governance_document_revision",
+                apply=add_governance_document_revision,
+            )
+        ],
+    )
+
+    columns = {
+        row["name"]: row
+        for row in conn.execute("PRAGMA table_info(governance_attestations)").fetchall()
+    }
+
+    assert applied == ["0007_governance_document_revision"]
+    assert "document_revision" in columns
+    assert columns["document_revision"]["notnull"] == 0
+
+
+def test_governance_document_revision_migration_preserves_history(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    conn.execute("""
+        INSERT INTO governance_attestations (
+            id,
+            attestation_version,
+            organization_name
+        )
+        VALUES (1, 1, 'Legacy Facility')
+        """)
+
+    run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0007_governance_document_revision",
+                apply=add_governance_document_revision,
+            )
+        ],
+    )
+
+    row = conn.execute("""
+        SELECT
+            id,
+            attestation_version,
+            organization_name,
+            document_revision
+        FROM governance_attestations
+        WHERE id = 1
+        """).fetchone()
+
+    assert row is not None
+    assert row["id"] == 1
+    assert row["attestation_version"] == 1
+    assert row["organization_name"] == "Legacy Facility"
+    assert row["document_revision"] is None
+
+
+def test_governance_document_revision_migration_accepts_current_schema(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL,
+            document_revision TEXT
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0007_governance_document_revision",
+                apply=add_governance_document_revision,
+            )
+        ],
+    )
+
+    columns = [
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(governance_attestations)").fetchall()
+    ]
+
+    assert applied == ["0007_governance_document_revision"]
+    assert columns.count("document_revision") == 1
+
+
+def test_governance_document_revision_migration_is_idempotent(conn):
+    conn.execute("""
+        CREATE TABLE governance_attestations (
+            id INTEGER PRIMARY KEY,
+            attestation_version INTEGER NOT NULL,
+            organization_name TEXT NOT NULL
+        )
+        """)
+
+    migration = Migration(
+        migration_id="0007_governance_document_revision",
+        apply=add_governance_document_revision,
+    )
+
+    assert run_migrations(conn, [migration]) == ["0007_governance_document_revision"]
+    assert run_migrations(conn, [migration]) == []
