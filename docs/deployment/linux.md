@@ -788,12 +788,16 @@ Before sharing logs, review them for hostnames, usernames, internal paths, crede
 
 ## Upgrade
 
-Before an upgrade:
+Before upgrading:
 
 1. Confirm a recent verified encrypted backup exists.
-2. Retain the currently trusted release artifact.
-3. Review the new release notes and deployment changes.
-4. Extract the new release package into a temporary installer directory.
+2. Preserve the current release package until validation is complete.
+3. Preserve a verified pre-upgrade backup until the upgraded installation has been fully validated.
+4. Review the release notes and [upgrade documentation](../operations/upgrades.md).
+5. Confirm the production environment file and all required encryption keys are accounted for.
+6. Confirm the current installation is healthy.
+7. Confirm sufficient disk space is available for application files, the database, logs, backups, and recovery data.
+8. Extract the new release package into a temporary installer directory.
 
 Run:
 
@@ -802,6 +806,40 @@ sudo bash deployment/linux/installer/invoke-install.sh upgrade
 ```
 
 Upgrade mode requires an existing installation. It preserves the existing production configuration and runtime data while reinstalling application files, recreating the Python environment, reinstalling service definitions, validating Caddy, restarting services, and rerunning health checks.
+
+When the upgraded CareQueue API starts, database initialization may apply registered versioned schema migrations that have not yet been recorded in the database's `schema_migrations` ledger.
+
+Already applied migrations are skipped. Each new migration is applied through the migration framework and is recorded only after successful application.
+
+Do not manually edit the migration ledger to bypass a failed upgrade.
+
+A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older CareQueue application release. Keep the verified pre-upgrade backup available until rollback is no longer required.
+
+After the installer completes, verify:
+
+1. `carequeue-api.service` is active.
+2. `carequeue-caddy.service` is active.
+3. The encrypted backup timer remains enabled.
+4. HTTPS frontend access succeeds.
+5. Liveness and readiness checks pass.
+6. Login succeeds.
+7. Governance status shows the expected attestation version and document revision.
+8. A representative authorization workflow works correctly.
+9. Backup and recovery functionality remains available.
+
+If the API fails to start after an upgrade, review the API journal and installer log before retrying the upgrade or modifying production data:
+
+```bash
+sudo journalctl \
+  -u carequeue-api.service \
+  --since today
+```
+
+```text
+/var/log/carequeue/installer/
+```
+
+A migration failure should be investigated rather than worked around by deleting migration records or manually altering the production schema.
 
 The current workflow does not provide automatic rollback to the previous application release.
 

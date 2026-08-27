@@ -706,8 +706,20 @@ Keep both until:
 - Readiness passes.
 - Login succeeds.
 - Critical records are verified.
+- Governance status is correct.
+- Audit continuity and integrity status are verified.
 - Recovery is accepted.
 - Retention requirements permit removal.
+
+A rollback database preserves the database state that existed immediately before recovery activation. It is not the same as an application-version rollback plan.
+
+CareQueue database schema changes are applied through versioned migrations. A database that has been migrated by a newer CareQueue release may not be compatible with an older application release.
+
+Do not assume that replacing newer application files with older application files is sufficient to roll back an upgrade.
+
+When rollback to an older CareQueue release is required, use a verified backup created before the newer release applied its database migrations, unless that older release is explicitly documented as compatible with the migrated database.
+
+Preserve pre-upgrade backups until the upgraded installation has passed application, governance, audit, backup, and recovery validation.
 
 ## Sidecar Files
 
@@ -738,8 +750,10 @@ A drill should include:
 5. Confirm SQLCipher protection.
 6. Start an isolated test instance.
 7. Verify login and representative records.
-8. Record elapsed time and issues.
-9. Remove drill data securely.
+8. Verify governance status and audit integrity.
+9. Confirm the restored database schema is compatible with the CareQueue release used for the drill.
+10. Record elapsed time and issues.
+11. Remove drill data securely.
 
 Do not wait for an emergency to perform the first drill.
 

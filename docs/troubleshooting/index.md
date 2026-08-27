@@ -196,10 +196,14 @@ If governance was accepted previously but is required again, check whether:
 
 - The application is using the expected database.
 - The required governance attestation version changed.
+- The required governance document revision changed.
 - The installation was restored from an older backup.
 - The previous attestation belongs to another environment or database.
+- The historical attestation predates document-revision tracking and therefore has no stored revision.
 
-The CareQueue application version and governance attestation version are independent. An ordinary application-version increase does not by itself require re-attestation.
+The CareQueue application version, governance attestation version, and governance document revision are separate values.
+
+An ordinary CareQueue application-version increase does not by itself require re-attestation. A current attestation must match both the required attestation version and required document revision.
 
 Do not manually edit governance history to bypass the requirement.
 
@@ -534,6 +538,8 @@ Symptoms:
 - Uninstall behavior is unclear
 - Services are left in an uncertain state
 - Post-install validation fails
+- The API fails during database initialization after an upgrade
+- Readiness fails after a migration-bearing upgrade
 - Rollback may be required
 
 Use:
@@ -544,6 +550,16 @@ docs/deployment/windows.md
 docs/deployment/linux.md
 docs/operations/health-checks.md
 ```
+
+If an upgrade fails while the API is starting, review the service and installer logs before changing database state.
+
+CareQueue applies registered schema migrations during database initialization. Successfully applied migrations are recorded in `schema_migrations`; previously applied migrations are skipped.
+
+Do not delete migration records or manually alter the production schema to force startup.
+
+If an upgrade cannot be completed safely, preserve the current database, verified pre-upgrade backup, encryption keys, installer logs, and application release artifacts before beginning recovery.
+
+A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older application release. Application rollback and database recovery must therefore be planned separately.
 
 ### Windows
 

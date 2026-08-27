@@ -733,22 +733,43 @@ Permission changes should be tested after upgrades. Windows ACL inheritance and 
 
 Packaged Windows and Linux upgrade workflows preserve the existing production environment configuration and encryption keys rather than generating replacement keys during an ordinary upgrade.
 
-The deployment workflows replace application/runtime files, rebuild or refresh the production backend environment, validate the installed backend, reapply deployment configuration and permissions, and restart the required services.
+The deployment workflows replace application and runtime files, rebuild or refresh the production backend environment, validate the installed backend, reapply deployment configuration and permissions, and restart the required services.
+
+CareQueue database schema changes are applied through an ordered versioned migration framework during database initialization.
+
+Applied migrations are recorded in the `schema_migrations` ledger. Previously completed migrations are skipped on later startups. Each new migration runs within a database savepoint and is recorded only after successful application.
+
+A failed required migration prevents that migration from being recorded as complete and should be investigated rather than bypassed by manually editing the migration ledger or production schema.
 
 Before an upgrade:
 
-- Confirm a recent encrypted backup exists.
-- Confirm the backup key is available.
-- Review dependency and deployment changes.
+- Confirm a recent verified encrypted backup exists.
+- Preserve a verified pre-upgrade backup until validation is complete.
+- Confirm the backup key and required database encryption keys are available.
+- Review dependency, schema, migration, and deployment changes.
 - Test the upgrade in a non-production copy when possible.
-- Keep recovery instructions available.
-- Confirm service health after the upgrade.
-- Confirm backup scheduling remains active.
+- Keep recovery instructions and the previously trusted release artifact available.
+- Confirm the current installation is healthy before beginning the upgrade.
+- Confirm sufficient disk space is available for application files, databases, logs, backups, and recovery data.
+
+After an upgrade:
+
+- Confirm required services are running.
+- Confirm liveness and readiness checks pass.
+- Confirm login succeeds.
+- Confirm governance status shows the expected attestation version and document revision.
+- Confirm representative application workflows operate correctly.
+- Confirm audit integrity remains valid.
+- Confirm backup scheduling and recovery functionality remain available.
 - Confirm the application is reachable only through the intended HTTPS origin.
 
-Automated application rollback to a previous release is not currently provided for every supported deployment path. Keep the previously trusted release artifact and documented recovery procedures available until the upgrade has been validated.
+Automated application rollback to a previous release is not currently provided for every supported deployment path.
 
-An application upgrade is not a substitute for a database migration, backup, restore, or disaster-recovery plan.
+A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older application release. Replacing newer application files with an older release is therefore not, by itself, a complete rollback procedure.
+
+Keep the previously trusted release artifact, a verified pre-upgrade backup, required encryption keys, and documented recovery procedures available until the upgraded installation has been fully validated.
+
+Database migrations, application rollback, database recovery, and disaster recovery are related but separate operational concerns. See `docs/operations/upgrades.md` and `docs/workflows/backup-and-recovery.md` for the corresponding procedures.
 
 ## Screenshots and Demonstrations
 

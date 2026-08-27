@@ -58,22 +58,29 @@ Use Uninstall to remove the installed CareQueue application and its operating-sy
 
 A normal uninstall is not secure data destruction.
 
-## Application Version and Governance Version
+## Application Version and Governance Revision
 
-The CareQueue application version and governance attestation version are independent.
-
-For example:
+CareQueue tracks three separate version values:
 
 ```text
 CareQueue application version: 0.3.0
 Governance attestation version: 1
+Governance document revision: governance-attestation-v1
 ```
 
-Installing a new CareQueue application version does not by itself require a new governance attestation.
+The CareQueue application version identifies the installed software release.
 
-Re-attestation is required only when the application's required governance attestation version changes or when no current attestation exists for the installation.
+The governance attestation version identifies the required governance acceptance generation.
 
-After an upgrade, verify that the expected governance status is shown before returning the installation to normal use.
+The governance document revision identifies the exact revision of the governance text that was accepted.
+
+A governance attestation is current only when both its attestation version and document revision match the values required by the installed application.
+
+Installing a new CareQueue application version does not by itself require a new governance attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists for the installation.
+
+Historical attestations created before document-revision tracking was introduced may not contain a document revision. These records are preserved as historical evidence but do not satisfy a current requirement that includes a document revision.
+
+After an upgrade, verify that the expected governance status, required attestation version, and required document revision are shown before returning the installation to normal use.
 
 ## General Upgrade Safety
 
@@ -92,6 +99,55 @@ Before upgrading any CareQueue installation:
 - Do not begin an upgrade while the database, services, or storage state is uncertain.
 
 An application upgrade is not a substitute for backup, restore, migration, or disaster-recovery planning.
+
+## Database Migration Safety
+
+CareQueue uses ordered, versioned database migrations for schema changes that must be applied to an existing installation.
+
+Applied migrations are recorded in the database table:
+
+```text
+schema_migrations
+```
+
+Each migration has a unique migration identifier and an application timestamp. Registered migrations are applied in migration-ID order, and migrations already recorded in the ledger are skipped on later startups. This makes normal startup and repair operations idempotent with respect to previously completed migrations.
+
+Current migration identifiers include:
+
+```text
+0001_security_walkthrough_columns
+0002_security_authentication_and_session_columns
+0003_authorization_core_columns
+0004_authorization_denial_follow_up_columns
+0005_governance_append_only_history
+0006_audit_event_columns
+0007_governance_document_revision
+```
+
+Each individual migration runs inside a database savepoint. If a migration step raises an error, CareQueue rolls that step back to its savepoint, does not record that migration as applied, and raises a migration error instead of continuing silently.
+
+Database initialization commits only after schema initialization and registered migrations complete successfully. If initialization raises an exception, the normal initialization path does not commit the failed startup attempt.
+
+Operators should not manually insert, delete, or alter rows in `schema_migrations` to bypass a failed upgrade. The migration ledger is part of the database's upgrade state.
+
+Before an upgrade that includes database migrations:
+
+- Create or confirm a recent encrypted backup.
+- Prefer a verified backup for higher-risk changes.
+- Preserve the required database and backup encryption keys.
+- Confirm sufficient free disk space for the application, database, logs, and recovery files.
+- Confirm the current installation is healthy before beginning the upgrade.
+- Review release notes for schema or migration changes.
+
+After the upgrade:
+
+- Confirm CareQueue starts normally.
+- Confirm readiness and health checks pass.
+- Confirm expected application workflows operate correctly.
+- Confirm governance status is correct.
+- Confirm backup and recovery functions remain available.
+
+A successful migration is not a downgrade guarantee. Reverting application files to an older release does not automatically make a database that has been migrated by a newer release compatible with that older application. Treat application rollback and database recovery as separate operations and use a verified pre-upgrade backup when recovery to an older database state is required.
 
 ## Release Validation Before Deployment
 
@@ -969,7 +1025,7 @@ The current organization governance attestation has not been completed.
 
 An Admin must complete the current attestation before normal protected application functionality becomes available.
 
-A CareQueue application-version change does not automatically require re-attestation unless the required governance attestation version also changed or no current attestation exists.
+A CareQueue application-version change does not automatically require re-attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
 
 ### Certificate warning appears after upgrade
 

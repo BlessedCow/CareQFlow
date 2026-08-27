@@ -93,6 +93,12 @@ Use readiness for:
 
 Readiness does not validate every table, application workflow, account, backup, or browser behavior.
 
+Readiness also does not prove that every post-upgrade validation requirement has been completed.
+
+Database initialization, including required registered schema migrations, occurs before normal API readiness can succeed. A readiness failure after an upgrade may therefore indicate a database configuration, encryption, schema initialization, or migration problem.
+
+Do not treat a successful readiness response as proof that governance, audit integrity, backup operation, recovery compatibility, or representative protected workflows have been validated.
+
 ## General Health Endpoint
 
 Endpoint:
@@ -499,6 +505,10 @@ Likely areas to investigate:
 - Production configuration mismatch
 - Recovery state requiring investigation
 
+If this occurs immediately after an upgrade, review the API and installer logs before retrying the upgrade or modifying the database.
+
+Do not manually edit `schema_migrations` or production table definitions to make readiness pass. Investigate the migration failure or use the documented backup and recovery procedure when recovery is required.
+
 Do not generate a new key for an existing encrypted database.
 
 ### HTTPS readiness succeeds, login fails
@@ -863,7 +873,7 @@ After an upgrade:
 12. Confirm logout and subsequent login work.
 13. Review installer and service logs for unexpected errors.
 
-A new CareQueue application version does not automatically require a new governance attestation version.
+A new CareQueue application version does not automatically require a new governance attestation version or governance document revision. Governance acceptance remains current only while both required governance values match the accepted record.
 
 ## Post-Repair Smoke Test
 

@@ -554,6 +554,7 @@ Each accepted attestation records:
 
 ```text
 Attestation version
+Document revision
 Organization name
 Deployment mode
 Accepting user
@@ -561,9 +562,15 @@ Acceptance time
 CareQueue application version
 ```
 
-Attestation history is append-only through the application. A future governance version can require re-attestation without deleting prior records.
+Attestation history is append-only and is also protected against direct update or deletion by database triggers. A future governance version or required document revision can require re-attestation without deleting prior records.
 
-The governance attestation version is independent of the CareQueue application version.
+The governance attestation version, governance document revision, and CareQueue application version are separate values.
+
+The attestation version identifies the required governance acceptance generation. The document revision identifies the exact governance text revision that was accepted. The CareQueue application version records which application release was running when the attestation was accepted.
+
+A normal CareQueue application-version change does not by itself require re-attestation. A change to the required governance attestation version or required governance document revision does require a new acceptance.
+
+Older governance records created before document-revision tracking was introduced may have no stored document revision. Those records are preserved as historical records rather than having a revision reconstructed or invented.
 
 ### Roles
 

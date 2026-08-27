@@ -15,12 +15,12 @@ from authstatus_api.persistence.migration_steps.authorizations import (
 from authstatus_api.persistence.migration_steps.governance import (
     enforce_append_only_governance_attestations,
 )
+from authstatus_api.persistence.migration_steps.governance_revision import (
+    add_governance_document_revision,
+)
 from authstatus_api.persistence.migration_steps.security import (
     add_authentication_and_session_columns,
     add_walkthrough_columns,
-)
-from authstatus_api.persistence.migration_steps.governance_revision import (
-    add_governance_document_revision,
 )
 
 

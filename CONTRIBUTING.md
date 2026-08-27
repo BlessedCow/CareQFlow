@@ -416,12 +416,16 @@ Confirm that:
 - Generic authentication errors do not reveal whether an account exists.
 - Normal protected routes remain blocked until the current governance attestation is complete.
 - Governance acceptance remains Admin-only.
-- Governance history remains append-only through the application.
+- Governance history remains append-only through the application and database-enforced append-only protections.
 - Governance audit metadata remains free of organization names and other unnecessary sensitive values.
 
 The first-time Admin setup endpoint is only for bootstrap. It must remain unavailable after any user exists and must not replace normal authenticated Admin user management.
 
-The governance attestation version is independent of the CareQueue application release version. Do not increase the governance version merely because the application version changes.
+The governance attestation version and governance document revision are independent of the CareQueue application release version.
+
+Do not increase the governance attestation version or change the governance document revision merely because the application version changes.
+
+When governance text or required acknowledgments change materially, update the required governance metadata deliberately so existing installations require re-attestation as intended.
 
 ## PDF Intake Changes
 

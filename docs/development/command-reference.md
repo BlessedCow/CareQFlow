@@ -298,7 +298,9 @@ The script updates the controlled release-version declarations used by:
 
 It intentionally does not replace arbitrary matching version strings in tests, documentation, dependency versions, or historical governance fixtures.
 
-The governance attestation version is independent of the CareQueue application version and should not be changed merely because the application release number changes.
+The governance attestation version and governance document revision are independent of the CareQueue application version and should not be changed merely because the application release number changes.
+
+Change the required governance metadata deliberately when governance text or required acknowledgments change. A change to either the required attestation version or required document revision causes existing acceptance records that do not match both values to no longer be current.
 
 After a version bump, review:
 

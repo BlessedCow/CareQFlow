@@ -575,7 +575,9 @@ Replace `0.3.0` with the intended application release version.
 
 The helper updates controlled backend and deployment version declarations without blindly replacing matching strings in tests, dependency versions, documentation examples, or historical governance fixtures.
 
-The governance attestation version is independent of the CareQueue application version. Do not change the governance version only because the application release number changes.
+The governance attestation version and governance document revision are independent of the CareQueue application version. Do not change either value only because the application release number changes.
+
+When governance text or required acknowledgments change, update the governance metadata intentionally. A local acceptance is considered current only when both its attestation version and document revision match the values required by the running application.
 
 Review all changes after a version bump:
 

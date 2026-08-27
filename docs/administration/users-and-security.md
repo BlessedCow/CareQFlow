@@ -293,7 +293,13 @@ If the current governance version has not been accepted:
 
 The Admin System page provides read-only access to the current attestation and append-only attestation history.
 
-The governance attestation version is separate from the CareQueue application version. Installing a newer CareQueue release does not by itself require re-attestation. Re-attestation occurs when the required governance attestation version changes.
+The governance attestation version and governance document revision are separate from the CareQueue application version.
+
+Installing a newer CareQueue release does not by itself require re-attestation.
+
+A governance attestation is current only when both its attestation version and document revision match the values required by the installed application. Re-attestation is therefore required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
+
+Older historical attestations created before document-revision tracking was introduced may not contain a stored document revision. These records remain part of the append-only governance history but do not satisfy a current requirement that includes a document revision.
 
 The governance workflow supports organizational accountability. It does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 

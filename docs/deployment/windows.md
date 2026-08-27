@@ -173,11 +173,62 @@ Install creates application files, runtime directories, services, production con
 
 Upgrade is used when CareQueue is already installed.
 
+Before upgrading:
+
+1. Confirm a recent verified encrypted backup exists.
+2. Preserve the current installer package until validation is complete.
+3. Preserve a verified pre-upgrade backup until the upgraded installation has been fully validated.
+4. Review the release notes and [upgrade documentation](../operations/upgrades.md).
+5. Confirm the production environment file and all required encryption keys are accounted for.
+6. Confirm the current installation is healthy.
+7. Confirm sufficient disk space is available for application files, the database, logs, backups, restores, and recovery data.
+
 Upgrade replaces application files and packaged runtime files while preserving runtime data and production configuration under:
 
 ```text
 C:\ProgramData\CareQueue
 ```
+
+When the upgraded CareQueue API starts, database initialization may apply registered versioned schema migrations that have not yet been recorded in the database's `schema_migrations` ledger.
+
+Already applied migrations are skipped. Each new migration is applied through the migration framework and is recorded only after successful application.
+
+Do not manually edit the migration ledger to bypass a failed upgrade.
+
+A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older CareQueue application release. Keep the verified pre-upgrade backup available until rollback is no longer required.
+
+After the installer completes, verify:
+
+1. `CareQueueApi` is running.
+2. `CareQueueCaddy` is running.
+3. HTTPS access to `https://carequeue.local` succeeds.
+4. API health and readiness checks pass.
+5. Login succeeds.
+6. Governance status shows the expected attestation version and document revision.
+7. A representative authorization workflow works correctly.
+8. Backup and recovery functionality remains available.
+
+If the API fails to start after an upgrade, review the Windows service state and the newest installer log before retrying the upgrade or modifying production data:
+
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy |
+Select-Object Name, Status, StartType
+```
+
+```powershell
+$latestLog = Get-ChildItem `
+    -Path "$env:ProgramData\CareQueue\Logs\Installer" `
+    -Filter "CareQueue-*.log" `
+    -ErrorAction SilentlyContinue |
+Sort-Object LastWriteTime -Descending |
+Select-Object -First 1
+
+Get-Content `
+    -LiteralPath $latestLog.FullName `
+    -Tail 240
+```
+
+A migration failure should be investigated rather than worked around by deleting migration records or manually altering the production schema.
 
 ### Repair
 
@@ -321,7 +372,7 @@ The helper updates the controlled version declarations used by the backend, Wind
 
 It intentionally does not replace arbitrary version strings in tests, dependency versions, documentation examples, or historical governance records.
 
-The governance attestation version is independent of the CareQueue application release version and should not be changed merely because the application version changes.
+The governance attestation version and governance document revision are independent of the CareQueue application release version and should not be changed merely because the application version changes.
 
 Review the working tree after changing the release version:
 
@@ -414,7 +465,7 @@ The first Admin password must be at least 12 characters.
 
 After the first Admin signs in through the browser, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
 
-The governance workflow records the organization, deployment mode, accepting Admin, acceptance timestamp, CareQueue application version, and governance attestation version.
+The governance workflow records the organization, deployment mode, accepting Admin, acceptance timestamp, CareQueue application version, governance attestation version, and governance document revision.
 
 The governance workflow supports organizational accountability. It does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
@@ -1071,7 +1122,7 @@ An Admin must complete the current governance attestation before normal protecte
 
 Non-Admin users cannot accept the organization-level attestation.
 
-A new CareQueue application release does not automatically require re-attestation unless the required governance attestation version also changes or no current attestation exists.
+A new CareQueue application release does not automatically require re-attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
 
 ## Production Database Is a Separate Instance
 

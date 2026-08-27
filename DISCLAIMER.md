@@ -310,7 +310,9 @@ Release notes should be reviewed for:
 - Changes to deployment behavior
 - Changes to governance requirements
 
-The CareQueue application version and governance attestation version are independent. An application release does not automatically require a new governance attestation unless the required governance version changes.
+The CareQueue application version, governance attestation version, and governance document revision are separate values.
+
+An application release does not automatically require a new governance attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
 
 ## No Guarantee of Availability
 

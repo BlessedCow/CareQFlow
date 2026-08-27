@@ -89,13 +89,13 @@ The current implementation includes:
 - Accepting Admin identity
 - Acceptance timestamp
 - CareQueue application version recording
-- Governance attestation version recording
+- Governance attestation version and document revision recording
 - Append-only attestation history
-- Re-attestation support when the required governance version changes
+- Re-attestation support when the required governance attestation version or document revision changes
 - Audit logging for governance acceptance
 - Admin System visibility for current and historical attestations
 
-The governance attestation version is independent from the CareQueue application version.
+The governance attestation version and governance document revision are independent from the CareQueue application version. A normal application-version change does not by itself require re-attestation.
 
 The workflow supports organizational accountability but does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
@@ -282,26 +282,27 @@ Remaining work includes:
 - Validation before replacing the active application
 - Clear rollback instructions
 - Better failure summaries
-- Database migration safeguards
 - Recovery steps when a packaged dependency fails
 - Recovery steps after an interrupted upgrade
 - Automatic or assisted rollback to a previously trusted release
 - Tests for upgrade failure and rollback scenarios
 
-### 5. Formalize database migrations
+### 5. Validate cross-release migrations and recovery
 
-The project currently initializes and evolves the schema through application-managed migration logic.
+CareQueue now uses an ordered versioned database migration framework with explicit migration identifiers, a persistent migration ledger, per-migration savepoint rollback, and automated coverage for legacy-schema upgrades, current schemas, idempotency, and migration failure behavior.
 
-A more formal migration system should provide:
+Remaining work focuses on release-to-release compatibility rather than creating the migration framework itself.
 
-- Explicit migration identifiers
-- Ordered migration history
-- Current schema-version tracking
-- Clear upgrade paths
-- Validation of the installed schema version
-- Representative migration tests from older releases
-- Better downgrade and rollback planning
-- Compatibility checks before application startup
+Planned work includes:
+
+- Representative upgrades from previously released CareQueue versions
+- Upgrade validation using older production-style databases
+- Cross-version backup and recovery testing
+- Compatibility validation before and after migration-bearing upgrades
+- Recovery testing after interrupted or failed upgrades
+- Clear supported-version upgrade paths
+- Better downgrade planning where rollback to an older application release is required
+- Preservation and validation of verified pre-upgrade backups
 
 ### 6. Expand end-to-end browser testing
 
@@ -455,4 +456,4 @@ Before a release is considered stable:
 - Documentation should describe the behavior of the release being published.
 - Release notes should distinguish implemented controls from remaining deployment and organizational responsibilities.
 
-A new CareQueue application version does not automatically imply a new governance attestation version. Governance requirements should be versioned independently when the attestation content or required acknowledgments change.
+A new CareQueue application version does not automatically imply a new governance attestation version or document revision. Governance requirements should be versioned independently when the attestation content or required acknowledgments change. A change to either the required attestation version or required document revision causes the existing acceptance to no longer be current.

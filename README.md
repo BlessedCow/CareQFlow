@@ -172,7 +172,9 @@ For a packaged Windows installation, the installer can launch the first-time Adm
 
 The first-time setup flow is available only while no users exist. After any user exists, the backend disables the initial Admin setup endpoint and the setup utility reports that setup is already complete.
 
-After the first Admin signs in, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available. The attestation records the organization, deployment mode, accepting Admin, acceptance time, CareQueue application version, and governance attestation version.
+After the first Admin signs in, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available. The attestation records the organization, deployment mode, accepting Admin, acceptance time, CareQueue application version, governance attestation version, and governance document revision.
+
+The governance attestation is current only when both its required attestation version and required document revision match the accepted record. A normal CareQueue application-version change does not by itself require re-attestation.
 
 The governance workflow supports organizational accountability. Accepting it does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
@@ -369,7 +371,7 @@ Use synthetic data in tests, screenshots, examples, and public documentation.
 
 CareQueue is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage options, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, private Windows deployment, and packaged Linux deployment are implemented.
 
-Current roadmap priorities include clean-machine release validation, release signing and artifact trust, production smoke-test tooling, stronger upgrade and rollback handling, formal database migrations, broader end-to-end browser testing, accessibility work, and continued operational hardening.
+Current roadmap priorities include clean-machine release validation, release signing and artifact trust, production smoke-test tooling, stronger cross-release upgrade and recovery validation, broader end-to-end browser testing, accessibility work, and continued operational hardening.
 
 ## License
 
