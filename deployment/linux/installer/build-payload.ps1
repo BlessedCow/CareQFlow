@@ -170,6 +170,24 @@ Copy-Item `
     -Recurse `
     -Force
 
+Write-Host "Writing CareQueue release metadata..."
+
+$releaseMetadataPath = Join-Path `
+    $stagingDirectory `
+    "carequeue-release.env"
+
+$releaseMetadata = @(
+    "CAREQUEUE_RELEASE_METADATA_SCHEMA=1"
+    "CAREQUEUE_APP_VERSION=$Version"
+    "CAREQUEUE_PACKAGE_PLATFORM=linux"
+) -join "`n"
+
+[System.IO.File]::WriteAllText(
+    $releaseMetadataPath,
+    $releaseMetadata + "`n",
+    [System.Text.UTF8Encoding]::new($false)
+)
+
 Write-Host "Normalizing Linux text files to LF..."
 
 $textFiles = Get-ChildItem `

@@ -22,6 +22,11 @@ SOURCE_DIRECTORY="$(
     pwd
 )"
 
+RELEASE_METADATA_FILE="${SOURCE_DIRECTORY}/carequeue-release.env"
+RELEASE_METADATA_SCHEMA=""
+RELEASE_APP_VERSION=""
+RELEASE_PACKAGE_PLATFORM=""
+
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
     exit 1
@@ -69,6 +74,57 @@ PY
             "Application origin must be an absolute HTTPS origin " \
             "containing only a hostname and optional port."
     fi
+}
+
+validate_release_metadata() {
+    if [[ ! -f "${RELEASE_METADATA_FILE}" ]]; then
+        fail \
+            "CareQueue release metadata was not found: " \
+            "${RELEASE_METADATA_FILE}"
+    fi
+
+    RELEASE_METADATA_SCHEMA=""
+    RELEASE_APP_VERSION=""
+    RELEASE_PACKAGE_PLATFORM=""
+
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            CAREQUEUE_RELEASE_METADATA_SCHEMA)
+                RELEASE_METADATA_SCHEMA="${value}"
+                ;;
+            CAREQUEUE_APP_VERSION)
+                RELEASE_APP_VERSION="${value}"
+                ;;
+            CAREQUEUE_PACKAGE_PLATFORM)
+                RELEASE_PACKAGE_PLATFORM="${value}"
+                ;;
+        esac
+    done < "${RELEASE_METADATA_FILE}"
+
+    if [[ "${RELEASE_METADATA_SCHEMA}" != "1" ]]; then
+        fail \
+            "Unsupported CareQueue release metadata schema: " \
+            "${RELEASE_METADATA_SCHEMA:-missing}"
+    fi
+
+    if [[ -z "${RELEASE_APP_VERSION}" ]]; then
+        fail "CareQueue release metadata does not contain an application version."
+    fi
+
+    if [[ ! "${RELEASE_APP_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        fail \
+            "Invalid CareQueue application version in release metadata: " \
+            "${RELEASE_APP_VERSION}"
+    fi
+
+    if [[ "${RELEASE_PACKAGE_PLATFORM}" != "linux" ]]; then
+        fail \
+            "CareQueue package platform is not compatible with this installer: " \
+            "${RELEASE_PACKAGE_PLATFORM:-missing}"
+    fi
+
+    printf 'CareQueue release metadata validated: version %s\n' \
+        "${RELEASE_APP_VERSION}"
 }
 
 detect_distribution() {
@@ -407,6 +463,9 @@ write_installation_state() {
     state_file="${CONFIG_DIRECTORY}/install-state.env"
 
     cat > "${state_file}" <<EOF
+CAREQUEUE_INSTALL_STATE_SCHEMA=1
+CAREQUEUE_INSTALLED_VERSION=${RELEASE_APP_VERSION}
+CAREQUEUE_PACKAGE_PLATFORM=${RELEASE_PACKAGE_PLATFORM}
 CAREQUEUE_INSTALL_DIRECTORY=${INSTALL_DIRECTORY}
 CAREQUEUE_DATA_DIRECTORY=${DATA_DIRECTORY}
 CAREQUEUE_CONFIG_DIRECTORY=${CONFIG_DIRECTORY}
@@ -682,6 +741,7 @@ validate_post_installation_health() {
 
 validate_source() {
     local required_paths=(
+        "carequeue-release.env"
         "backend/authstatus_api"
         "backend/scripts"
         "backend/requirements.txt"
@@ -706,6 +766,7 @@ validate_source() {
 main() {
     require_root
     validate_application_origin
+    validate_release_metadata
     detect_distribution
     validate_source
     install_system_dependencies
