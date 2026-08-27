@@ -6,6 +6,7 @@ from authstatus_api.audit.tables import initialize_audit_tables
 from authstatus_api.authorizations.tables import initialize_authorization_tables
 from authstatus_api.governance.tables import initialize_governance_tables
 from authstatus_api.persistence.connections import get_conn
+from authstatus_api.persistence.migration_runner import run_registered_migrations
 from authstatus_api.registered_options.tables import (
     initialize_registered_options_table,
 )
@@ -18,6 +19,7 @@ def initialize_schema(conn: Any) -> None:
     initialize_governance_tables(conn)
     initialize_audit_tables(conn)
     initialize_registered_options_table(conn)
+    run_registered_migrations(conn)
 
 
 def init_db() -> None:

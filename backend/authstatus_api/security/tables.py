@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from authstatus_api.persistence.migrations import ensure_column
-
 
 def initialize_security_tables(conn: Any) -> None:
     conn.execute("""
@@ -75,46 +73,3 @@ def initialize_security_tables(conn: Any) -> None:
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         )
         """)
-
-    ensure_column(
-        conn,
-        "users",
-        "failed_login_count",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(conn, "users", "locked_until", "TEXT")
-    ensure_column(conn, "users", "last_login_at", "TEXT")
-    ensure_column(conn, "users", "password_changed_at", "TEXT")
-    ensure_column(
-        conn,
-        "users",
-        "must_change_password",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(
-        conn,
-        "users",
-        "mfa_enabled",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(
-        conn,
-        "users",
-        "mfa_secret",
-        "TEXT",
-    )
-    ensure_column(
-        conn,
-        "users",
-        "walkthrough_status",
-        "TEXT NOT NULL DEFAULT 'pending'",
-    )
-    ensure_column(
-        conn,
-        "users",
-        "walkthrough_step",
-        "TEXT",
-    )
-
-    ensure_column(conn, "sessions", "ip_address", "TEXT")
-    ensure_column(conn, "sessions", "user_agent", "TEXT")

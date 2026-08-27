@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from authstatus_api.persistence.migrations import ensure_column
-
 
 def initialize_authorization_tables(conn: Any) -> None:
     conn.execute("""
@@ -105,84 +103,3 @@ def initialize_authorization_tables(conn: Any) -> None:
             FOREIGN KEY (auth_id) REFERENCES auths (id) ON DELETE CASCADE
         )
         """)
-
-    ensure_column(conn, "auths", "member_id", "TEXT")
-    ensure_column(conn, "auths", "auth_number", "TEXT")
-    ensure_column(conn, "auths", "group_number", "TEXT")
-    ensure_column(conn, "auths", "date_of_birth", "TEXT")
-    ensure_column(conn, "auths", "insurance", "TEXT")
-    ensure_column(conn, "auths", "insurance_fax", "TEXT")
-    ensure_column(
-        conn,
-        "auths",
-        "requested_days",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(
-        conn,
-        "auths",
-        "approved_days",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(conn, "auths", "review_due_date", "TEXT")
-    ensure_column(conn, "auths", "programming_days", "TEXT")
-    ensure_column(conn, "auths", "submitted_at", "TEXT")
-    ensure_column(conn, "auths", "decision_at", "TEXT")
-    ensure_column(conn, "auths", "denial_reason_category", "TEXT")
-    ensure_column(conn, "auths", "denial_reason_notes", "TEXT")
-    ensure_column(conn, "auths", "denial_prevention_notes", "TEXT")
-    ensure_column(
-        conn,
-        "auths",
-        "denied_days",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(conn, "auths", "denial_date", "TEXT")
-    ensure_column(conn, "auths", "denial_through_date", "TEXT")
-    ensure_column(conn, "auths", "denial_level_of_care", "TEXT")
-    ensure_column(conn, "auths", "denial_source", "TEXT")
-    ensure_column(
-        conn,
-        "auths",
-        "p2p_requested",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(conn, "auths", "p2p_scheduled_at", "TEXT")
-    ensure_column(conn, "auths", "p2p_deadline", "TEXT")
-    ensure_column(conn, "auths", "p2p_outcome", "TEXT")
-    ensure_column(conn, "auths", "p2p_reviewer", "TEXT")
-    ensure_column(conn, "auths", "p2p_notes", "TEXT")
-    ensure_column(
-        conn,
-        "auths",
-        "appeal_submitted",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(conn, "auths", "appeal_deadline", "TEXT")
-    ensure_column(conn, "auths", "appeal_outcome", "TEXT")
-    ensure_column(conn, "auths", "appeal_notes", "TEXT")
-    ensure_column(
-        conn,
-        "auths",
-        "retro_requested",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(conn, "auths", "retro_deadline", "TEXT")
-    ensure_column(conn, "auths", "retro_outcome", "TEXT")
-    ensure_column(conn, "auths", "retro_notes", "TEXT")
-
-    ensure_column(
-        conn,
-        "auth_events",
-        "requested_days",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(
-        conn,
-        "auth_events",
-        "approved_days",
-        "INTEGER NOT NULL DEFAULT 0",
-    )
-    ensure_column(conn, "auth_events", "auth_start_date", "TEXT")
-    ensure_column(conn, "auth_events", "auth_end_date", "TEXT")
-    ensure_column(conn, "auth_events", "review_due_date", "TEXT")
