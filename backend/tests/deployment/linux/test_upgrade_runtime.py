@@ -774,6 +774,24 @@ exit 0
     )
     systemd_run.chmod(0o755)
 
+    curl = fake_bin_directory / "curl"
+    curl.write_text(
+        """#!/bin/sh
+    exit 0
+    """,
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+
+    sleep = fake_bin_directory / "sleep"
+    sleep.write_text(
+        """#!/bin/sh
+    exit 0
+    """,
+        encoding="utf-8",
+    )
+    sleep.chmod(0o755)
+
     recovery_record = tmp_path / "upgrade.env"
     recovery_record.write_text(
         "\n".join(
@@ -820,9 +838,15 @@ exit 0
     assert "CAREQUEUE_UPGRADE_STATUS=rollback_activated" not in record
 
     assert "Rollback database activation completed." in result.stdout
-    assert "CareQueue API started after rollback activation." in result.stdout
+    assert "CareQueue services started after rollback activation." in result.stdout
 
     assert "Upgrade recovery status: rollback_completed" in result.stdout
+
+    assert "systemctl start carequeue-caddy.service" in commands
+    assert "systemctl enable --now carequeue-backup.timer" in commands
+    assert "systemctl is-active --quiet carequeue-api.service" in commands
+    assert "systemctl is-active --quiet carequeue-caddy.service" in commands
+    assert "systemctl is-active --quiet carequeue-backup.timer" in commands
 
 
 def test_rollback_activation_failure_keeps_api_stopped_and_status_staged(
@@ -1729,3 +1753,742 @@ def test_rollback_failed_application_metadata_is_not_duplicated(
     assert record.count("CAREQUEUE_FAILED_APPLICATION=") == 1
     assert record.count("CAREQUEUE_FAILED_APPLICATION_SHA256=") == 1
     assert f"CAREQUEUE_FAILED_APPLICATION={failed_archive}" in record
+
+
+def test_rollback_application_swap_restores_previous_payload_and_rebuilds_venv(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    install_directory = tmp_path / "install"
+    staged_directory = tmp_path / "staged"
+    recovery_staging = tmp_path / "data" / "recovery" / "application-staging"
+    fake_bin = tmp_path / "bin"
+    command_log = tmp_path / "commands.log"
+
+    for directory in (
+        install_directory / "backend",
+        install_directory / "frontend",
+        install_directory / "deployment",
+        staged_directory / "backend",
+        staged_directory / "frontend",
+        staged_directory / "deployment",
+        recovery_staging,
+        fake_bin,
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    (install_directory / "backend" / "failed.txt").write_text(
+        "failed backend\n",
+        encoding="utf-8",
+    )
+    (install_directory / "frontend" / "failed.txt").write_text(
+        "failed frontend\n",
+        encoding="utf-8",
+    )
+    (install_directory / "deployment" / "failed.txt").write_text(
+        "failed deployment\n",
+        encoding="utf-8",
+    )
+
+    (staged_directory / "backend" / "previous.txt").write_text(
+        "previous backend\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "frontend" / "previous.txt").write_text(
+        "previous frontend\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "deployment" / "previous.txt").write_text(
+        "previous deployment\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "backend" / "requirements.txt").write_text(
+        "example-package==1.0\n",
+        encoding="utf-8",
+    )
+
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        f"""#!/bin/sh
+printf 'systemctl %s\\n' "$*" >> "{command_log}"
+exit 0
+""",
+        encoding="utf-8",
+    )
+    systemctl.chmod(0o755)
+
+    python3 = fake_bin / "python3"
+    python3.write_text(
+        f"""#!/bin/sh
+printf 'python3 %s\\n' "$*" >> "{command_log}"
+
+if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
+    venv_path="$3"
+    mkdir -p "$venv_path/bin"
+
+    cat > "$venv_path/bin/python" <<'EOF'
+#!/bin/sh
+printf 'venv-python %s\\n' "$*" >> "{command_log}"
+exit 0
+EOF
+
+    chmod +x "$venv_path/bin/python"
+    exit 0
+fi
+
+exit 1
+""",
+        encoding="utf-8",
+    )
+    python3.chmod(0o755)
+
+    result = _run_bash(f"""
+        export PATH="{fake_bin}:$PATH"
+
+        source "{installer}"
+
+        MODE="rollback"
+        INSTALL_DIRECTORY="{install_directory}"
+        DATA_DIRECTORY="{tmp_path / "data"}"
+        ROLLBACK_APPLICATION_STAGING_ROOT="{staged_directory}"
+
+        replace_failed_application_with_rollback_payload
+
+        printf 'FAILED_STAGING=%s\\n' \
+            "${{FAILED_APPLICATION_STAGING_DIRECTORY}}"
+        """)
+
+    assert result.returncode == 0
+
+    assert not (install_directory / "backend" / "failed.txt").exists()
+    assert not (install_directory / "frontend" / "failed.txt").exists()
+    assert not (install_directory / "deployment" / "failed.txt").exists()
+
+    assert (install_directory / "backend" / "previous.txt").is_file()
+    assert (install_directory / "frontend" / "previous.txt").is_file()
+    assert (install_directory / "deployment" / "previous.txt").is_file()
+
+    assert (install_directory / "backend" / ".venv" / "bin" / "python").is_file()
+
+    staged_line = next(
+        line
+        for line in result.stdout.splitlines()
+        if line.startswith("FAILED_STAGING=")
+    )
+    failed_staging = Path(staged_line.removeprefix("FAILED_STAGING="))
+
+    assert (failed_staging / "backend" / "failed.txt").is_file()
+    assert (failed_staging / "frontend" / "failed.txt").is_file()
+    assert (failed_staging / "deployment" / "failed.txt").is_file()
+
+    commands = command_log.read_text(encoding="utf-8")
+
+    assert "systemctl stop carequeue-api.service" in commands
+    assert "systemctl stop carequeue-caddy.service" in commands
+    assert "python3 -m venv" in commands
+    assert "venv-python -m pip install --upgrade pip setuptools wheel" in commands
+    assert "venv-python -m pip install --requirement" in commands
+    assert "venv-python -c import authstatus_api.main" in commands
+
+
+def test_rollback_application_swap_does_not_move_files_when_api_stop_fails(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    install_directory = tmp_path / "install"
+    staged_directory = tmp_path / "staged"
+    fake_bin = tmp_path / "bin"
+
+    for directory in (
+        install_directory / "backend",
+        install_directory / "frontend",
+        install_directory / "deployment",
+        staged_directory / "backend",
+        staged_directory / "frontend",
+        staged_directory / "deployment",
+        fake_bin,
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    failed_backend = install_directory / "backend" / "failed.txt"
+    failed_backend.write_text(
+        "failed backend\n",
+        encoding="utf-8",
+    )
+
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        """#!/bin/sh
+if [ "$1" = "stop" ] && [ "$2" = "carequeue-api.service" ]; then
+    exit 1
+fi
+
+exit 0
+""",
+        encoding="utf-8",
+    )
+    systemctl.chmod(0o755)
+
+    result = _run_bash(f"""
+        export PATH="{fake_bin}:$PATH"
+
+        source "{installer}"
+
+        MODE="rollback"
+        INSTALL_DIRECTORY="{install_directory}"
+        DATA_DIRECTORY="{tmp_path / "data"}"
+        ROLLBACK_APPLICATION_STAGING_ROOT="{staged_directory}"
+
+        replace_failed_application_with_rollback_payload
+        """)
+
+    assert result.returncode != 0
+
+    assert failed_backend.is_file()
+    assert (install_directory / "frontend").is_dir()
+    assert (install_directory / "deployment").is_dir()
+
+    assert (
+        "CareQueue rollback could not stop carequeue-api.service "
+        "before application replacement." in result.stderr
+    )
+
+
+def test_rollback_application_swap_does_not_move_files_when_caddy_stop_fails(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    install_directory = tmp_path / "install"
+    staged_directory = tmp_path / "staged"
+    fake_bin = tmp_path / "bin"
+
+    for directory in (
+        install_directory / "backend",
+        install_directory / "frontend",
+        install_directory / "deployment",
+        staged_directory / "backend",
+        staged_directory / "frontend",
+        staged_directory / "deployment",
+        fake_bin,
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    failed_backend = install_directory / "backend" / "failed.txt"
+    failed_backend.write_text(
+        "failed backend\n",
+        encoding="utf-8",
+    )
+
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        """#!/bin/sh
+if [ "$1" = "stop" ] && [ "$2" = "carequeue-caddy.service" ]; then
+    exit 1
+fi
+
+exit 0
+""",
+        encoding="utf-8",
+    )
+    systemctl.chmod(0o755)
+
+    result = _run_bash(f"""
+        export PATH="{fake_bin}:$PATH"
+
+        source "{installer}"
+
+        MODE="rollback"
+        INSTALL_DIRECTORY="{install_directory}"
+        DATA_DIRECTORY="{tmp_path / "data"}"
+        ROLLBACK_APPLICATION_STAGING_ROOT="{staged_directory}"
+
+        replace_failed_application_with_rollback_payload
+        """)
+
+    assert result.returncode != 0
+
+    assert failed_backend.is_file()
+    assert (install_directory / "frontend").is_dir()
+    assert (install_directory / "deployment").is_dir()
+
+    assert (
+        "CareQueue rollback could not stop carequeue-caddy.service "
+        "before application replacement." in result.stderr
+    )
+
+
+def test_rollback_restores_failed_application_when_backend_copy_fails(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    install_directory = tmp_path / "install"
+    staged_directory = tmp_path / "staged"
+    recovery_staging = tmp_path / "data" / "recovery" / "application-staging"
+    fake_bin = tmp_path / "bin"
+
+    for directory in (
+        install_directory / "backend",
+        install_directory / "frontend",
+        install_directory / "deployment",
+        staged_directory / "backend",
+        staged_directory / "frontend",
+        staged_directory / "deployment",
+        recovery_staging,
+        fake_bin,
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    (install_directory / "backend" / "failed.txt").write_text(
+        "failed backend\n",
+        encoding="utf-8",
+    )
+    (install_directory / "frontend" / "failed.txt").write_text(
+        "failed frontend\n",
+        encoding="utf-8",
+    )
+    (install_directory / "deployment" / "failed.txt").write_text(
+        "failed deployment\n",
+        encoding="utf-8",
+    )
+
+    (staged_directory / "backend" / "previous.txt").write_text(
+        "previous backend\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "frontend" / "previous.txt").write_text(
+        "previous frontend\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "deployment" / "previous.txt").write_text(
+        "previous deployment\n",
+        encoding="utf-8",
+    )
+
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        """#!/bin/sh
+exit 0
+""",
+        encoding="utf-8",
+    )
+    systemctl.chmod(0o755)
+
+    cp = fake_bin / "cp"
+    cp.write_text(
+        """#!/bin/sh
+case "$*" in
+    *"/staged/backend"*"/install/backend"*)
+        exit 1
+        ;;
+esac
+
+exec /bin/cp "$@"
+""",
+        encoding="utf-8",
+    )
+    cp.chmod(0o755)
+
+    recovery_record = tmp_path / "upgrade.env"
+    recovery_record.write_text(
+        "\n".join(
+            [
+                "CAREQUEUE_UPGRADE_RECOVERY_SCHEMA=1",
+                "CAREQUEUE_UPGRADE_STATUS=rollback_staged",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        export PATH="{fake_bin}:$PATH"
+
+        source "{installer}"
+
+        MODE="rollback"
+        ROLLBACK_RECOVERY_RECORD="{recovery_record}"
+        INSTALL_DIRECTORY="{install_directory}"
+        DATA_DIRECTORY="{tmp_path / "data"}"
+        ROLLBACK_APPLICATION_STAGING_ROOT="{staged_directory}"
+
+        replace_failed_application_with_rollback_payload
+        """)
+
+    assert result.returncode != 0
+
+    assert (install_directory / "backend" / "failed.txt").is_file()
+    assert (install_directory / "frontend" / "failed.txt").is_file()
+    assert (install_directory / "deployment" / "failed.txt").is_file()
+
+    assert not (install_directory / "backend" / "previous.txt").exists()
+    assert not (install_directory / "frontend" / "previous.txt").exists()
+    assert not (install_directory / "deployment" / "previous.txt").exists()
+
+    assert (
+        "The failed application was restored and CareQueue services remain stopped."
+        in result.stderr
+    )
+
+    record = recovery_record.read_text(encoding="utf-8")
+
+    assert "CAREQUEUE_UPGRADE_STATUS=rollback_application_restored" in record
+
+
+def test_rollback_restores_failed_application_when_venv_creation_fails(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    install_directory = tmp_path / "install"
+    staged_directory = tmp_path / "staged"
+    recovery_staging = tmp_path / "data" / "recovery" / "application-staging"
+    fake_bin = tmp_path / "bin"
+
+    for directory in (
+        install_directory / "backend",
+        install_directory / "frontend",
+        install_directory / "deployment",
+        staged_directory / "backend",
+        staged_directory / "frontend",
+        staged_directory / "deployment",
+        recovery_staging,
+        fake_bin,
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    (install_directory / "backend" / "failed.txt").write_text(
+        "failed backend\n",
+        encoding="utf-8",
+    )
+    (install_directory / "frontend" / "failed.txt").write_text(
+        "failed frontend\n",
+        encoding="utf-8",
+    )
+    (install_directory / "deployment" / "failed.txt").write_text(
+        "failed deployment\n",
+        encoding="utf-8",
+    )
+
+    (staged_directory / "backend" / "previous.txt").write_text(
+        "previous backend\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "frontend" / "previous.txt").write_text(
+        "previous frontend\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "deployment" / "previous.txt").write_text(
+        "previous deployment\n",
+        encoding="utf-8",
+    )
+    (staged_directory / "backend" / "requirements.txt").write_text(
+        "example-package==1.0\n",
+        encoding="utf-8",
+    )
+
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        """#!/bin/sh
+exit 0
+""",
+        encoding="utf-8",
+    )
+    systemctl.chmod(0o755)
+
+    python3 = fake_bin / "python3"
+    python3.write_text(
+        """#!/bin/sh
+exit 1
+""",
+        encoding="utf-8",
+    )
+    python3.chmod(0o755)
+
+    recovery_record = tmp_path / "upgrade.env"
+    recovery_record.write_text(
+        "\n".join(
+            [
+                "CAREQUEUE_UPGRADE_RECOVERY_SCHEMA=1",
+                "CAREQUEUE_UPGRADE_STATUS=rollback_staged",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        export PATH="{fake_bin}:$PATH"
+
+        source "{installer}"
+
+        MODE="rollback"
+        ROLLBACK_RECOVERY_RECORD="{recovery_record}"
+        INSTALL_DIRECTORY="{install_directory}"
+        DATA_DIRECTORY="{tmp_path / "data"}"
+        ROLLBACK_APPLICATION_STAGING_ROOT="{staged_directory}"
+
+        replace_failed_application_with_rollback_payload
+        """)
+
+    assert result.returncode != 0
+
+    assert (install_directory / "backend" / "failed.txt").is_file()
+    assert (install_directory / "frontend" / "failed.txt").is_file()
+    assert (install_directory / "deployment" / "failed.txt").is_file()
+
+    assert not (install_directory / "backend" / "previous.txt").exists()
+    assert not (install_directory / "frontend" / "previous.txt").exists()
+    assert not (install_directory / "deployment" / "previous.txt").exists()
+
+    assert (
+        "Failed to rebuild the previous CareQueue Python environment. "
+        "The failed application was restored and CareQueue services remain stopped."
+        in result.stderr
+    )
+
+    record = recovery_record.read_text(encoding="utf-8")
+
+    assert "CAREQUEUE_UPGRADE_STATUS=rollback_application_restored" in record
+
+
+def test_failed_application_restore_helper_restores_all_application_trees(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    install_directory = tmp_path / "install"
+    failed_staging = tmp_path / "failed-staging"
+
+    for directory in (
+        install_directory / "backend",
+        install_directory / "frontend",
+        install_directory / "deployment",
+        failed_staging / "backend",
+        failed_staging / "frontend",
+        failed_staging / "deployment",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+
+    (install_directory / "backend" / "partial.txt").write_text(
+        "partial rollback\n",
+        encoding="utf-8",
+    )
+
+    (failed_staging / "backend" / "failed.txt").write_text(
+        "failed backend\n",
+        encoding="utf-8",
+    )
+    (failed_staging / "frontend" / "failed.txt").write_text(
+        "failed frontend\n",
+        encoding="utf-8",
+    )
+    (failed_staging / "deployment" / "failed.txt").write_text(
+        "failed deployment\n",
+        encoding="utf-8",
+    )
+
+    recovery_record = tmp_path / "upgrade.env"
+    recovery_record.write_text(
+        "\n".join(
+            [
+                "CAREQUEUE_UPGRADE_RECOVERY_SCHEMA=1",
+                "CAREQUEUE_UPGRADE_STATUS=rollback_staged",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+
+        MODE="rollback"
+        ROLLBACK_RECOVERY_RECORD="{recovery_record}"
+        INSTALL_DIRECTORY="{install_directory}"
+        FAILED_APPLICATION_STAGING_DIRECTORY="{failed_staging}"
+        RECOVERY_RECORD="{recovery_record}"
+
+        restore_failed_application_after_swap_failure
+        """)
+
+    assert result.returncode == 0
+
+    assert (install_directory / "backend" / "failed.txt").is_file()
+    assert (install_directory / "frontend" / "failed.txt").is_file()
+    assert (install_directory / "deployment" / "failed.txt").is_file()
+    assert not (install_directory / "backend" / "partial.txt").exists()
+
+    assert (
+        "Failed application restored after rollback replacement failure."
+        in result.stdout
+    )
+
+    record = recovery_record.read_text(encoding="utf-8")
+
+    assert "CAREQUEUE_UPGRADE_STATUS=rollback_application_restored" in record
+    assert "CAREQUEUE_UPGRADE_STATUS=rollback_staged" not in record
+
+    assert (
+        "CareQueue services remain stopped pending administrator review."
+        in result.stdout
+    )
+
+
+def test_successful_rollback_cleanup_removes_only_temporary_staging(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    rollback_staging = tmp_path / "rollback-staging"
+    failed_staging = tmp_path / "failed-staging"
+
+    rollback_staging.mkdir()
+    failed_staging.mkdir()
+
+    (rollback_staging / "temporary.txt").write_text(
+        "temporary rollback data\n",
+        encoding="utf-8",
+    )
+    (failed_staging / "temporary.txt").write_text(
+        "temporary failed app\n",
+        encoding="utf-8",
+    )
+
+    database_backup = tmp_path / "backup.db.enc"
+    previous_archive = tmp_path / "previous.tar.gz"
+    failed_archive = tmp_path / "failed.tar.gz"
+    recovery_record = tmp_path / "upgrade.env"
+
+    database_backup.write_bytes(b"database")
+    previous_archive.write_bytes(b"previous")
+    failed_archive.write_bytes(b"failed")
+    recovery_record.write_text(
+        "CAREQUEUE_UPGRADE_STATUS=rollback_completed\n",
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+
+        MODE="rollback"
+        ROLLBACK_APPLICATION_STAGING_DIRECTORY="{rollback_staging}"
+        ROLLBACK_APPLICATION_STAGING_ROOT="{rollback_staging}"
+        FAILED_APPLICATION_STAGING_DIRECTORY="{failed_staging}"
+
+        ROLLBACK_BACKUP_PATH="{database_backup}"
+        ROLLBACK_APPLICATION_ARCHIVE="{previous_archive}"
+        FAILED_APPLICATION_ARCHIVE="{failed_archive}"
+        ROLLBACK_RECOVERY_RECORD="{recovery_record}"
+
+        cleanup_successful_rollback_staging
+        """)
+
+    assert result.returncode == 0
+
+    assert not rollback_staging.exists()
+    assert not failed_staging.exists()
+
+    assert database_backup.is_file()
+    assert previous_archive.is_file()
+    assert failed_archive.is_file()
+    assert recovery_record.is_file()
+
+    assert (
+        "Temporary rollback application staging directories removed." in result.stdout
+    )
+
+
+def test_post_rollback_health_failure_does_not_mark_rollback_completed(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+
+    install_state = tmp_path / "install-state.env"
+    install_state.write_text(
+        "\n".join(
+            [
+                "CAREQUEUE_APPLICATION_ORIGIN=https://carequeue.local",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    curl = fake_bin / "curl"
+    curl.write_text(
+        """#!/bin/sh
+exit 1
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+
+    sleep = fake_bin / "sleep"
+    sleep.write_text(
+        """#!/bin/sh
+exit 0
+""",
+        encoding="utf-8",
+    )
+    sleep.chmod(0o755)
+
+    result = _run_bash(f"""
+        export PATH="{fake_bin}:$PATH"
+
+        source "{installer}"
+
+        MODE="rollback"
+        INSTALL_STATE_FILE="{install_state}"
+
+        validate_post_rollback_health
+        """)
+
+    assert result.returncode != 0
+    assert (
+        "CareQueue did not pass health and readiness checks after rollback."
+        in result.stderr
+    )
+    assert "rollback was not marked complete." in result.stderr
+
+
+def test_post_rollback_service_validation_rejects_inactive_service(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+
+    systemctl = fake_bin / "systemctl"
+    systemctl.write_text(
+        """#!/bin/sh
+if [ "$1" = "is-active" ] \
+    && [ "$3" = "carequeue-caddy.service" ]; then
+    exit 1
+fi
+
+exit 0
+""",
+        encoding="utf-8",
+    )
+    systemctl.chmod(0o755)
+
+    result = _run_bash(f"""
+        export PATH="{fake_bin}:$PATH"
+
+        source "{installer}"
+
+        MODE="rollback"
+
+        validate_post_rollback_services
+        """)
+
+    assert result.returncode != 0
+    assert "carequeue-caddy.service is not active." in result.stderr

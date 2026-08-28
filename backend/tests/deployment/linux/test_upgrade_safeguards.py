@@ -952,3 +952,344 @@ def test_linux_rollback_preserves_failed_application_before_database_recovery():
     assert stage_index < preserve_index
     assert preserve_index < record_index
     assert record_index < database_index
+
+
+def test_linux_rollback_moves_failed_application_before_restoring_previous():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "replace_failed_application_with_rollback_payload",
+    )
+
+    move_index = function.index(
+        'mv \\\n        "${INSTALL_DIRECTORY}/backend"',
+    )
+    restore_index = function.index(
+        "cp -a --no-preserve=context \\\n        "
+        '"${ROLLBACK_APPLICATION_STAGING_ROOT}/backend"',
+    )
+
+    assert move_index < restore_index
+    assert "FAILED_APPLICATION_STAGING_DIRECTORY" in function
+
+
+def test_linux_rollback_rebuilds_previous_python_environment():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "replace_failed_application_with_rollback_payload",
+    )
+
+    assert "python3 -m venv" in function
+    assert 'requirements.txt"' in function
+    assert "-c 'import authstatus_api.main'" in function
+
+
+def test_linux_rollback_restores_application_before_database_recovery():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    main_function = _shell_function(
+        content,
+        "main",
+    )
+
+    rollback_case = main_function.split(
+        "rollback)",
+        maxsplit=1,
+    )[1].split(
+        ";;",
+        maxsplit=1,
+    )[0]
+
+    application_index = rollback_case.index(
+        "replace_failed_application_with_rollback_payload",
+    )
+    service_index = rollback_case.index(
+        "restore_rollback_service_definitions",
+    )
+    database_index = rollback_case.index(
+        "prepare_failed_upgrade_rollback",
+    )
+
+    assert application_index < service_index < database_index
+
+
+def test_linux_rollback_restores_previous_systemd_units():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "restore_rollback_service_definitions",
+    )
+
+    assert "carequeue-api.service" in function
+    assert "carequeue-backup.service" in function
+    assert "carequeue-backup.timer" in function
+    assert "carequeue-caddy.service" in function
+    assert "systemctl daemon-reload" in function
+
+
+def test_linux_rollback_can_restore_failed_application_after_swap_failure():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "restore_failed_application_after_swap_failure",
+    )
+
+    assert "rm -rf \\" in function
+    assert '"${FAILED_APPLICATION_STAGING_DIRECTORY}/backend"' in function
+    assert '"${FAILED_APPLICATION_STAGING_DIRECTORY}/frontend"' in function
+    assert '"${FAILED_APPLICATION_STAGING_DIRECTORY}/deployment"' in function
+    assert "Failed application restored after rollback replacement failure." in function
+
+
+def test_linux_rollback_copy_failures_restore_failed_application():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "replace_failed_application_with_rollback_payload",
+    )
+
+    assert function.count("restore_failed_application_after_swap_failure") >= 3
+
+    assert (
+        "The failed application was restored and CareQueue services remain stopped."
+        in function
+    )
+
+
+def test_linux_rollback_environment_failures_restore_failed_application():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "replace_failed_application_with_rollback_payload",
+    )
+
+    venv_index = function.index(
+        'python3 -m venv "${virtual_environment}"',
+    )
+    dependency_index = function.index(
+        '--requirement "${backend_directory}/requirements.txt"',
+    )
+    validation_index = function.index(
+        "-c 'import authstatus_api.main'",
+    )
+
+    assert "restore_failed_application_after_swap_failure" in function
+    assert venv_index < dependency_index < validation_index
+
+
+def test_linux_rollback_does_not_continue_after_application_swap_failure():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "replace_failed_application_with_rollback_payload",
+    )
+
+    assert "CareQueue services remain stopped." in function
+    assert "fail \\" in function
+
+
+def test_linux_failed_application_restore_records_recovery_state():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "restore_failed_application_after_swap_failure",
+    )
+
+    assert 'update_rollback_recovery_status "rollback_application_restored"' in function
+    assert "Upgrade recovery status: rollback_application_restored" in function
+
+
+def test_linux_failed_application_restore_keeps_services_stopped():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "restore_failed_application_after_swap_failure",
+    )
+
+    assert "CareQueue services remain stopped pending administrator review." in function
+    assert "systemctl start carequeue-api.service" not in function
+    assert "systemctl start carequeue-caddy.service" not in function
+
+
+def test_linux_successful_rollback_cleans_temporary_application_staging():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "cleanup_successful_rollback_staging",
+    )
+
+    assert '"${ROLLBACK_APPLICATION_STAGING_DIRECTORY}"' in function
+    assert '"${FAILED_APPLICATION_STAGING_DIRECTORY}"' in function
+    assert 'rm -rf "${ROLLBACK_APPLICATION_STAGING_DIRECTORY}"' in function
+    assert 'rm -rf "${FAILED_APPLICATION_STAGING_DIRECTORY}"' in function
+
+
+def test_linux_rollback_cleans_staging_only_after_completion_state():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "activate_failed_upgrade_rollback",
+    )
+
+    completed_index = function.index(
+        'update_rollback_recovery_status "rollback_completed"',
+    )
+    cleanup_index = function.index(
+        "cleanup_successful_rollback_staging",
+    )
+
+    assert completed_index < cleanup_index
+
+
+def test_linux_rollback_cleanup_does_not_delete_durable_recovery_assets():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "cleanup_successful_rollback_staging",
+    )
+
+    assert "ROLLBACK_BACKUP_PATH" not in function
+    assert "ROLLBACK_APPLICATION_ARCHIVE" not in function
+    assert "FAILED_APPLICATION_ARCHIVE" not in function
+    assert "ROLLBACK_RECOVERY_RECORD" not in function
+
+
+def test_linux_rollback_restarts_api_and_caddy_before_completion():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "activate_failed_upgrade_rollback",
+    )
+
+    api_index = function.index(
+        "systemctl start carequeue-api.service",
+    )
+    caddy_index = function.index(
+        "systemctl start carequeue-caddy.service",
+    )
+    completed_index = function.index(
+        'update_rollback_recovery_status "rollback_completed"',
+    )
+
+    assert api_index < caddy_index < completed_index
+
+
+def test_linux_rollback_validates_health_and_readiness():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "validate_post_rollback_health",
+    )
+
+    assert "/api/health" in function
+    assert "/api/health/ready" in function
+    assert "--fail" in function
+    assert "--insecure" in function
+    assert "seq 1 30" in function
+
+
+def test_linux_rollback_health_uses_recorded_application_origin():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "validate_post_rollback_health",
+    )
+
+    assert '"CAREQUEUE_APPLICATION_ORIGIN"' in function
+    assert 'application_origin="https://carequeue.local"' in function
+
+
+def test_linux_rollback_health_validation_precedes_completion():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "activate_failed_upgrade_rollback",
+    )
+
+    health_index = function.index(
+        "validate_post_rollback_health",
+    )
+    version_index = function.index(
+        "restore_previous_install_state_version",
+    )
+    completed_index = function.index(
+        'update_rollback_recovery_status "rollback_completed"',
+    )
+
+    assert health_index < version_index < completed_index
+
+
+def test_linux_rollback_health_failure_does_not_claim_completion():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "validate_post_rollback_health",
+    )
+
+    assert (
+        "Recovery remains activated, but rollback was not marked complete." in function
+    )
+
+
+def test_linux_rollback_restores_backup_timer():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "activate_failed_upgrade_rollback",
+    )
+
+    assert "systemctl enable --now carequeue-backup.timer" in function
+
+
+def test_linux_rollback_validates_required_services():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "validate_post_rollback_services",
+    )
+
+    assert "carequeue-api.service" in function
+    assert "carequeue-caddy.service" in function
+    assert "carequeue-backup.timer" in function
+    assert "systemctl is-active --quiet" in function
+
+
+def test_linux_rollback_service_validation_precedes_health_check():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "activate_failed_upgrade_rollback",
+    )
+
+    service_index = function.index(
+        "validate_post_rollback_services",
+    )
+    health_index = function.index(
+        "validate_post_rollback_health",
+    )
+    completed_index = function.index(
+        'update_rollback_recovery_status "rollback_completed"',
+    )
+
+    assert service_index < health_index < completed_index

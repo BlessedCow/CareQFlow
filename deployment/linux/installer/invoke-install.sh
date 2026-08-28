@@ -46,6 +46,7 @@ PRE_UPGRADE_APPLICATION_SHA256=""
 UPGRADE_APPLICATION_RECOVERY_DIRECTORY="${DATA_DIRECTORY}/recovery/applications"
 FAILED_APPLICATION_ARCHIVE=""
 FAILED_APPLICATION_SHA256=""
+FAILED_APPLICATION_STAGING_DIRECTORY=""
 
 INSTALL_SCRIPT="${LINUX_DEPLOYMENT_DIRECTORY}/install-production.sh"
 UNINSTALL_SCRIPT="${LINUX_DEPLOYMENT_DIRECTORY}/uninstall-production.sh"
@@ -609,6 +610,29 @@ restore_previous_install_state_version() {
         "${ROLLBACK_PREVIOUS_VERSION}"
 }
 
+cleanup_successful_rollback_staging() {
+    if [[ "${MODE}" != "rollback" ]]; then
+        return
+    fi
+
+    if [[ -n "${ROLLBACK_APPLICATION_STAGING_DIRECTORY}" ]] \
+        && [[ -d "${ROLLBACK_APPLICATION_STAGING_DIRECTORY}" ]]; then
+        rm -rf "${ROLLBACK_APPLICATION_STAGING_DIRECTORY}"
+    fi
+
+    if [[ -n "${FAILED_APPLICATION_STAGING_DIRECTORY}" ]] \
+        && [[ -d "${FAILED_APPLICATION_STAGING_DIRECTORY}" ]]; then
+        rm -rf "${FAILED_APPLICATION_STAGING_DIRECTORY}"
+    fi
+
+    ROLLBACK_APPLICATION_STAGING_DIRECTORY=""
+    ROLLBACK_APPLICATION_STAGING_ROOT=""
+    FAILED_APPLICATION_STAGING_DIRECTORY=""
+
+    printf '%s\n' \
+        "Temporary rollback application staging directories removed."
+}
+
 resolve_failed_upgrade_recovery_record() {
     local calculated_application_sha256
     local record_path
@@ -968,6 +992,283 @@ record_failed_application_for_rollback() {
     mv -f "${temporary_record}" "${ROLLBACK_RECOVERY_RECORD}"
 }
 
+restore_failed_application_after_swap_failure() {
+    local restore_failed
+
+    if [[ "${MODE}" != "rollback" ]]; then
+        return
+    fi
+
+    if [[ -z "${FAILED_APPLICATION_STAGING_DIRECTORY}" ]] \
+        || [[ ! -d "${FAILED_APPLICATION_STAGING_DIRECTORY}" ]]; then
+        return 1
+    fi
+
+    restore_failed=false
+
+    printf '%s\n' \
+        "Restoring the failed application after rollback replacement failure..."
+
+    rm -rf \
+        "${INSTALL_DIRECTORY}/backend" \
+        "${INSTALL_DIRECTORY}/frontend" \
+        "${INSTALL_DIRECTORY}/deployment"
+
+    if ! mv \
+        "${FAILED_APPLICATION_STAGING_DIRECTORY}/backend" \
+        "${INSTALL_DIRECTORY}/backend"; then
+        restore_failed=true
+    fi
+
+    if ! mv \
+        "${FAILED_APPLICATION_STAGING_DIRECTORY}/frontend" \
+        "${INSTALL_DIRECTORY}/frontend"; then
+        restore_failed=true
+    fi
+
+    if ! mv \
+        "${FAILED_APPLICATION_STAGING_DIRECTORY}/deployment" \
+        "${INSTALL_DIRECTORY}/deployment"; then
+        restore_failed=true
+    fi
+
+    if command -v restorecon >/dev/null 2>&1; then
+        restorecon -RF "${INSTALL_DIRECTORY}"
+    fi
+
+    if [[ "${restore_failed}" == "true" ]]; then
+        return 1
+    fi
+
+    update_rollback_recovery_status "rollback_application_restored"
+
+    printf '%s\n' \
+        "Failed application restored after rollback replacement failure."
+
+    printf '%s\n' \
+        "Upgrade recovery status: rollback_application_restored"
+
+    printf '%s\n' \
+        "CareQueue services remain stopped pending administrator review."
+
+    return 0
+}
+
+replace_failed_application_with_rollback_payload() {
+    local backend_directory
+    local virtual_environment
+
+    if [[ "${MODE}" != "rollback" ]]; then
+        return
+    fi
+
+    if [[ -z "${ROLLBACK_APPLICATION_STAGING_ROOT}" ]] \
+        || [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}" ]]; then
+        fail \
+            "Cannot restore the previous CareQueue application because the staged rollback payload is unavailable."
+    fi
+
+    if [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}/backend" ]] \
+        || [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}/frontend" ]] \
+        || [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}/deployment" ]]; then
+        fail \
+            "Cannot restore the previous CareQueue application because the staged rollback payload is incomplete."
+    fi
+
+    printf '%s\n' \
+        "Stopping CareQueue services before application rollback..."
+
+    if ! systemctl stop carequeue-api.service; then
+        fail \
+            "CareQueue rollback could not stop carequeue-api.service before application replacement."
+    fi
+
+    if ! systemctl stop carequeue-caddy.service; then
+        fail \
+            "CareQueue rollback could not stop carequeue-caddy.service before application replacement."
+    fi
+
+    FAILED_APPLICATION_STAGING_DIRECTORY="$(
+        mktemp \
+            --directory \
+            "${DATA_DIRECTORY}/recovery/application-staging/failed-application.XXXXXX"
+    )"
+
+    printf '%s\n' \
+        "Moving the failed application aside before restoring the previous release..."
+
+    mv \
+        "${INSTALL_DIRECTORY}/backend" \
+        "${FAILED_APPLICATION_STAGING_DIRECTORY}/backend"
+
+    mv \
+        "${INSTALL_DIRECTORY}/frontend" \
+        "${FAILED_APPLICATION_STAGING_DIRECTORY}/frontend"
+
+    mv \
+        "${INSTALL_DIRECTORY}/deployment" \
+        "${FAILED_APPLICATION_STAGING_DIRECTORY}/deployment"
+
+    printf '%s\n' \
+        "Restoring the previous CareQueue application payload..."
+
+    if ! cp -a --no-preserve=context \
+        "${ROLLBACK_APPLICATION_STAGING_ROOT}/backend" \
+        "${INSTALL_DIRECTORY}/backend"; then
+
+        if ! restore_failed_application_after_swap_failure; then
+            fail \
+                "Failed to restore the previous CareQueue backend, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+        fi
+
+        fail \
+            "Failed to restore the previous CareQueue backend. The failed application was restored and CareQueue services remain stopped."
+    fi
+
+    if ! cp -a --no-preserve=context \
+        "${ROLLBACK_APPLICATION_STAGING_ROOT}/frontend" \
+        "${INSTALL_DIRECTORY}/frontend"; then
+
+        if ! restore_failed_application_after_swap_failure; then
+            fail \
+                "Failed to restore the previous CareQueue frontend, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+        fi
+
+        fail \
+            "Failed to restore the previous CareQueue frontend. The failed application was restored and CareQueue services remain stopped."
+    fi
+
+    if ! cp -a --no-preserve=context \
+        "${ROLLBACK_APPLICATION_STAGING_ROOT}/deployment" \
+        "${INSTALL_DIRECTORY}/deployment"; then
+
+        if ! restore_failed_application_after_swap_failure; then
+            fail \
+                "Failed to restore the previous CareQueue deployment files, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+        fi
+
+        fail \
+            "Failed to restore the previous CareQueue deployment files. The failed application was restored and CareQueue services remain stopped."
+    fi
+
+    if command -v restorecon >/dev/null 2>&1; then
+        restorecon -RF "${INSTALL_DIRECTORY}"
+    fi
+
+    backend_directory="${INSTALL_DIRECTORY}/backend"
+    virtual_environment="${backend_directory}/.venv"
+
+    printf '%s\n' \
+        "Rebuilding the previous CareQueue Python environment..."
+
+    python3 -m venv "${virtual_environment}"
+
+if ! python3 -m venv "${virtual_environment}"; then
+    if ! restore_failed_application_after_swap_failure; then
+        fail \
+            "Failed to rebuild the previous CareQueue Python environment, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+    fi
+
+    fail \
+        "Failed to rebuild the previous CareQueue Python environment. The failed application was restored and CareQueue services remain stopped."
+fi
+
+    if ! "${virtual_environment}/bin/python" \
+        -m pip install \
+        --upgrade \
+        pip \
+        setuptools \
+        wheel; then
+
+        if ! restore_failed_application_after_swap_failure; then
+            fail \
+                "Failed to prepare the previous CareQueue Python environment, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+        fi
+
+        fail \
+            "Failed to prepare the previous CareQueue Python environment. The failed application was restored and CareQueue services remain stopped."
+    fi
+
+    if ! "${virtual_environment}/bin/python" \
+        -m pip install \
+        --requirement "${backend_directory}/requirements.txt"; then
+
+        if ! restore_failed_application_after_swap_failure; then
+            fail \
+                "Failed to install the previous CareQueue backend dependencies, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+        fi
+
+        fail \
+            "Failed to install the previous CareQueue backend dependencies. The failed application was restored and CareQueue services remain stopped."
+    fi
+
+    if ! (
+        cd "${backend_directory}"
+
+        "${virtual_environment}/bin/python" \
+            -c 'import authstatus_api.main'
+    ); then
+        if ! restore_failed_application_after_swap_failure; then
+            fail \
+                "The restored CareQueue backend failed validation, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+        fi
+
+        fail \
+            "The restored CareQueue backend failed validation. The failed application was restored and CareQueue services remain stopped."
+    fi
+
+    printf '%s\n' \
+        "Previous CareQueue application payload restored successfully."
+}
+
+restore_rollback_service_definitions() {
+    local systemd_directory
+
+    if [[ "${MODE}" != "rollback" ]]; then
+        return
+    fi
+
+    systemd_directory="${INSTALL_DIRECTORY}/deployment/linux/systemd"
+
+    if [[ ! -d "${systemd_directory}" ]]; then
+        fail \
+            "The restored CareQueue application does not contain Linux systemd definitions."
+    fi
+
+    install \
+        -o root \
+        -g root \
+        -m 0644 \
+        "${systemd_directory}/carequeue-api.service" \
+        "/etc/systemd/system/carequeue-api.service"
+
+    install \
+        -o root \
+        -g root \
+        -m 0644 \
+        "${systemd_directory}/carequeue-backup.service" \
+        "/etc/systemd/system/carequeue-backup.service"
+
+    install \
+        -o root \
+        -g root \
+        -m 0644 \
+        "${systemd_directory}/carequeue-backup.timer" \
+        "/etc/systemd/system/carequeue-backup.timer"
+
+    install \
+        -o root \
+        -g root \
+        -m 0644 \
+        "${systemd_directory}/carequeue-caddy.service" \
+        "/etc/systemd/system/carequeue-caddy.service"
+
+    systemctl daemon-reload
+
+    printf '%s\n' \
+        "Previous CareQueue systemd service definitions restored."
+}
+
 prepare_failed_upgrade_rollback() {
     local restore_script
 
@@ -1004,6 +1305,78 @@ prepare_failed_upgrade_rollback() {
 
     printf '%s\n' \
         "Complete recovery activation using the staged CareQueue recovery workflow."
+}
+
+validate_post_rollback_services() {
+    local service_name
+
+    if [[ "${MODE}" != "rollback" ]]; then
+        return
+    fi
+
+    for service_name in \
+        carequeue-api.service \
+        carequeue-caddy.service \
+        carequeue-backup.timer; do
+
+        if ! systemctl is-active --quiet "${service_name}"; then
+            fail \
+                "CareQueue rollback service validation failed because ${service_name} is not active."
+        fi
+    done
+
+    printf '%s\n' \
+        "CareQueue rollback service validation passed."
+}
+
+validate_post_rollback_health() {
+    local application_origin
+    local attempt
+
+    if [[ "${MODE}" != "rollback" ]]; then
+        return
+    fi
+
+    application_origin="$(
+        read_env_value \
+            "${INSTALL_STATE_FILE}" \
+            "CAREQUEUE_APPLICATION_ORIGIN"
+    )"
+
+    if [[ -z "${application_origin}" ]]; then
+        application_origin="https://carequeue.local"
+    fi
+
+    printf '%s\n' \
+        "Validating CareQueue health after rollback..."
+
+    for attempt in $(seq 1 30); do
+        if curl \
+            --fail \
+            --silent \
+            --show-error \
+            --insecure \
+            "${application_origin}/api/health" \
+            >/dev/null 2>&1 \
+            && curl \
+                --fail \
+                --silent \
+                --show-error \
+                --insecure \
+                "${application_origin}/api/health/ready" \
+                >/dev/null 2>&1; then
+
+            printf '%s\n' \
+                "CareQueue health and readiness checks passed after rollback."
+
+            return
+        fi
+
+        sleep 1
+    done
+
+    fail \
+        "CareQueue did not pass health and readiness checks after rollback. Recovery remains activated, but rollback was not marked complete."
 }
 
 activate_failed_upgrade_rollback() {
@@ -1074,11 +1447,31 @@ activate_failed_upgrade_rollback() {
             "Rollback activation completed, but carequeue-api.service could not be started."
     fi
 
-    restore_previous_install_state_version
-    update_rollback_recovery_status "rollback_completed"
+    printf '%s\n' \
+        "Starting the CareQueue HTTPS service..."
+
+    if ! systemctl start carequeue-caddy.service; then
+        fail \
+            "Rollback activation completed, but carequeue-caddy.service could not be started."
+    fi
 
     printf '%s\n' \
-        "CareQueue API started after rollback activation."
+        "Restoring the CareQueue backup schedule..."
+
+    if ! systemctl enable --now carequeue-backup.timer; then
+        fail \
+            "Rollback activation completed, but carequeue-backup.timer could not be restored."
+    fi
+
+    validate_post_rollback_services
+    validate_post_rollback_health
+
+    restore_previous_install_state_version
+    update_rollback_recovery_status "rollback_completed"
+    cleanup_successful_rollback_staging
+
+    printf '%s\n' \
+        "CareQueue services started after rollback activation."
 
     printf '%s\n' \
         "Upgrade recovery status: rollback_completed"
@@ -1190,6 +1583,8 @@ main() {
             stage_verified_rollback_application
             preserve_failed_application_before_rollback
             record_failed_application_for_rollback
+            replace_failed_application_with_rollback_payload
+            restore_rollback_service_definitions
             prepare_failed_upgrade_rollback
             activate_failed_upgrade_rollback
             ;;
