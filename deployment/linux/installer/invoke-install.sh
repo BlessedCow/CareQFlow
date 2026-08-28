@@ -189,9 +189,8 @@ validate_upgrade_version() {
     fi
 
     if [[ ! -f "${INSTALL_STATE_FILE}" ]]; then
-        printf \
-            'Installed CareQueue version metadata is unavailable. ' \
-            'Continuing legacy upgrade validation.\n'
+        printf '%s\n' \
+            'Installed CareQueue version metadata is unavailable. Continuing legacy upgrade validation.'
         return
     fi
 
@@ -202,9 +201,8 @@ validate_upgrade_version() {
     )"
 
     if [[ -z "${INSTALLED_VERSION}" ]]; then
-        printf \
-            'Installed CareQueue version metadata is unavailable. ' \
-            'Continuing legacy upgrade validation.\n'
+        printf '%s\n' \
+            'Installed CareQueue version metadata is unavailable. Continuing legacy upgrade validation.'
         return
     fi
 
