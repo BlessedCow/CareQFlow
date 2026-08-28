@@ -30,6 +30,9 @@ INSTALL_STATE_FILE="${CONFIG_DIRECTORY}/install-state.env"
 
 INCOMING_VERSION=""
 INSTALLED_VERSION=""
+PRE_UPGRADE_BACKUP_PATH=""
+UPGRADE_RECOVERY_DIRECTORY="${DATA_DIRECTORY}/recovery/upgrades"
+UPGRADE_RECOVERY_RECORD=""
 
 INSTALL_SCRIPT="${LINUX_DEPLOYMENT_DIRECTORY}/install-production.sh"
 UNINSTALL_SCRIPT="${LINUX_DEPLOYMENT_DIRECTORY}/uninstall-production.sh"
@@ -321,7 +324,85 @@ create_verified_pre_upgrade_backup() {
             "${backup_path}"
     fi
 
-    printf 'Verified pre-upgrade backup: %s\n' "${backup_path}"
+    PRE_UPGRADE_BACKUP_PATH="${backup_path}"
+
+    printf 'Verified pre-upgrade backup: %s\n' "${PRE_UPGRADE_BACKUP_PATH}"
+}
+
+write_upgrade_recovery_record() {
+    local attempted_at
+
+    if [[ "${MODE}" != "upgrade" ]]; then
+        return
+    fi
+
+    if [[ -z "${PRE_UPGRADE_BACKUP_PATH}" ]]; then
+        fail \
+            "Cannot create upgrade recovery state because the " \
+            "verified pre-upgrade backup path is unavailable."
+    fi
+
+    mkdir -p "${UPGRADE_RECOVERY_DIRECTORY}"
+    chmod 0750 "${UPGRADE_RECOVERY_DIRECTORY}"
+
+    attempted_at="$(date -u --iso-8601=seconds)"
+
+    UPGRADE_RECOVERY_RECORD="$(
+        printf \
+            '%s/upgrade-%s-to-%s.env' \
+            "${UPGRADE_RECOVERY_DIRECTORY}" \
+            "${INSTALLED_VERSION:-legacy}" \
+            "${INCOMING_VERSION}"
+    )"
+
+    cat > "${UPGRADE_RECOVERY_RECORD}" <<EOF
+CAREQUEUE_UPGRADE_RECOVERY_SCHEMA=1
+CAREQUEUE_PREVIOUS_VERSION=${INSTALLED_VERSION:-unknown}
+CAREQUEUE_INCOMING_VERSION=${INCOMING_VERSION}
+CAREQUEUE_PRE_UPGRADE_BACKUP=${PRE_UPGRADE_BACKUP_PATH}
+CAREQUEUE_INSTALLER_LOG=${LOG_PATH}
+CAREQUEUE_UPGRADE_ATTEMPTED_AT=${attempted_at}
+CAREQUEUE_UPGRADE_STATUS=pending
+EOF
+
+    chmod 0640 "${UPGRADE_RECOVERY_RECORD}"
+
+    printf \
+        'Upgrade recovery record created: %s\n' \
+        "${UPGRADE_RECOVERY_RECORD}"
+}
+
+update_upgrade_recovery_status() {
+    local status="$1"
+    local temporary_record
+
+    if [[ "${MODE}" != "upgrade" ]]; then
+        return
+    fi
+
+    if [[ -z "${UPGRADE_RECOVERY_RECORD}" ]] \
+        || [[ ! -f "${UPGRADE_RECOVERY_RECORD}" ]]; then
+        return
+    fi
+
+    temporary_record="${UPGRADE_RECOVERY_RECORD}.tmp"
+
+    awk \
+        -v replacement_status="${status}" \
+        '
+        /^CAREQUEUE_UPGRADE_STATUS=/ {
+            print "CAREQUEUE_UPGRADE_STATUS=" replacement_status
+            next
+        }
+        {
+            print
+        }
+        ' \
+        "${UPGRADE_RECOVERY_RECORD}" \
+        > "${temporary_record}"
+
+    chmod 0640 "${temporary_record}"
+    mv -f "${temporary_record}" "${UPGRADE_RECOVERY_RECORD}"
 }
 
 prepare_logging() {
@@ -396,6 +477,7 @@ main() {
     prepare_logging
     print_header
     create_verified_pre_upgrade_backup
+    write_upgrade_recovery_record
 
     case "${MODE}" in
         install)
@@ -405,7 +487,16 @@ main() {
 
         upgrade)
             printf 'Upgrading CareQueue while preserving configuration and data...\n'
-            run_install_operation
+
+            if run_install_operation; then
+                update_upgrade_recovery_status "completed"
+            else
+                update_upgrade_recovery_status "failed"
+
+                fail \
+                    "CareQueue upgrade failed. Recovery information was preserved at: " \
+                    "${UPGRADE_RECOVERY_RECORD}"
+            fi
             ;;
 
         repair)

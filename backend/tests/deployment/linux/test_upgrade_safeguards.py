@@ -261,3 +261,93 @@ def test_linux_upgrade_does_not_replace_application_before_verified_backup():
     assert backup_index < main_function.index(
         'case "${MODE}" in',
     )
+
+
+def test_linux_upgrade_tracks_verified_backup_for_recovery():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "create_verified_pre_upgrade_backup",
+    )
+
+    assert 'PRE_UPGRADE_BACKUP_PATH="${backup_path}"' in function
+    assert "Verified pre-upgrade backup: %s" in function
+
+
+def test_linux_upgrade_creates_recovery_record_before_installation():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    assert "write_upgrade_recovery_record()" in content
+
+    function = _shell_function(
+        content,
+        "write_upgrade_recovery_record",
+    )
+
+    assert "CAREQUEUE_UPGRADE_RECOVERY_SCHEMA=1" in function
+    assert "CAREQUEUE_PREVIOUS_VERSION=${INSTALLED_VERSION:-unknown}" in function
+    assert "CAREQUEUE_INCOMING_VERSION=${INCOMING_VERSION}" in function
+    assert "CAREQUEUE_PRE_UPGRADE_BACKUP=${PRE_UPGRADE_BACKUP_PATH}" in function
+    assert "CAREQUEUE_INSTALLER_LOG=${LOG_PATH}" in function
+    assert "CAREQUEUE_UPGRADE_STATUS=pending" in function
+
+    main_function = _shell_function(
+        content,
+        "main",
+    )
+
+    recovery_index = main_function.index(
+        "write_upgrade_recovery_record",
+    )
+    case_index = main_function.index(
+        'case "${MODE}" in',
+    )
+
+    assert recovery_index < case_index
+
+
+def test_linux_upgrade_recovery_record_requires_verified_backup():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "write_upgrade_recovery_record",
+    )
+
+    assert 'if [[ -z "${PRE_UPGRADE_BACKUP_PATH}" ]]' in function
+    assert "Cannot create upgrade recovery state because the " in function
+
+
+def test_linux_upgrade_recovery_status_updates_atomically():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "update_upgrade_recovery_status",
+    )
+
+    assert 'temporary_record="${UPGRADE_RECOVERY_RECORD}.tmp"' in function
+    assert "replacement_status" in function
+    assert 'mv -f "${temporary_record}" "${UPGRADE_RECOVERY_RECORD}"' in function
+
+
+def test_linux_upgrade_marks_recovery_record_completed_or_failed():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    main_function = _shell_function(
+        content,
+        "main",
+    )
+
+    upgrade_case = main_function.split(
+        "upgrade)",
+        maxsplit=1,
+    )[1].split(
+        ";;",
+        maxsplit=1,
+    )[0]
+
+    assert 'update_upgrade_recovery_status "completed"' in upgrade_case
+    assert 'update_upgrade_recovery_status "failed"' in upgrade_case
+    assert "Recovery information was preserved at:" in upgrade_case
