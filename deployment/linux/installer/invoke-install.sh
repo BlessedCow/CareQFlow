@@ -379,9 +379,7 @@ create_verified_pre_upgrade_application_archive() {
             "${INSTALLED_VERSION}"
     )"
 
-    PRE_UPGRADE_APPLICATION_ARCHIVE="${
-        UPGRADE_APPLICATION_RECOVERY_DIRECTORY
-    }/${archive_name}"
+    PRE_UPGRADE_APPLICATION_ARCHIVE="${UPGRADE_APPLICATION_RECOVERY_DIRECTORY}/${archive_name}"
 
     checksum_path="${PRE_UPGRADE_APPLICATION_ARCHIVE}.sha256"
 
@@ -866,10 +864,8 @@ preserve_failed_application_before_rollback() {
             'carequeue-failed-application-%s.tar.gz' \
             "${ROLLBACK_INCOMING_VERSION:-unknown}"
     )"
-
-    FAILED_APPLICATION_ARCHIVE="${
-        UPGRADE_APPLICATION_RECOVERY_DIRECTORY
-    }/${archive_name}"
+    
+    FAILED_APPLICATION_ARCHIVE="${UPGRADE_APPLICATION_RECOVERY_DIRECTORY}/${archive_name}"
 
     checksum_path="${FAILED_APPLICATION_ARCHIVE}.sha256"
 
@@ -1161,9 +1157,7 @@ replace_failed_application_with_rollback_payload() {
     printf '%s\n' \
         "Rebuilding the previous CareQueue Python environment..."
 
-    python3 -m venv "${virtual_environment}"
-
-if ! python3 -m venv "${virtual_environment}"; then
+    if ! python3 -m venv "${virtual_environment}"; then
     if ! restore_failed_application_after_swap_failure; then
         fail \
             "Failed to rebuild the previous CareQueue Python environment, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
@@ -1386,9 +1380,7 @@ activate_failed_upgrade_rollback() {
         return
     fi
 
-    activation_script="${
-        INSTALL_DIRECTORY
-    }/backend/scripts/activate_staged_recovery.py"
+    activation_script="${INSTALL_DIRECTORY}/backend/scripts/activate_staged_recovery.py"
 
     if [[ ! -f "${activation_script}" ]]; then
         fail \

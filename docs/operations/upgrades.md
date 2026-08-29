@@ -31,6 +31,7 @@ The packaged deployment workflows support:
 Install
 Upgrade
 Repair
+Rollback
 Uninstall
 ```
 
@@ -51,6 +52,14 @@ Upgrade preserves production configuration and runtime data while replacing appl
 Use Repair when the installed release is damaged, incomplete, or needs its packaged application files and service definitions restored.
 
 Repair preserves production configuration and runtime data.
+
+### Rollback
+
+Use Rollback after a failed supported upgrade when CareQueue has preserved the required pre-upgrade recovery assets.
+
+Rollback restores the previous packaged application, stages and activates the verified pre-upgrade encrypted database backup, restores the previous installed version metadata, restores the packaged service definitions, validates required services and application health, and retains recovery evidence for review.
+
+Rollback is a recovery operation and should be performed only by an administrator who understands the failed upgrade state and has reviewed the preserved recovery record.
 
 ### Uninstall
 
@@ -564,6 +573,7 @@ Supported Linux modes are:
 install
 upgrade
 repair
+rollback
 uninstall
 ```
 
@@ -745,6 +755,41 @@ sudo bash deployment/linux/installer/invoke-install.sh repair
 
 Repair also preserves production configuration and data.
 
+### Run Linux Rollback
+
+Linux upgrade rollback is available after a failed upgrade that created a valid CareQueue upgrade recovery record and preserved the required database and application recovery assets.
+
+From the extracted release package associated with the failed upgrade:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh rollback
+```
+
+The rollback workflow:
+
+- Selects the newest failed upgrade recovery record.
+- Verifies the preserved pre-upgrade application archive and SHA256 checksum.
+- Extracts and validates the previous application in an isolated staging directory.
+- Preserves the failed incoming application and records its archive metadata.
+- Stops CareQueue services before application replacement.
+- Restores the previous backend, frontend, and deployment payload.
+- Recreates and validates the previous Python environment.
+- Restores the previous packaged systemd service definitions.
+- Stages the verified pre-upgrade encrypted database backup.
+- Requires administrator confirmation before activating staged database recovery.
+- Restores the previous installed application version metadata.
+- Restarts the API and HTTPS services.
+- Restores the scheduled backup timer.
+- Verifies required service state, application health, and readiness.
+- Marks the recovery record as completed only after successful validation.
+- Removes temporary application staging while retaining durable recovery assets.
+
+Database recovery activation requires the administrator to enter the confirmation phrase displayed by the recovery tool. Do not automate or bypass that confirmation.
+
+If application replacement fails during rollback, CareQueue attempts to restore the failed incoming application files and leaves services stopped for administrator review.
+
+A successful rollback retains the encrypted recovery backup, previous application archive, failed incoming application archive, checksums, recovery record, and installer logs.
+
 ### Run Linux Uninstall
 
 From the extracted release package:
@@ -923,20 +968,53 @@ Do not edit encrypted database or backup files manually.
 
 ## Rollback
 
-CareQueue does not currently provide a complete automated application rollback workflow for every packaged deployment path.
+CareQueue currently provides an assisted rollback workflow for supported packaged Linux upgrades.
 
-Before a higher-risk upgrade:
+A Linux upgrade preserves recovery information before replacing the installed application. When version metadata is available, this includes:
 
-- Keep the previously trusted release artifact.
-- Keep a recent verified encrypted backup.
-- Preserve the existing production environment file and keys.
-- Record the current application version.
-- Record the selected backup and its verification result.
-- Ensure the recovery process is understood.
+- A verified encrypted pre-upgrade database backup.
+- A preserved archive of the previous application.
+- A SHA256 checksum for the previous application archive.
+- Previous and incoming application versions.
+- Installer log location.
+- Upgrade recovery status.
 
-If rollback becomes necessary, treat application rollback and database recovery as separate decisions.
+If the upgrade fails, the recovery record is marked as failed and can be used by the Linux rollback mode.
 
-Do not restore an older database merely because application files are being reverted. Database compatibility must be considered explicitly.
+During rollback, CareQueue also preserves the failed incoming application before restoring the previous release. This allows the failed application state to remain available for troubleshooting after recovery.
+
+The recovery lifecycle may include:
+
+```text
+failed
+rollback_staged
+rollback_activated
+rollback_completed
+```
+
+If application replacement fails and the failed incoming application is restored successfully, the record may instead enter:
+
+```text
+rollback_application_restored
+```
+
+In that state, CareQueue services remain stopped pending administrator review.
+
+A rollback is marked complete only after:
+
+- The previous application has been restored and validated.
+- The pre-upgrade database has been activated successfully.
+- The previous installed version metadata has been restored.
+- The CareQueue API service is active.
+- The CareQueue HTTPS service is active.
+- The scheduled backup timer is active.
+- Application health and readiness checks pass.
+
+Temporary rollback application staging is removed after successful completion. Durable recovery evidence is retained.
+
+The current assisted rollback workflow is Linux-specific. Windows packaged rollback behavior is documented separately when supported.
+
+Rollback should not be treated as a substitute for normal backup and recovery planning. Preserve encryption keys and recovery assets independently of the application installation.
 
 ## What the Installers Do Not Prove
 

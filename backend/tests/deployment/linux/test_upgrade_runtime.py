@@ -453,6 +453,26 @@ def test_rollback_selects_latest_failed_upgrade_record(
     backup_old.write_bytes(b"old")
     backup_new.write_bytes(b"new")
 
+    application_old = tmp_path / "application-old.tar.gz"
+    application_new = tmp_path / "application-new.tar.gz"
+
+    application_old.write_bytes(b"old application")
+    application_new.write_bytes(b"new application")
+
+    application_old_checksum = subprocess.run(
+        ["sha256sum", str(application_old)],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()[0]
+
+    application_new_checksum = subprocess.run(
+        ["sha256sum", str(application_new)],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()[0]
+
     completed_record = recovery_directory / "upgrade-0.3.0-to-0.4.0.env"
     failed_old_record = recovery_directory / "upgrade-0.4.0-to-0.5.0.env"
     failed_new_record = recovery_directory / "upgrade-0.5.0-to-0.6.0.env"
@@ -476,6 +496,8 @@ def test_rollback_selects_latest_failed_upgrade_record(
                 "CAREQUEUE_PREVIOUS_VERSION=0.4.0",
                 "CAREQUEUE_INCOMING_VERSION=0.5.0",
                 f"CAREQUEUE_PRE_UPGRADE_BACKUP={backup_old}",
+                f"CAREQUEUE_PRE_UPGRADE_APPLICATION={application_old}",
+                f"CAREQUEUE_PRE_UPGRADE_APPLICATION_SHA256={application_old_checksum}",
                 "CAREQUEUE_UPGRADE_STATUS=failed",
                 "",
             ]
@@ -489,6 +511,8 @@ def test_rollback_selects_latest_failed_upgrade_record(
                 "CAREQUEUE_PREVIOUS_VERSION=0.5.0",
                 "CAREQUEUE_INCOMING_VERSION=0.6.0",
                 f"CAREQUEUE_PRE_UPGRADE_BACKUP={backup_new}",
+                f"CAREQUEUE_PRE_UPGRADE_APPLICATION={application_new}",
+                f"CAREQUEUE_PRE_UPGRADE_APPLICATION_SHA256={application_new_checksum}",
                 "CAREQUEUE_UPGRADE_STATUS=failed",
                 "",
             ]
