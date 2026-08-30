@@ -114,7 +114,7 @@ if (-not $PayloadDirectory) {
 if (-not $InstallerPath) {
     $InstallerPath = Join-Path `
         $repositoryRoot `
-        "build\windows\installer\CareQueue-Setup-0.3.0.exe"
+        "build\windows\installer\CareQueue-Setup-0.4.0.exe"
 }
 
 $resolvedPayloadDirectory = (
