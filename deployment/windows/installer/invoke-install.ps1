@@ -5,6 +5,7 @@ param(
         "Install",
         "Upgrade",
         "Repair",
+        "Rollback",
         "Uninstall"
     )]
     [string]$Mode,
@@ -43,6 +44,40 @@ $installStatePath = Join-Path `
 
 $incomingVersion = $null
 $installedVersion = $null
+$preUpgradeBackupPath = $null
+$backupDirectory = Join-Path `
+    $DataDirectory `
+    "Backups"
+$preUpgradeApplicationArchive = $null
+$preUpgradeApplicationSha256 = $null
+
+$applicationRecoveryDirectory = Join-Path `
+    $DataDirectory `
+    "Recovery\Applications"
+
+$upgradeRecoveryDirectory = Join-Path `
+    $DataDirectory `
+    "Recovery\Upgrades"
+
+$upgradeRecoveryRecord = $null
+$rollbackRecoveryRecord = $null
+$rollbackPreviousVersion = $null
+$rollbackIncomingVersion = $null
+$rollbackBackupPath = $null
+$rollbackApplicationArchive = $null
+$rollbackApplicationSha256 = $null
+$rollbackApplicationStagingDirectory = Join-Path `
+    $DataDirectory `
+    "Recovery\Staging\Application"
+$failedApplicationRecoveryDirectory = Join-Path `
+    $DataDirectory `
+    "Recovery\FailedApplications"
+
+$failedApplicationArchive = $null
+$failedApplicationSha256 = $null
+$failedApplicationStagingDirectory = Join-Path `
+    $DataDirectory `
+    "Recovery\Staging\FailedApplication"
 
 function Test-Administrator {
     $currentIdentity = (
@@ -294,8 +329,8 @@ function Get-CareQueueInstalledVersion {
     if (
         $null -eq $installState.installed_version `
             -or [string]::IsNullOrWhiteSpace(
-                [string]$installState.installed_version
-            )
+            [string]$installState.installed_version
+        )
     ) {
         return $null
     }
@@ -358,6 +393,1844 @@ function Assert-CareQueueUpgradeVersion {
     Write-Output (
         "Validated CareQueue upgrade path: " +
         "$InstalledVersion -> $IncomingVersion"
+    )
+}
+
+function New-VerifiedPreUpgradeBackup {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$DataDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$BackupDirectory
+    )
+
+    if ($Mode -ne "Upgrade") {
+        return $null
+    }
+
+    $backupRunner = Join-Path `
+        $InstallDirectory `
+        "deployment\windows\run-backup.ps1"
+
+    $environmentFile = Join-Path `
+        $DataDirectory `
+        "Config\carequeue.env"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $backupRunner `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue upgrade requires the installed backup runner: " +
+            $backupRunner
+        )
+    }
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $environmentFile `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue upgrade requires the production configuration: " +
+            $environmentFile
+        )
+    }
+
+    New-Item `
+        -ItemType Directory `
+        -Path $BackupDirectory `
+        -Force |
+    Out-Null
+
+    $backupMarker = Join-Path `
+        $BackupDirectory `
+    (
+        ".carequeue-pre-upgrade-marker-" +
+        [Guid]::NewGuid().ToString("N")
+    )
+
+    Set-Content `
+        -LiteralPath $backupMarker `
+        -Value "" `
+        -Encoding ASCII `
+        -ErrorAction Stop
+
+    try {
+        Write-Host (
+            "Creating and verifying pre-upgrade encrypted backup..."
+        )
+
+        & powershell.exe `
+            -NoProfile `
+            -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File $backupRunner `
+            -InstallDirectory $InstallDirectory `
+            -BackupDirectory $BackupDirectory `
+            -EnvironmentFile $environmentFile
+
+        if ($LASTEXITCODE -ne 0) {
+            throw (
+                "Pre-upgrade backup creation or verification failed. " +
+                "The CareQueue application has not been replaced."
+            )
+        }
+
+        $markerTimestamp = (
+            Get-Item `
+                -LiteralPath $backupMarker `
+                -ErrorAction Stop
+        ).LastWriteTimeUtc
+
+        $newBackups = @(
+            Get-ChildItem `
+                -LiteralPath $BackupDirectory `
+                -Filter "*.db.enc" `
+                -File `
+                -ErrorAction Stop |
+            Where-Object {
+                $_.LastWriteTimeUtc -gt $markerTimestamp
+            } |
+            Sort-Object `
+                -Property LastWriteTimeUtc `
+                -Descending
+        )
+
+        if ($newBackups.Count -eq 0) {
+            throw (
+                "The CareQueue backup runner completed but no new " +
+                "pre-upgrade backup could be identified. " +
+                "The CareQueue application has not been replaced."
+            )
+        }
+
+        $backupPath = $newBackups[0].FullName
+
+        if ($newBackups[0].Length -le 0) {
+            throw (
+                "The pre-upgrade backup is missing or empty: " +
+                $backupPath
+            )
+        }
+
+        Write-Host (
+            "Verified pre-upgrade backup: " +
+            $backupPath
+        )
+
+        return $backupPath
+    }
+    finally {
+        Remove-Item `
+            -LiteralPath $backupMarker `
+            -Force `
+            -ErrorAction SilentlyContinue
+    }
+}
+
+function New-VerifiedPreUpgradeApplicationArchive {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$InstalledVersion,
+
+        [Parameter(Mandatory)]
+        [string]$RecoveryDirectory
+    )
+
+    if ($Mode -ne "Upgrade") {
+        return $null
+    }
+
+    if (-not (Test-CareQueueVersion -Version $InstalledVersion)) {
+        throw (
+            "Cannot preserve the installed CareQueue application " +
+            "because its version metadata is invalid: $InstalledVersion"
+        )
+    }
+
+    $requiredApplicationDirectories = @(
+        "backend",
+        "frontend",
+        "deployment",
+        "runtime",
+        "vendor",
+        "Service"
+    )
+
+    foreach ($relativeDirectory in $requiredApplicationDirectories) {
+        $applicationDirectory = Join-Path `
+            $InstallDirectory `
+            $relativeDirectory
+
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $applicationDirectory `
+                    -PathType Container
+            )
+        ) {
+            throw (
+                "Cannot preserve the installed CareQueue application " +
+                "because a required directory is missing: " +
+                $applicationDirectory
+            )
+        }
+    }
+
+    New-Item `
+        -ItemType Directory `
+        -Path $RecoveryDirectory `
+        -Force |
+    Out-Null
+
+    $archivePath = Join-Path `
+        $RecoveryDirectory `
+    (
+        "carequeue-application-" +
+        $InstalledVersion +
+        ".zip"
+    )
+
+    $checksumPath = "$archivePath.sha256"
+
+    Remove-Item `
+        -LiteralPath $archivePath `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+    Remove-Item `
+        -LiteralPath $checksumPath `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+    Write-Host (
+        "Preserving installed CareQueue $InstalledVersion " +
+        "application payload..."
+    )
+
+    $applicationPaths = @(
+        $requiredApplicationDirectories |
+        ForEach-Object {
+            Join-Path `
+                $InstallDirectory `
+                $_
+        }
+    )
+
+    Compress-Archive `
+        -LiteralPath $applicationPaths `
+        -DestinationPath $archivePath `
+        -CompressionLevel Optimal `
+        -Force `
+        -ErrorAction Stop
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $archivePath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The pre-upgrade application archive was not created."
+        )
+    }
+
+    $archiveItem = Get-Item `
+        -LiteralPath $archivePath `
+        -ErrorAction Stop
+
+    if ($archiveItem.Length -le 0) {
+        throw (
+            "The pre-upgrade application archive is empty: " +
+            $archivePath
+        )
+    }
+
+    $archiveSha256 = (
+        Get-FileHash `
+            -LiteralPath $archivePath `
+            -Algorithm SHA256 `
+            -ErrorAction Stop
+    ).Hash.ToLowerInvariant()
+
+    if ($archiveSha256 -notmatch '^[0-9a-f]{64}$') {
+        throw (
+            "Unable to calculate the pre-upgrade application " +
+            "archive SHA256 checksum."
+        )
+    }
+
+    Set-Content `
+        -LiteralPath $checksumPath `
+        -Value (
+        "$archiveSha256  " +
+        [System.IO.Path]::GetFileName($archivePath)
+    ) `
+        -Encoding ASCII `
+        -ErrorAction Stop
+
+    $verificationSha256 = (
+        Get-FileHash `
+            -LiteralPath $archivePath `
+            -Algorithm SHA256 `
+            -ErrorAction Stop
+    ).Hash.ToLowerInvariant()
+
+    if ($verificationSha256 -ne $archiveSha256) {
+        throw (
+            "Pre-upgrade application archive checksum " +
+            "verification failed."
+        )
+    }
+
+    Write-Host (
+        "Verified pre-upgrade application payload: " +
+        $archivePath
+    )
+
+    Write-Host (
+        "Pre-upgrade application SHA256: " +
+        $archiveSha256
+    )
+
+    return [PSCustomObject]@{
+        ArchivePath = $archivePath
+        Sha256      = $archiveSha256
+    }
+}
+
+function New-CareQueueUpgradeRecoveryRecord {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RecoveryDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$PreviousVersion,
+
+        [Parameter(Mandatory)]
+        [string]$IncomingVersion,
+
+        [Parameter(Mandatory)]
+        [string]$BackupPath,
+
+        [Parameter(Mandatory)]
+        [string]$ApplicationArchive,
+
+        [Parameter(Mandatory)]
+        [string]$ApplicationSha256,
+
+        [Parameter(Mandatory)]
+        [string]$InstallerLog
+    )
+
+    if ($Mode -ne "Upgrade") {
+        return $null
+    }
+
+    if (-not (Test-CareQueueVersion -Version $PreviousVersion)) {
+        throw (
+            "Cannot create upgrade recovery state because the " +
+            "previous CareQueue version is invalid: $PreviousVersion"
+        )
+    }
+
+    if (-not (Test-CareQueueVersion -Version $IncomingVersion)) {
+        throw (
+            "Cannot create upgrade recovery state because the " +
+            "incoming CareQueue version is invalid: $IncomingVersion"
+        )
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($BackupPath) `
+            -or -not (
+            Test-Path `
+                -LiteralPath $BackupPath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "Cannot create upgrade recovery state because the " +
+            "verified pre-upgrade backup is unavailable."
+        )
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($ApplicationArchive) `
+            -or -not (
+            Test-Path `
+                -LiteralPath $ApplicationArchive `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "Cannot create upgrade recovery state because the " +
+            "verified pre-upgrade application archive is unavailable."
+        )
+    }
+
+    if ($ApplicationSha256 -notmatch '^[0-9a-f]{64}$') {
+        throw (
+            "Cannot create upgrade recovery state because the " +
+            "pre-upgrade application checksum is invalid."
+        )
+    }
+
+    New-Item `
+        -ItemType Directory `
+        -Path $RecoveryDirectory `
+        -Force |
+    Out-Null
+
+    $recordPath = Join-Path `
+        $RecoveryDirectory `
+    (
+        "upgrade-" +
+        $PreviousVersion +
+        "-to-" +
+        $IncomingVersion +
+        ".json"
+    )
+
+    $temporaryRecordPath = "$recordPath.tmp"
+
+    $recoveryState = [ordered]@{
+        schema_version                 = 1
+        previous_version               = $PreviousVersion
+        incoming_version               = $IncomingVersion
+        pre_upgrade_backup             = $BackupPath
+        pre_upgrade_application        = $ApplicationArchive
+        pre_upgrade_application_sha256 = $ApplicationSha256
+        installer_log                  = $InstallerLog
+        upgrade_attempted_at_utc       = [DateTime]::UtcNow.ToString("o")
+        status                         = "pending"
+    }
+
+    $recoveryState |
+    ConvertTo-Json `
+        -Depth 4 |
+    Set-Content `
+        -LiteralPath $temporaryRecordPath `
+        -Encoding UTF8 `
+        -ErrorAction Stop
+
+    Move-Item `
+        -LiteralPath $temporaryRecordPath `
+        -Destination $recordPath `
+        -Force `
+        -ErrorAction Stop
+
+    Write-Host (
+        "Upgrade recovery record created: " +
+        $recordPath
+    )
+
+    return $recordPath
+}
+
+function Set-CareQueueUpgradeRecoveryStatus {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RecoveryRecord,
+
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            "pending",
+            "completed",
+            "failed"
+        )]
+        [string]$Status
+    )
+
+    if ($Mode -ne "Upgrade") {
+        return
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($RecoveryRecord) `
+            -or -not (
+            Test-Path `
+                -LiteralPath $RecoveryRecord `
+                -PathType Leaf
+        )
+    ) {
+        return
+    }
+
+    $state = Get-Content `
+        -LiteralPath $RecoveryRecord `
+        -Raw `
+        -ErrorAction Stop |
+    ConvertFrom-Json `
+        -ErrorAction Stop
+
+    $state.status = $Status
+
+    $temporaryRecordPath = "$RecoveryRecord.tmp"
+
+    $state |
+    ConvertTo-Json `
+        -Depth 4 |
+    Set-Content `
+        -LiteralPath $temporaryRecordPath `
+        -Encoding UTF8 `
+        -ErrorAction Stop
+
+    Move-Item `
+        -LiteralPath $temporaryRecordPath `
+        -Destination $RecoveryRecord `
+        -Force `
+        -ErrorAction Stop
+}
+
+function Set-CareQueueRollbackRecoveryStatus {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RecoveryRecord,
+
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            "failed",
+            "rollback_staged",
+            "rollback_activated",
+            "rollback_completed"
+        )]
+        [string]$Status
+    )
+
+    if ($Mode -ne "Rollback") {
+        return
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($RecoveryRecord) `
+            -or -not (
+            Test-Path `
+                -LiteralPath $RecoveryRecord `
+                -PathType Leaf
+        )
+    ) {
+        return
+    }
+
+    $state = Get-Content `
+        -LiteralPath $RecoveryRecord `
+        -Raw `
+        -ErrorAction Stop |
+    ConvertFrom-Json `
+        -ErrorAction Stop
+
+    $state.status = $Status
+
+    $temporaryRecordPath = "$RecoveryRecord.tmp"
+
+    $state |
+    ConvertTo-Json `
+        -Depth 4 |
+    Set-Content `
+        -LiteralPath $temporaryRecordPath `
+        -Encoding UTF8 `
+        -ErrorAction Stop
+
+    Move-Item `
+        -LiteralPath $temporaryRecordPath `
+        -Destination $RecoveryRecord `
+        -Force `
+        -ErrorAction Stop
+}
+
+function Get-CareQueueFailedUpgradeRecovery {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RecoveryDirectory
+    )
+
+    if ($Mode -ne "Rollback") {
+        return $null
+    }
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $RecoveryDirectory `
+                -PathType Container
+        )
+    ) {
+        throw "No CareQueue upgrade recovery records are available."
+    }
+
+    $recoveryRecords = @(
+        Get-ChildItem `
+            -LiteralPath $RecoveryDirectory `
+            -Filter "upgrade-*.json" `
+            -File `
+            -ErrorAction Stop |
+        Sort-Object `
+            -Property LastWriteTimeUtc `
+            -Descending
+    )
+
+    $failedRecord = $null
+    $failedState = $null
+
+    foreach ($record in $recoveryRecords) {
+        try {
+            $state = Get-Content `
+                -LiteralPath $record.FullName `
+                -Raw `
+                -ErrorAction Stop |
+            ConvertFrom-Json `
+                -ErrorAction Stop
+        }
+        catch {
+            continue
+        }
+
+        if ([string]$state.status -eq "failed") {
+            $failedRecord = $record
+            $failedState = $state
+            break
+        }
+    }
+
+    if ($null -eq $failedRecord -or $null -eq $failedState) {
+        throw "No failed CareQueue upgrade recovery record was found."
+    }
+
+    if ([int]$failedState.schema_version -ne 1) {
+        throw (
+            "The failed CareQueue upgrade recovery record has an " +
+            "unsupported schema version."
+        )
+    }
+
+    $previousVersion = [string]$failedState.previous_version
+    $incomingVersion = [string]$failedState.incoming_version
+    $backupPath = [string]$failedState.pre_upgrade_backup
+    $applicationArchive = [string]$failedState.pre_upgrade_application
+    $applicationSha256 = (
+        [string]$failedState.pre_upgrade_application_sha256
+    ).ToLowerInvariant()
+
+    if (-not (Test-CareQueueVersion -Version $previousVersion)) {
+        throw (
+            "The failed upgrade recovery record contains an invalid " +
+            "previous CareQueue version: $previousVersion"
+        )
+    }
+
+    if (-not (Test-CareQueueVersion -Version $incomingVersion)) {
+        throw (
+            "The failed upgrade recovery record contains an invalid " +
+            "incoming CareQueue version: $incomingVersion"
+        )
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($backupPath) `
+            -or -not (
+            Test-Path `
+                -LiteralPath $backupPath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The pre-upgrade rollback backup does not exist: " +
+            $backupPath
+        )
+    }
+
+    $backupItem = Get-Item `
+        -LiteralPath $backupPath `
+        -ErrorAction Stop
+
+    if ($backupItem.Length -le 0) {
+        throw (
+            "The pre-upgrade rollback backup is empty: " +
+            $backupPath
+        )
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($applicationArchive) `
+            -or -not (
+            Test-Path `
+                -LiteralPath $applicationArchive `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The pre-upgrade application archive does not exist: " +
+            $applicationArchive
+        )
+    }
+
+    $applicationItem = Get-Item `
+        -LiteralPath $applicationArchive `
+        -ErrorAction Stop
+
+    if ($applicationItem.Length -le 0) {
+        throw (
+            "The pre-upgrade application archive is empty: " +
+            $applicationArchive
+        )
+    }
+
+    if ($applicationSha256 -notmatch '^[0-9a-f]{64}$') {
+        throw (
+            "The failed upgrade recovery record contains an invalid " +
+            "application archive checksum."
+        )
+    }
+
+    $calculatedApplicationSha256 = (
+        Get-FileHash `
+            -LiteralPath $applicationArchive `
+            -Algorithm SHA256 `
+            -ErrorAction Stop
+    ).Hash.ToLowerInvariant()
+
+    if ($calculatedApplicationSha256 -ne $applicationSha256) {
+        throw (
+            "Pre-upgrade application archive checksum " +
+            "verification failed."
+        )
+    }
+
+    return [PSCustomObject]@{
+        RecoveryRecord     = $failedRecord.FullName
+        PreviousVersion    = $previousVersion
+        IncomingVersion    = $incomingVersion
+        BackupPath         = $backupPath
+        ApplicationArchive = $applicationArchive
+        ApplicationSha256  = $applicationSha256
+    }
+}
+
+function New-CareQueueRollbackApplicationStage {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ArchivePath,
+
+        [Parameter(Mandatory)]
+        [string]$ExpectedSha256,
+
+        [Parameter(Mandatory)]
+        [string]$StagingDirectory
+    )
+
+    if ($Mode -ne "Rollback") {
+        return $null
+    }
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $ArchivePath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The rollback application archive does not exist: " +
+            $ArchivePath
+        )
+    }
+
+    $archiveItem = Get-Item `
+        -LiteralPath $ArchivePath `
+        -ErrorAction Stop
+
+    if ($archiveItem.Length -le 0) {
+        throw (
+            "The rollback application archive is empty: " +
+            $ArchivePath
+        )
+    }
+
+    if ($ExpectedSha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw (
+            "The rollback application archive has an invalid " +
+            "expected SHA256 checksum."
+        )
+    }
+
+    $normalizedExpectedSha256 = `
+        $ExpectedSha256.ToLowerInvariant()
+
+    $calculatedSha256 = (
+        Get-FileHash `
+            -LiteralPath $ArchivePath `
+            -Algorithm SHA256 `
+            -ErrorAction Stop
+    ).Hash.ToLowerInvariant()
+
+    if ($calculatedSha256 -ne $normalizedExpectedSha256) {
+        throw (
+            "Rollback application archive checksum verification failed."
+        )
+    }
+
+    Add-Type `
+        -AssemblyName System.IO.Compression.FileSystem `
+        -ErrorAction Stop
+
+    $archive = $null
+
+    try {
+        $archive = [System.IO.Compression.ZipFile]::OpenRead(
+            $ArchivePath
+        )
+
+        foreach ($entry in $archive.Entries) {
+            $entryPath = [string]$entry.FullName
+
+            if ([string]::IsNullOrWhiteSpace($entryPath)) {
+                continue
+            }
+
+            $normalizedEntryPath = $entryPath.Replace(
+                "\",
+                "/"
+            )
+
+            if (
+                [System.IO.Path]::IsPathRooted($entryPath) `
+                    -or $normalizedEntryPath.StartsWith("/") `
+                    -or $normalizedEntryPath -match (
+                    '(^|/)\.\.(/|$)'
+                )
+            ) {
+                throw (
+                    "The rollback application archive contains an " +
+                    "unsafe path: " +
+                    $entryPath
+                )
+            }
+        }
+    }
+    finally {
+        if ($null -ne $archive) {
+            $archive.Dispose()
+        }
+    }
+
+    Remove-Item `
+        -LiteralPath $StagingDirectory `
+        -Recurse `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+    New-Item `
+        -ItemType Directory `
+        -Path $StagingDirectory `
+        -Force `
+        -ErrorAction Stop |
+    Out-Null
+
+    try {
+        Write-Host (
+            "Staging verified rollback application payload..."
+        )
+
+        Expand-Archive `
+            -LiteralPath $ArchivePath `
+            -DestinationPath $StagingDirectory `
+            -Force `
+            -ErrorAction Stop
+
+        $requiredDirectories = @(
+            "backend",
+            "frontend",
+            "deployment",
+            "runtime",
+            "vendor",
+            "Service"
+        )
+
+        foreach ($relativeDirectory in $requiredDirectories) {
+            $stagedDirectory = Join-Path `
+                $StagingDirectory `
+                $relativeDirectory
+
+            if (
+                -not (
+                    Test-Path `
+                        -LiteralPath $stagedDirectory `
+                        -PathType Container
+                )
+            ) {
+                throw (
+                    "The staged rollback application is missing a " +
+                    "required directory: " +
+                    $relativeDirectory
+                )
+            }
+        }
+
+        Write-Host (
+            "Rollback application payload staged and validated: " +
+            $StagingDirectory
+        )
+
+        return $StagingDirectory
+    }
+    catch {
+        Remove-Item `
+            -LiteralPath $StagingDirectory `
+            -Recurse `
+            -Force `
+            -ErrorAction SilentlyContinue
+
+        throw
+    }
+}
+
+function New-CareQueueFailedApplicationArchive {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$IncomingVersion,
+
+        [Parameter(Mandatory)]
+        [string]$RecoveryDirectory
+    )
+
+    if ($Mode -ne "Rollback") {
+        return $null
+    }
+
+    if (-not (Test-CareQueueVersion -Version $IncomingVersion)) {
+        throw (
+            "Cannot preserve the failed CareQueue application " +
+            "because the incoming version is invalid: " +
+            $IncomingVersion
+        )
+    }
+
+    $applicationDirectories = @(
+        "backend",
+        "frontend",
+        "deployment",
+        "runtime",
+        "vendor",
+        "Service"
+    )
+
+    $existingApplicationPaths = @(
+        foreach ($relativeDirectory in $applicationDirectories) {
+            $candidatePath = Join-Path `
+                $InstallDirectory `
+                $relativeDirectory
+
+            if (
+                Test-Path `
+                    -LiteralPath $candidatePath `
+                    -PathType Container
+            ) {
+                $candidatePath
+            }
+        }
+    )
+
+    if ($existingApplicationPaths.Count -eq 0) {
+        throw (
+            "No failed CareQueue application directories are " +
+            "available to preserve before rollback."
+        )
+    }
+
+    New-Item `
+        -ItemType Directory `
+        -Path $RecoveryDirectory `
+        -Force `
+        -ErrorAction Stop |
+    Out-Null
+
+    $timestamp = [DateTime]::UtcNow.ToString(
+        "yyyyMMdd-HHmmss"
+    )
+
+    $archivePath = Join-Path `
+        $RecoveryDirectory `
+    (
+        "failed-application-" +
+        $IncomingVersion +
+        "-" +
+        $timestamp +
+        ".zip"
+    )
+
+    $checksumPath = "$archivePath.sha256"
+
+    Write-Host (
+        "Preserving failed CareQueue application before rollback..."
+    )
+
+    Compress-Archive `
+        -LiteralPath $existingApplicationPaths `
+        -DestinationPath $archivePath `
+        -CompressionLevel Optimal `
+        -Force `
+        -ErrorAction Stop
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $archivePath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The failed CareQueue application archive was not created."
+        )
+    }
+
+    $archiveItem = Get-Item `
+        -LiteralPath $archivePath `
+        -ErrorAction Stop
+
+    if ($archiveItem.Length -le 0) {
+        throw (
+            "The failed CareQueue application archive is empty: " +
+            $archivePath
+        )
+    }
+
+    $archiveSha256 = (
+        Get-FileHash `
+            -LiteralPath $archivePath `
+            -Algorithm SHA256 `
+            -ErrorAction Stop
+    ).Hash.ToLowerInvariant()
+
+    if ($archiveSha256 -notmatch '^[0-9a-f]{64}$') {
+        throw (
+            "Unable to calculate the failed CareQueue application " +
+            "archive SHA256 checksum."
+        )
+    }
+
+    Set-Content `
+        -LiteralPath $checksumPath `
+        -Value (
+        "$archiveSha256  " +
+        [System.IO.Path]::GetFileName($archivePath)
+    ) `
+        -Encoding ASCII `
+        -ErrorAction Stop
+
+    $verificationSha256 = (
+        Get-FileHash `
+            -LiteralPath $archivePath `
+            -Algorithm SHA256 `
+            -ErrorAction Stop
+    ).Hash.ToLowerInvariant()
+
+    if ($verificationSha256 -ne $archiveSha256) {
+        throw (
+            "Failed CareQueue application archive checksum " +
+            "verification failed."
+        )
+    }
+
+    Write-Host (
+        "Failed CareQueue application preserved: " +
+        $archivePath
+    )
+
+    return [PSCustomObject]@{
+        ArchivePath = $archivePath
+        Sha256      = $archiveSha256
+    }
+}
+
+function Stop-CareQueueServicesForRollback {
+    if ($Mode -ne "Rollback") {
+        return $null
+    }
+
+    $serviceNames = @(
+        "CareQueueApi",
+        "CareQueueCaddy"
+    )
+
+    $serviceStates = @()
+
+    foreach ($serviceName in $serviceNames) {
+        $service = Get-Service `
+            -Name $serviceName `
+            -ErrorAction Stop
+
+        $wasRunning = $service.Status -eq "Running"
+
+        $serviceStates += [PSCustomObject]@{
+            Name       = $serviceName
+            WasRunning = $wasRunning
+        }
+
+        if ($service.Status -ne "Stopped") {
+            Write-Host (
+                "Stopping Windows service for rollback: " +
+                $serviceName
+            )
+
+            Stop-Service `
+                -Name $serviceName `
+                -Force `
+                -ErrorAction Stop
+
+            $service = Get-Service `
+                -Name $serviceName `
+                -ErrorAction Stop
+
+            $service.WaitForStatus(
+                "Stopped",
+                [TimeSpan]::FromSeconds(30)
+            )
+        }
+
+        $service = Get-Service `
+            -Name $serviceName `
+            -ErrorAction Stop
+
+        if ($service.Status -ne "Stopped") {
+            throw (
+                "CareQueue rollback could not stop Windows service: " +
+                $serviceName
+            )
+        }
+    }
+
+    return $serviceStates
+}
+
+function Restore-CareQueueFailedApplicationAfterSwapFailure {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$FailedApplicationDirectory,
+
+        [Parameter(Mandatory)]
+        [object[]]$ServiceStates
+    )
+
+    $applicationDirectories = @(
+        "backend",
+        "frontend",
+        "deployment",
+        "runtime",
+        "vendor",
+        "Service"
+    )
+
+    Write-Host (
+        "Restoring the failed CareQueue application after " +
+        "rollback swap failure..."
+    )
+
+    foreach ($relativeDirectory in $applicationDirectories) {
+        $activePath = Join-Path `
+            $InstallDirectory `
+            $relativeDirectory
+
+        if (Test-Path -LiteralPath $activePath) {
+            Remove-Item `
+                -LiteralPath $activePath `
+                -Recurse `
+                -Force `
+                -ErrorAction Stop
+        }
+    }
+
+    foreach ($relativeDirectory in $applicationDirectories) {
+        $preservedPath = Join-Path `
+            $FailedApplicationDirectory `
+            $relativeDirectory
+
+        if (
+            Test-Path `
+                -LiteralPath $preservedPath `
+                -PathType Container
+        ) {
+            Move-Item `
+                -LiteralPath $preservedPath `
+                -Destination $InstallDirectory `
+                -Force `
+                -ErrorAction Stop
+        }
+    }
+
+    foreach ($serviceState in $ServiceStates) {
+        if (-not $serviceState.WasRunning) {
+            continue
+        }
+
+        Write-Host (
+            "Restarting restored Windows service: " +
+            $serviceState.Name
+        )
+
+        Start-Service `
+            -Name $serviceState.Name `
+            -ErrorAction Stop
+
+        $service = Get-Service `
+            -Name $serviceState.Name `
+            -ErrorAction Stop
+
+        $service.WaitForStatus(
+            "Running",
+            [TimeSpan]::FromSeconds(30)
+        )
+    }
+
+    Write-Host (
+        "Failed CareQueue application restored after swap failure."
+    )
+}
+
+function Set-CareQueueRollbackApplication {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$StagedApplicationDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$FailedApplicationDirectory
+    )
+
+    if ($Mode -ne "Rollback") {
+        return $null
+    }
+
+    $applicationDirectories = @(
+        "backend",
+        "frontend",
+        "deployment",
+        "runtime",
+        "vendor",
+        "Service"
+    )
+
+    foreach ($relativeDirectory in $applicationDirectories) {
+        $stagedPath = Join-Path `
+            $StagedApplicationDirectory `
+            $relativeDirectory
+
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $stagedPath `
+                    -PathType Container
+            )
+        ) {
+            throw (
+                "Cannot activate the rollback application because " +
+                "the staged payload is missing: " +
+                $relativeDirectory
+            )
+        }
+    }
+
+    Remove-Item `
+        -LiteralPath $FailedApplicationDirectory `
+        -Recurse `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+    New-Item `
+        -ItemType Directory `
+        -Path $FailedApplicationDirectory `
+        -Force `
+        -ErrorAction Stop |
+    Out-Null
+
+    $serviceStates = $null
+    $activeApplicationMoved = $false
+
+    try {
+        $serviceStates = @(
+            Stop-CareQueueServicesForRollback
+        )
+
+        foreach ($relativeDirectory in $applicationDirectories) {
+            $activePath = Join-Path `
+                $InstallDirectory `
+                $relativeDirectory
+
+            if (
+                Test-Path `
+                    -LiteralPath $activePath `
+                    -PathType Container
+            ) {
+                Move-Item `
+                    -LiteralPath $activePath `
+                    -Destination $FailedApplicationDirectory `
+                    -Force `
+                    -ErrorAction Stop
+            }
+        }
+
+        $activeApplicationMoved = $true
+
+        foreach ($relativeDirectory in $applicationDirectories) {
+            $stagedPath = Join-Path `
+                $StagedApplicationDirectory `
+                $relativeDirectory
+
+            Move-Item `
+                -LiteralPath $stagedPath `
+                -Destination $InstallDirectory `
+                -Force `
+                -ErrorAction Stop
+        }
+
+        foreach ($relativeDirectory in $applicationDirectories) {
+            $activatedPath = Join-Path `
+                $InstallDirectory `
+                $relativeDirectory
+
+            if (
+                -not (
+                    Test-Path `
+                        -LiteralPath $activatedPath `
+                        -PathType Container
+                )
+            ) {
+                throw (
+                    "Rollback application activation failed because " +
+                    "a required directory is missing: " +
+                    $relativeDirectory
+                )
+            }
+        }
+
+        Write-Host (
+            "Previous CareQueue application payload activated."
+        )
+
+        return [PSCustomObject]@{
+            FailedApplicationDirectory = $FailedApplicationDirectory
+            Services                   = $serviceStates
+        }
+    }
+    catch {
+        $swapFailure = $_
+
+        if ($activeApplicationMoved) {
+            try {
+                Restore-CareQueueFailedApplicationAfterSwapFailure `
+                    -InstallDirectory $InstallDirectory `
+                    -FailedApplicationDirectory `
+                    $FailedApplicationDirectory `
+                    -ServiceStates $serviceStates
+            }
+            catch {
+                throw (
+                    "CareQueue rollback application activation failed, " +
+                    "and restoration of the failed application also " +
+                    "failed. Activation error: " +
+                    $swapFailure.Exception.Message +
+                    " Restoration error: " +
+                    $_.Exception.Message
+                )
+            }
+        }
+        elseif ($null -ne $serviceStates) {
+            foreach ($serviceState in $serviceStates) {
+                if (-not $serviceState.WasRunning) {
+                    continue
+                }
+
+                try {
+                    Start-Service `
+                        -Name $serviceState.Name `
+                        -ErrorAction Stop
+                }
+                catch {
+                    Write-Host (
+                        "Unable to restart service after rollback " +
+                        "preparation failure: " +
+                        $serviceState.Name
+                    )
+                }
+            }
+        }
+
+        throw $swapFailure
+    }
+}
+
+function Invoke-CareQueueRollbackDatabaseStaging {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$DataDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$BackupPath
+    )
+
+    if ($Mode -ne "Rollback") {
+        return
+    }
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $BackupPath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The pre-upgrade rollback backup does not exist: " +
+            $BackupPath
+        )
+    }
+
+    $backupItem = Get-Item `
+        -LiteralPath $BackupPath `
+        -ErrorAction Stop
+
+    if ($backupItem.Length -le 0) {
+        throw (
+            "The pre-upgrade rollback backup is empty: " +
+            $BackupPath
+        )
+    }
+
+    $restoreScript = Join-Path `
+        $InstallDirectory `
+        "backend\scripts\restore_encrypted_backup.py"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $restoreScript `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue rollback requires the installed restore script: " +
+            $restoreScript
+        )
+    }
+
+    $pythonExecutable = Join-Path `
+        $InstallDirectory `
+        "backend\.venv\Scripts\python.exe"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $pythonExecutable `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue rollback requires the installed Python " +
+            "environment: " +
+            $pythonExecutable
+        )
+    }
+
+    $environmentFile = Join-Path `
+        $DataDirectory `
+        "Config\carequeue.env"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $environmentFile `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue rollback requires the production " +
+            "configuration: " +
+            $environmentFile
+        )
+    }
+
+    Get-Content `
+        -LiteralPath $environmentFile `
+        -ErrorAction Stop |
+    ForEach-Object {
+        $line = $_.Trim()
+
+        if (
+            [string]::IsNullOrWhiteSpace($line) `
+                -or $line.StartsWith("#") `
+                -or -not $line.Contains("=")
+        ) {
+            return
+        }
+
+        $name, $value = $line.Split("=", 2)
+
+        [Environment]::SetEnvironmentVariable(
+            $name.Trim(),
+            $value.Trim(),
+            "Process"
+        )
+    }
+
+    Write-Host (
+        "Staging the verified pre-upgrade database backup " +
+        "for rollback..."
+    )
+
+    & $pythonExecutable `
+        $restoreScript `
+        $BackupPath
+
+    if ($LASTEXITCODE -ne 0) {
+        throw (
+            "CareQueue rollback database staging failed with " +
+            "exit code " +
+            $LASTEXITCODE +
+            "."
+        )
+    }
+
+    Write-Host (
+        "Rollback database preparation completed successfully."
+    )
+}
+
+function Invoke-CareQueueRollbackDatabaseActivation {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallDirectory,
+
+        [Parameter(Mandatory)]
+        [string]$DataDirectory
+    )
+
+    if ($Mode -ne "Rollback") {
+        return
+    }
+
+    $activationScript = Join-Path `
+        $InstallDirectory `
+        "backend\scripts\activate_staged_recovery.py"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $activationScript `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue rollback requires the installed recovery " +
+            "activation script: " +
+            $activationScript
+        )
+    }
+
+    $pythonExecutable = Join-Path `
+        $InstallDirectory `
+        "backend\.venv\Scripts\python.exe"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $pythonExecutable `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue rollback requires the installed Python " +
+            "environment: " +
+            $pythonExecutable
+        )
+    }
+
+    $environmentFile = Join-Path `
+        $DataDirectory `
+        "Config\carequeue.env"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $environmentFile `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "CareQueue rollback requires the production " +
+            "configuration: " +
+            $environmentFile
+        )
+    }
+
+    Get-Content `
+        -LiteralPath $environmentFile `
+        -ErrorAction Stop |
+    ForEach-Object {
+        $line = $_.Trim()
+
+        if (
+            [string]::IsNullOrWhiteSpace($line) `
+                -or $line.StartsWith("#") `
+                -or -not $line.Contains("=")
+        ) {
+            return
+        }
+
+        $name, $value = $line.Split("=", 2)
+
+        [Environment]::SetEnvironmentVariable(
+            $name.Trim(),
+            $value.Trim(),
+            "Process"
+        )
+    }
+
+    $databasePath = Join-Path `
+        $DataDirectory `
+        "Data\auth_tracker.sqlcipher.db"
+
+    $backupDirectory = Join-Path `
+        $DataDirectory `
+        "Backups"
+
+    $restoreDirectory = Join-Path `
+        $DataDirectory `
+        "Restores"
+
+    Write-Host (
+        "Activating the staged pre-upgrade database for rollback..."
+    )
+
+    & $pythonExecutable `
+        $activationScript `
+        --service-name "CareQueueApi" `
+        --database-path $databasePath `
+        --backup-directory $backupDirectory `
+        --restore-directory $restoreDirectory
+
+    if ($LASTEXITCODE -ne 0) {
+        throw (
+            "CareQueue rollback database activation failed with " +
+            "exit code " +
+            $LASTEXITCODE +
+            ". CareQueue services remain stopped."
+        )
+    }
+
+    Write-Host (
+        "Rollback database activation completed successfully."
+    )
+}
+
+function Start-CareQueueServicesAfterRollback {
+    if ($Mode -ne "Rollback") {
+        return
+    }
+
+    foreach ($serviceName in @(
+            "CareQueueApi",
+            "CareQueueCaddy"
+        )) {
+        $service = Get-Service `
+            -Name $serviceName `
+            -ErrorAction Stop
+
+        if ($service.Status -ne "Running") {
+            Write-Host (
+                "Starting restored Windows service: " +
+                $serviceName
+            )
+
+            Start-Service `
+                -Name $serviceName `
+                -ErrorAction Stop
+        }
+
+        $service = Get-Service `
+            -Name $serviceName `
+            -ErrorAction Stop
+
+        $service.WaitForStatus(
+            "Running",
+            [TimeSpan]::FromSeconds(30)
+        )
+    }
+
+    Write-Host (
+        "CareQueue services started after rollback activation."
+    )
+}
+
+function Stop-CareQueueServicesAfterRollbackFailure {
+    if ($Mode -ne "Rollback") {
+        return
+    }
+
+    foreach ($serviceName in @(
+            "CareQueueApi",
+            "CareQueueCaddy"
+        )) {
+        $service = Get-Service `
+            -Name $serviceName `
+            -ErrorAction Stop
+
+        if ($service.Status -ne "Stopped") {
+            Write-Host (
+                "Stopping Windows service after rollback failure: " +
+                $serviceName
+            )
+
+            Stop-Service `
+                -Name $serviceName `
+                -Force `
+                -ErrorAction Stop
+
+            $service = Get-Service `
+                -Name $serviceName `
+                -ErrorAction Stop
+
+            $service.WaitForStatus(
+                "Stopped",
+                [TimeSpan]::FromSeconds(30)
+            )
+        }
+
+        $service = Get-Service `
+            -Name $serviceName `
+            -ErrorAction Stop
+
+        if ($service.Status -ne "Stopped") {
+            throw (
+                "CareQueue could not stop Windows service after " +
+                "rollback failure: " +
+                $serviceName
+            )
+        }
+    }
+
+    Write-Host (
+        "CareQueue services stopped after rollback failure."
+    )
+}
+
+function Restore-CareQueueRollbackInstallStateVersion {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallStatePath,
+
+        [Parameter(Mandatory)]
+        [string]$PreviousVersion
+    )
+
+    if ($Mode -ne "Rollback") {
+        return
+    }
+
+    if (-not (Test-CareQueueVersion -Version $PreviousVersion)) {
+        throw (
+            "Cannot restore installed version metadata because the " +
+            "previous CareQueue version is invalid: " +
+            $PreviousVersion
+        )
+    }
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $InstallStatePath `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "Cannot restore installed version metadata because the " +
+            "installation state file is missing: " +
+            $InstallStatePath
+        )
+    }
+
+    $installState = Get-Content `
+        -LiteralPath $InstallStatePath `
+        -Raw `
+        -ErrorAction Stop |
+    ConvertFrom-Json `
+        -ErrorAction Stop
+
+    $installState.installed_version = $PreviousVersion
+
+    $temporaryInstallStatePath = "$InstallStatePath.tmp"
+
+    $installState |
+    ConvertTo-Json `
+        -Depth 4 |
+    Set-Content `
+        -LiteralPath $temporaryInstallStatePath `
+        -Encoding UTF8 `
+        -ErrorAction Stop
+
+    Move-Item `
+        -LiteralPath $temporaryInstallStatePath `
+        -Destination $InstallStatePath `
+        -Force `
+        -ErrorAction Stop
+
+    Write-Host (
+        "Installed CareQueue version metadata restored to " +
+        $PreviousVersion
+    )
+}
+
+function Remove-CareQueueSuccessfulRollbackStaging {
+    if ($Mode -ne "Rollback") {
+        return
+    }
+
+    foreach ($stagingDirectory in @(
+            $rollbackApplicationStagingDirectory,
+            $failedApplicationStagingDirectory
+        )) {
+        if (
+            -not [string]::IsNullOrWhiteSpace($stagingDirectory) `
+                -and (
+                Test-Path `
+                    -LiteralPath $stagingDirectory `
+                    -PathType Container
+            )
+        ) {
+            Remove-Item `
+                -LiteralPath $stagingDirectory `
+                -Recurse `
+                -Force `
+                -ErrorAction Stop
+        }
+    }
+
+    Write-Host (
+        "Temporary rollback application staging directories removed."
     )
 }
 
@@ -1012,8 +2885,8 @@ if (
         -Status "failed" `
         -ExitCode $exitCodeInvalidInstallState `
         -Message (
-        "ApplicationOrigin is required for Install, Upgrade, " +
-        "and Repair operations."
+        "ApplicationOrigin is required for Install, Upgrade, Repair, " +
+        "and Rollback operations."
     )
 
     exit $exitCodeInvalidInstallState
@@ -1062,6 +2935,15 @@ switch ($Mode) {
         if (-not $careQueueIsInstalled) {
             $modeValidationMessage = (
                 "CareQueue is not installed. Use -Mode Install."
+            )
+        }
+    }
+
+    "Rollback" {
+        if (-not $careQueueIsInstalled) {
+            $modeValidationMessage = (
+                "CareQueue is not installed, so there is no " +
+                "installation to roll back."
             )
         }
     }
@@ -1410,6 +3292,340 @@ catch {
     exit $exitCodeLoggingFailure
 }
 
+if ($Mode -eq "Rollback") {
+    $rollbackDatabaseActivated = $false
+
+    try {
+        $rollbackRecovery = Get-CareQueueFailedUpgradeRecovery `
+            -RecoveryDirectory $upgradeRecoveryDirectory
+
+        if ($null -eq $rollbackRecovery) {
+            throw (
+                "The CareQueue rollback recovery state was not returned."
+            )
+        }
+
+        $rollbackRecoveryRecord = `
+            [string]$rollbackRecovery.RecoveryRecord
+
+        $rollbackPreviousVersion = `
+            [string]$rollbackRecovery.PreviousVersion
+
+        $rollbackIncomingVersion = `
+            [string]$rollbackRecovery.IncomingVersion
+
+        $rollbackBackupPath = `
+            [string]$rollbackRecovery.BackupPath
+
+        $rollbackApplicationArchive = `
+            [string]$rollbackRecovery.ApplicationArchive
+
+        $rollbackApplicationSha256 = `
+            [string]$rollbackRecovery.ApplicationSha256
+        
+        $stagedRollbackApplication = `
+            New-CareQueueRollbackApplicationStage `
+            -ArchivePath $rollbackApplicationArchive `
+            -ExpectedSha256 $rollbackApplicationSha256 `
+            -StagingDirectory $rollbackApplicationStagingDirectory
+        
+        if ([string]::IsNullOrWhiteSpace($stagedRollbackApplication)) {
+            throw (
+                "The staged CareQueue rollback application path " +
+                "was not returned."
+            )
+        }
+
+        $failedApplication = New-CareQueueFailedApplicationArchive `
+            -InstallDirectory $InstallDirectory `
+            -IncomingVersion $rollbackIncomingVersion `
+            -RecoveryDirectory $failedApplicationRecoveryDirectory
+
+        if ($null -eq $failedApplication) {
+            throw (
+                "The failed CareQueue application archive " +
+                "was not returned."
+            )
+        }
+
+        $failedApplicationArchive = `
+            [string]$failedApplication.ArchivePath
+
+        $failedApplicationSha256 = `
+            [string]$failedApplication.Sha256
+
+        if (
+            [string]::IsNullOrWhiteSpace($failedApplicationArchive) `
+                -or [string]::IsNullOrWhiteSpace(
+                $failedApplicationSha256
+            )
+        ) {
+            throw (
+                "The failed CareQueue application archive metadata " +
+                "is incomplete."
+            )
+        }
+
+        $rollbackApplicationActivation = `
+            Set-CareQueueRollbackApplication `
+            -InstallDirectory $InstallDirectory `
+            -StagedApplicationDirectory $stagedRollbackApplication `
+            -FailedApplicationDirectory `
+            $failedApplicationStagingDirectory
+
+        if ($null -eq $rollbackApplicationActivation) {
+            throw (
+                "The CareQueue rollback application was not activated."
+            )
+        }
+
+        Invoke-CareQueueRollbackDatabaseStaging `
+            -InstallDirectory $InstallDirectory `
+            -DataDirectory $DataDirectory `
+            -BackupPath $rollbackBackupPath
+
+        Set-CareQueueRollbackRecoveryStatus `
+            -RecoveryRecord $rollbackRecoveryRecord `
+            -Status "rollback_staged"
+
+        Invoke-CareQueueRollbackDatabaseActivation `
+            -InstallDirectory $InstallDirectory `
+            -DataDirectory $DataDirectory
+
+        $rollbackDatabaseActivated = $true
+
+        Set-CareQueueRollbackRecoveryStatus `
+            -RecoveryRecord $rollbackRecoveryRecord `
+            -Status "rollback_activated"
+
+        Start-CareQueueServicesAfterRollback
+
+        Assert-PostInstallationHealth `
+            -InstallDirectory $InstallDirectory `
+            -DataDirectory $DataDirectory `
+            -ApplicationOrigin $ApplicationOrigin
+
+        Restore-CareQueueRollbackInstallStateVersion `
+            -InstallStatePath $installStatePath `
+            -PreviousVersion $rollbackPreviousVersion
+
+        Set-CareQueueRollbackRecoveryStatus `
+            -RecoveryRecord $rollbackRecoveryRecord `
+            -Status "rollback_completed"
+
+        try {
+            Remove-CareQueueSuccessfulRollbackStaging
+        }
+        catch {
+            Add-Content `
+                -LiteralPath $logPath `
+                -Value (
+                "Rollback completed successfully, but temporary " +
+                "staging cleanup failed: " +
+                $_.Exception.Message
+            ) `
+                -Encoding utf8
+        }
+
+        @(
+            "CareQueue Windows Rollback Recovery"
+            "Recovery record: $rollbackRecoveryRecord"
+            "Previous version: $rollbackPreviousVersion"
+            "Failed incoming version: $rollbackIncomingVersion"
+            "Pre-upgrade backup: $rollbackBackupPath"
+            "Pre-upgrade application: $rollbackApplicationArchive"
+            "Application SHA256: $rollbackApplicationSha256"
+            "Staged application: $stagedRollbackApplication"
+            "Failed application archive: $failedApplicationArchive"
+            "Failed application SHA256: $failedApplicationSha256"
+            ""
+            "Rollback recovery assets validated successfully."
+            "Previous application payload activated successfully."
+            "Pre-upgrade database staged successfully."
+            "Pre-upgrade database activated successfully."
+            "CareQueue services started and validated successfully."
+            "Installed version metadata restored successfully."
+            "Upgrade recovery status: rollback_completed"
+        ) |
+        Add-Content `
+            -LiteralPath $logPath `
+            -Encoding utf8
+
+        Write-InstallerResult `
+            -Status "success" `
+            -ExitCode $exitCodeSuccess `
+            -Message (
+            "Previous CareQueue application payload and pre-upgrade " +
+            "database were activated successfully. CareQueue services " +
+            "passed post-rollback validation."
+        ) `
+            -LogPath $logPath
+
+        exit $exitCodeSuccess
+    }
+    catch {
+        $failureMessage = $_.Exception.Message
+
+        if ($rollbackDatabaseActivated) {
+            try {
+                Stop-CareQueueServicesAfterRollbackFailure
+            }
+            catch {
+                Add-Content `
+                    -LiteralPath $logPath `
+                    -Value (
+                    "Rollback failed after database activation, and " +
+                    "CareQueue services could not be fully stopped: " +
+                    $_.Exception.Message
+                ) `
+                    -Encoding utf8
+            }
+
+            Add-Content `
+                -LiteralPath $logPath `
+                -Value (
+                "Rollback failed after pre-upgrade database " +
+                "activation. The recovery record retains its " +
+                "last durable rollback state."
+            ) `
+                -Encoding utf8
+        }
+
+        Write-InstallerResult `
+            -Status "failed" `
+            -ExitCode $exitCodeInvalidInstallState `
+            -Message $failureMessage `
+            -LogPath $logPath
+
+        exit $exitCodeInvalidInstallState
+    }
+}
+
+if ($Mode -eq "Upgrade") {
+    try {
+        $preUpgradeBackupPath = New-VerifiedPreUpgradeBackup `
+            -InstallDirectory $InstallDirectory `
+            -DataDirectory $DataDirectory `
+            -BackupDirectory $backupDirectory
+
+        if ([string]::IsNullOrWhiteSpace($preUpgradeBackupPath)) {
+            throw (
+                "The verified pre-upgrade backup path was not returned. " +
+                "The CareQueue application has not been replaced."
+            )
+        }
+
+        Add-Content `
+            -LiteralPath $logPath `
+            -Value (
+            "Verified pre-upgrade backup: " +
+            $preUpgradeBackupPath
+        ) `
+            -Encoding utf8
+
+        if ([string]::IsNullOrWhiteSpace($installedVersion)) {
+            throw (
+                "The installed CareQueue version metadata is required " +
+                "to create an application rollback payload."
+            )
+        }
+            
+        $preUpgradeApplication = `
+            New-VerifiedPreUpgradeApplicationArchive `
+            -InstallDirectory $InstallDirectory `
+            -InstalledVersion $installedVersion `
+            -RecoveryDirectory $applicationRecoveryDirectory
+            
+        if ($null -eq $preUpgradeApplication) {
+            throw (
+                "The verified pre-upgrade application archive " +
+                "was not returned."
+            )
+        }
+            
+        $preUpgradeApplicationArchive = `
+            [string]$preUpgradeApplication.ArchivePath
+            
+        $preUpgradeApplicationSha256 = `
+            [string]$preUpgradeApplication.Sha256
+            
+        if (
+            [string]::IsNullOrWhiteSpace(
+                $preUpgradeApplicationArchive
+            ) `
+                -or [string]::IsNullOrWhiteSpace(
+                $preUpgradeApplicationSha256
+            )
+        ) {
+            throw (
+                "The verified pre-upgrade application archive " +
+                "metadata is incomplete."
+            )
+        }
+            
+        Add-Content `
+            -LiteralPath $logPath `
+            -Value (
+            "Verified pre-upgrade application: " +
+            $preUpgradeApplicationArchive
+        ) `
+            -Encoding utf8
+            
+        Add-Content `
+            -LiteralPath $logPath `
+            -Value (
+            "Pre-upgrade application SHA256: " +
+            $preUpgradeApplicationSha256
+        ) `
+            -Encoding utf8
+        
+        $upgradeRecoveryRecord = New-CareQueueUpgradeRecoveryRecord `
+            -RecoveryDirectory $upgradeRecoveryDirectory `
+            -PreviousVersion $installedVersion `
+            -IncomingVersion $incomingVersion `
+            -BackupPath $preUpgradeBackupPath `
+            -ApplicationArchive $preUpgradeApplicationArchive `
+            -ApplicationSha256 $preUpgradeApplicationSha256 `
+            -InstallerLog $logPath
+        
+        if ([string]::IsNullOrWhiteSpace($upgradeRecoveryRecord)) {
+            throw (
+                "The Windows upgrade recovery record was not created. " +
+                "The CareQueue application has not been replaced."
+            )
+        }
+        
+        Add-Content `
+            -LiteralPath $logPath `
+            -Value (
+            "Upgrade recovery record: " +
+            $upgradeRecoveryRecord
+        ) `
+            -Encoding utf8
+    }
+    catch {
+        $failureMessage = $_.Exception.Message
+
+        @(
+            ""
+            "Upgrade pre-upgrade backup failed."
+            "Completed UTC: $([DateTime]::UtcNow.ToString('o'))"
+            "Message: $failureMessage"
+        ) |
+        Add-Content `
+            -LiteralPath $logPath `
+            -Encoding utf8
+
+        Write-InstallerResult `
+            -Status "failed" `
+            -ExitCode $exitCodeInstallationFailure `
+            -Message $failureMessage `
+            -LogPath $logPath
+
+        exit $exitCodeInstallationFailure
+    }
+}
+
 $installerArguments = @(
     "-NoProfile",
     "-NonInteractive",
@@ -1530,6 +3746,23 @@ try {
 catch {
     $failureMessage = $_.Exception.Message
 
+    if ($Mode -eq "Upgrade") {
+        try {
+            Set-CareQueueUpgradeRecoveryStatus `
+                -RecoveryRecord $upgradeRecoveryRecord `
+                -Status "failed"
+        }
+        catch {
+            Add-Content `
+                -LiteralPath $logPath `
+                -Value (
+                "Unable to mark the upgrade recovery record failed: " +
+                $_.Exception.Message
+            ) `
+                -Encoding utf8
+        }
+    }
+
     @(
         ""
         "$Mode operation failed."
@@ -1564,9 +3797,32 @@ try {
     Tee-Object `
         -FilePath $logPath `
         -Append
+
+    if ($Mode -eq "Upgrade") {
+        Set-CareQueueUpgradeRecoveryStatus `
+            -RecoveryRecord $upgradeRecoveryRecord `
+            -Status "completed"
+    }
 }
 catch {
     $failureMessage = $_.Exception.Message
+
+    if ($Mode -eq "Upgrade") {
+        try {
+            Set-CareQueueUpgradeRecoveryStatus `
+                -RecoveryRecord $upgradeRecoveryRecord `
+                -Status "failed"
+        }
+        catch {
+            Add-Content `
+                -LiteralPath $logPath `
+                -Value (
+                "Unable to mark the upgrade recovery record failed: " +
+                $_.Exception.Message
+            ) `
+                -Encoding utf8
+        }
+    }
 
     @(
         ""
