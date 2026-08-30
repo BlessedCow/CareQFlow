@@ -64,9 +64,12 @@ const
   CareQueueApplicationOrigin = 'https://carequeue.local';
   CareQueueInstallDirectory = 'C:\Program Files\CareQueue';
   CareQueueDataDirectory = 'C:\ProgramData\CareQueue';
+  CareQueueUpgradeRecoveryDirectory =
+    'C:\ProgramData\CareQueue\Recovery\Upgrades';
 var
   OperationModePage: TInputOptionWizardPage;
   SelectedOperationMode: String;
+  RollbackOperationAvailable: Boolean;
 
 function CareQueueIsInstalled(): Boolean;
 begin
@@ -87,6 +90,50 @@ begin
       AddBackslash(CareQueueInstallDirectory) +
       'vendor\caddy\caddy.exe'
     );
+end;
+
+function CareQueueHasFailedUpgradeRecovery(): Boolean;
+var
+  FindRec: TFindRec;
+  RecoveryPath: String;
+  RecoveryContent: AnsiString;
+begin
+  Result := False;
+
+  if not DirExists(CareQueueUpgradeRecoveryDirectory) then
+    exit;
+
+  RecoveryPath :=
+    AddBackslash(CareQueueUpgradeRecoveryDirectory) +
+    'upgrade-*.json';
+
+  if FindFirst(RecoveryPath, FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+        begin
+          if LoadStringFromFile(
+            AddBackslash(CareQueueUpgradeRecoveryDirectory) +
+            FindRec.Name,
+            RecoveryContent
+          ) then
+          begin
+            if Pos(
+              '"status": "failed"',
+              String(RecoveryContent)
+            ) > 0 then
+            begin
+              Result := True;
+              exit;
+            end;
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
 end;
 
 function GetOperationMode(): String;
@@ -120,8 +167,14 @@ begin
 end;
 
 function ShouldOfferAdminSetup(): Boolean;
+var
+  OperationMode: String;
 begin
-  Result := GetOperationMode() <> 'Uninstall';
+  OperationMode := GetOperationMode();
+
+  Result :=
+    (OperationMode <> 'Uninstall') and
+    (OperationMode <> 'Rollback');
 end;
 
 function GetInstallerScriptPath(): String;
@@ -184,6 +237,18 @@ begin
     exit;
   end;
 
+  if OperationMode = 'Rollback' then
+  begin
+    Result :=
+      'Setup is ready to roll back the most recent failed CareQueue upgrade.' +
+      NewLine +
+      NewLine +
+      'The verified pre-upgrade application and database recovery assets will be restored.' +
+      NewLine +
+      'Rollback will stop if the required recovery assets cannot be validated.';
+    exit;
+  end;
+
   Result :=
     'Setup is ready to install CareQueue.' +
     NewLine +
@@ -205,7 +270,14 @@ begin
     SelectedOperationMode := 'Upgrade'
   else if OperationModePage.Values[1] then
     SelectedOperationMode := 'Repair'
-  else if OperationModePage.Values[2] then
+  else if RollbackOperationAvailable and
+          OperationModePage.Values[2] then
+    SelectedOperationMode := 'Rollback'
+  else if RollbackOperationAvailable and
+          OperationModePage.Values[3] then
+    SelectedOperationMode := 'Uninstall'
+  else if (not RollbackOperationAvailable) and
+          OperationModePage.Values[2] then
     SelectedOperationMode := 'Uninstall'
   else
     SelectedOperationMode := 'Upgrade';
@@ -329,6 +401,12 @@ begin
       WizardForm.ReadyLabel.Caption :=
         'Click Upgrade to upgrade the existing CareQueue installation.';
     end
+    else if OperationMode = 'Rollback' then
+    begin
+      WizardForm.NextButton.Caption := '&Rollback';
+      WizardForm.ReadyLabel.Caption :=
+        'Click Rollback to recover from the most recent failed CareQueue upgrade.';
+    end
     else
     begin
       WizardForm.NextButton.Caption := '&Install';
@@ -357,14 +435,23 @@ end;
 procedure InitializeWizard();
 begin
   SelectedOperationMode := '';
+  RollbackOperationAvailable :=
+    CareQueueHasFailedUpgradeRecovery();
 
   if CareQueueIsInstalled() then
   begin
-    WizardForm.WelcomeLabel2.Caption :=
-      'CareQueue is already installed.' +
-      Chr(13) + Chr(10) +
-      Chr(13) + Chr(10) +
-      'Choose whether to upgrade, repair, or uninstall the existing installation.';
+    if RollbackOperationAvailable then
+      WizardForm.WelcomeLabel2.Caption :=
+        'CareQueue is already installed.' +
+        Chr(13) + Chr(10) +
+        Chr(13) + Chr(10) +
+        'Choose whether to upgrade, repair, roll back, or uninstall the existing installation.'
+    else
+      WizardForm.WelcomeLabel2.Caption :=
+        'CareQueue is already installed.' +
+        Chr(13) + Chr(10) +
+        Chr(13) + Chr(10) +
+        'Choose whether to upgrade, repair, or uninstall the existing installation.';
 
     OperationModePage :=
       CreateInputOptionPage(
@@ -383,6 +470,11 @@ begin
     OperationModePage.Add(
       'Repair existing installation'
     );
+
+    if RollbackOperationAvailable then
+      OperationModePage.Add(
+        'Roll back most recent failed upgrade'
+      );
 
     OperationModePage.Add(
       'Uninstall CareQueue'

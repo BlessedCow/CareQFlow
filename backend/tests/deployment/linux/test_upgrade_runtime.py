@@ -816,6 +816,12 @@ exit 0
     )
     sleep.chmod(0o755)
 
+    install_state = config_directory / "install-state.env"
+    install_state.write_text(
+        "CAREQUEUE_APPLICATION_ORIGIN=https://carequeue.local\n",
+        encoding="utf-8",
+    )
+
     recovery_record = tmp_path / "upgrade.env"
     recovery_record.write_text(
         "\n".join(
@@ -836,6 +842,7 @@ exit 0
         MODE="rollback"
         INSTALL_DIRECTORY="{install_directory}"
         CONFIG_DIRECTORY="{config_directory}"
+        INSTALL_STATE_FILE="{install_state}"
         DATA_DIRECTORY="{data_directory}"
         BACKUP_DIRECTORY="{backup_directory}"
         ROLLBACK_RECOVERY_RECORD="{recovery_record}"
