@@ -37,6 +37,12 @@ $exitCodeAdministratorRequired = 20
 $exitCodeLoggingFailure = 25
 $exitCodeInstallationFailure = 30
 $exitCodePostInstallValidationFailure = 35
+$installStatePath = Join-Path `
+    $DataDirectory `
+    "Config\install-state.json"
+
+$incomingVersion = $null
+$installedVersion = $null
 
 function Test-Administrator {
     $currentIdentity = (
@@ -54,7 +60,7 @@ function Test-Administrator {
     )
 }
 
-function Ensure-CareQueueLocalHostname {
+function Set-CareQueueLocalHostname {
     param(
         [Parameter(Mandatory)]
         [string]$ApplicationOrigin
@@ -201,7 +207,161 @@ function Test-CareQueueInstallation {
     return $true
 }
 
-function Ensure-CareQueueCaddyRootCertificate {
+function Test-CareQueueVersion {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Version
+    )
+
+    return $Version -match '^\d+\.\d+\.\d+$'
+}
+
+function Compare-CareQueueVersions {
+    param(
+        [Parameter(Mandatory)]
+        [string]$LeftVersion,
+
+        [Parameter(Mandatory)]
+        [string]$RightVersion
+    )
+
+    if (-not (Test-CareQueueVersion -Version $LeftVersion)) {
+        throw "Invalid CareQueue version: $LeftVersion"
+    }
+
+    if (-not (Test-CareQueueVersion -Version $RightVersion)) {
+        throw "Invalid CareQueue version: $RightVersion"
+    }
+
+    $leftParts = @(
+        $LeftVersion.Split(".") |
+        ForEach-Object {
+            [int]$_
+        }
+    )
+
+    $rightParts = @(
+        $RightVersion.Split(".") |
+        ForEach-Object {
+            [int]$_
+        }
+    )
+
+    for ($index = 0; $index -lt 3; $index++) {
+        if ($leftParts[$index] -gt $rightParts[$index]) {
+            return 1
+        }
+
+        if ($leftParts[$index] -lt $rightParts[$index]) {
+            return -1
+        }
+    }
+
+    return 0
+}
+
+function Get-CareQueueInstalledVersion {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallStatePath
+    )
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $InstallStatePath `
+                -PathType Leaf
+        )
+    ) {
+        return $null
+    }
+
+    try {
+        $installState = Get-Content `
+            -LiteralPath $InstallStatePath `
+            -Raw `
+            -ErrorAction Stop |
+        ConvertFrom-Json `
+            -ErrorAction Stop
+    }
+    catch {
+        throw (
+            "The CareQueue installation state could not be read: " +
+            $_.Exception.Message
+        )
+    }
+
+    if (
+        $null -eq $installState.installed_version `
+            -or [string]::IsNullOrWhiteSpace(
+                [string]$installState.installed_version
+            )
+    ) {
+        return $null
+    }
+
+    $version = [string]$installState.installed_version
+
+    if (-not (Test-CareQueueVersion -Version $version)) {
+        throw (
+            "The installed CareQueue version metadata is invalid: " +
+            $version
+        )
+    }
+
+    return $version
+}
+
+function Assert-CareQueueUpgradeVersion {
+    param(
+        [Parameter(Mandatory)]
+        [string]$IncomingVersion,
+
+        [AllowNull()]
+        [string]$InstalledVersion
+    )
+
+    if (-not (Test-CareQueueVersion -Version $IncomingVersion)) {
+        throw (
+            "The incoming CareQueue payload has an invalid " +
+            "application version: $IncomingVersion"
+        )
+    }
+
+    if ([string]::IsNullOrWhiteSpace($InstalledVersion)) {
+        Write-Output (
+            "Installed CareQueue version metadata is unavailable. " +
+            "Continuing legacy upgrade validation."
+        )
+
+        return
+    }
+
+    $comparison = Compare-CareQueueVersions `
+        -LeftVersion $IncomingVersion `
+        -RightVersion $InstalledVersion
+
+    if ($comparison -eq 0) {
+        throw (
+            "CareQueue $IncomingVersion is already installed. " +
+            "Use Repair instead of Upgrade."
+        )
+    }
+
+    if ($comparison -lt 0) {
+        throw (
+            "CareQueue downgrade refused: installed version " +
+            "$InstalledVersion, incoming version $IncomingVersion."
+        )
+    }
+
+    Write-Output (
+        "Validated CareQueue upgrade path: " +
+        "$InstalledVersion -> $IncomingVersion"
+    )
+}
+
+function Set-CareQueueCaddyRootCertificate {
     param(
         [Parameter(Mandatory)]
         [string]$DataDirectory,
@@ -484,7 +644,7 @@ function Assert-PostInstallationHealth {
         }
     }
 
-    Ensure-CareQueueCaddyRootCertificate `
+    Set-CareQueueCaddyRootCertificate `
         -DataDirectory $DataDirectory
 
     $normalizedApplicationOrigin = $ApplicationOrigin.TrimEnd("/")
@@ -860,7 +1020,7 @@ if (
 }
 
 try {
-    Ensure-CareQueueLocalHostname `
+    Set-CareQueueLocalHostname `
         -ApplicationOrigin $ApplicationOrigin
 }
 catch {
@@ -1166,6 +1326,15 @@ try {
         -ErrorAction Stop |
     ConvertFrom-Json
 
+    $incomingVersion = [string]$payloadMetadata.application.backend_version
+
+    if (-not (Test-CareQueueVersion -Version $incomingVersion)) {
+        throw (
+            "The CareQueue payload contains an invalid application " +
+            "version: $incomingVersion"
+        )
+    }
+
     if ($payloadMetadata.schema_version -ne 1) {
         throw (
             "Unsupported CareQueue payload schema version: " +
@@ -1189,6 +1358,25 @@ catch {
         -Message $_.Exception.Message
 
     exit $exitCodeInvalidPayload
+}
+
+if ($Mode -eq "Upgrade") {
+    try {
+        $installedVersion = Get-CareQueueInstalledVersion `
+            -InstallStatePath $installStatePath
+
+        Assert-CareQueueUpgradeVersion `
+            -IncomingVersion $incomingVersion `
+            -InstalledVersion $installedVersion
+    }
+    catch {
+        Write-InstallerResult `
+            -Status "failed" `
+            -ExitCode $exitCodeInvalidInstallState `
+            -Message $_.Exception.Message
+
+        exit $exitCodeInvalidInstallState
+    }
 }
 
 try {
@@ -1237,6 +1425,8 @@ $installerArguments = @(
     $InstallDirectory,
     "-DataDirectory",
     $DataDirectory,
+    "-ReleaseVersion",
+    $incomingVersion,
     "-FrontendBuildDirectory",
     $frontendBuildDirectory,
     "-PrivatePythonRuntimeDirectory",

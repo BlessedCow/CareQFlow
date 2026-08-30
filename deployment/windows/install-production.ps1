@@ -10,6 +10,10 @@ param(
 
     [string]$DataDirectory = "C:\ProgramData\CareQueue",
 
+    [Parameter(Mandatory)]
+    [ValidatePattern("^\d+\.\d+\.\d+$")]
+    [string]$ReleaseVersion,
+
     [string]$PythonExecutable = "python",
 
     [string]$FrontendBuildDirectory,
@@ -987,6 +991,10 @@ try {
         $databaseDirectory `
         "auth_tracker.sqlcipher.db"
 
+    $installStatePath = Join-Path `
+        $configDirectory `
+        "install-state.json"
+
     if (
         Test-Path `
             -LiteralPath $environmentFile `
@@ -1473,6 +1481,36 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         Pop-Location
     }
 
+    Write-Host "Writing CareQueue installation state..."
+
+    $installationState = [ordered]@{
+        schema_version      = 1
+        installed_version  = $ReleaseVersion
+        package_platform   = "windows"
+        application_origin = $normalizedApplicationOrigin
+        install_directory  = $InstallDirectory
+        data_directory     = $DataDirectory
+    }
+
+    $temporaryInstallStatePath = "$installStatePath.tmp"
+
+    $installationState |
+    ConvertTo-Json `
+        -Depth 4 |
+    Set-Content `
+        -LiteralPath $temporaryInstallStatePath `
+        -Encoding UTF8
+
+    Move-Item `
+        -LiteralPath $temporaryInstallStatePath `
+        -Destination $installStatePath `
+        -Force
+
+    Write-Host (
+        "Installed CareQueue version metadata written: " +
+        $ReleaseVersion
+    )
+
     if (-not $SkipPermissionHardening) {
         Write-Host "Restricting runtime directory permissions..."
 
@@ -1552,6 +1590,8 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     }
 
     $serviceStatesRestored = $true
+
+
 
     Write-Host ""
     Write-Host "CareQueue production files installed successfully."
