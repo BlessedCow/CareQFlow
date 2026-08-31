@@ -163,6 +163,48 @@ def test_windows_install_state_written_after_backend_validation():
     assert validation_index < state_index
 
 
+def test_windows_existing_environment_migrates_legacy_cors_origin():
+    content = _read(WINDOWS_PRODUCTION_INSTALLER)
+
+    migration_block = content.split(
+        "$currentCorsOrigins = ConvertTo-Json",
+        maxsplit=1,
+    )[1].split(
+        "$migratedEnvironmentLines +=",
+        maxsplit=1,
+    )[0]
+
+    assert '["https://carequeue.local"]' in migration_block
+    assert (
+        '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"'
+        in migration_block
+    )
+
+
+def test_windows_existing_environment_preserves_custom_cors_origin():
+    content = _read(WINDOWS_PRODUCTION_INSTALLER)
+
+    migration_block = content.split(
+        "$currentCorsOrigins = ConvertTo-Json",
+        maxsplit=1,
+    )[1].split(
+        "$migratedEnvironmentLines +=",
+        maxsplit=1,
+    )[0]
+
+    legacy_condition_index = migration_block.index(
+        '["https://carequeue.local"]'
+    )
+    replacement_index = migration_block.index(
+        '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"'
+    )
+    else_index = migration_block.index("else {", replacement_index)
+    preserve_index = migration_block.index("$_", else_index)
+
+    assert legacy_condition_index < replacement_index
+    assert replacement_index < else_index < preserve_index
+
+
 def test_windows_upgrade_has_verified_pre_upgrade_backup_helper():
     content = _read(WINDOWS_INSTALLER_WRAPPER)
 

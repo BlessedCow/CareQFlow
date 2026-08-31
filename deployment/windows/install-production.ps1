@@ -1048,6 +1048,10 @@ try {
                 -LiteralPath $environmentFile
         )
     
+        $currentCorsOrigins = ConvertTo-Json `
+            -InputObject @($normalizedApplicationOrigin) `
+            -Compress
+    
         $migratedEnvironmentLines = @(
             $existingEnvironmentLines |
             Where-Object {
@@ -1056,6 +1060,19 @@ try {
                     '|^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=' +
                     '|^AUTHSTATUS_PRODUCTION_DATA_ROOT='
                 )
+            } |
+            ForEach-Object {
+                if (
+                    $_ -eq (
+                        'AUTHSTATUS_CORS_ORIGINS=' +
+                        '["https://carequeue.local"]'
+                    )
+                ) {
+                    "AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"
+                }
+                else {
+                    $_
+                }
             }
         )
     
