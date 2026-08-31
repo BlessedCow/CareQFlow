@@ -515,7 +515,7 @@ def test_validate_active_database_rejects_missing_required_tables(
 
     with pytest.raises(
         RecoveryActivationError,
-        match="missing required CareQueue tables",
+        match="missing required CareQFlow tables",
     ):
         validate_active_database()
 
@@ -1240,7 +1240,7 @@ def test_verify_api_port_available_wraps_unexpected_socket_failure():
         with pytest.raises(
             RecoveryActivationError,
             match=(
-                "Unable to determine whether the CareQueue API " "port is available"
+                "Unable to determine whether the CareQFlow API " "port is available"
             ),
         ):
             verify_api_port_available(
@@ -1348,7 +1348,7 @@ def test_verify_managed_service_wraps_service_manager_launch_failure():
     ):
         with pytest.raises(
             RecoveryActivationError,
-            match="Unable to verify the managed CareQueue service status",
+            match="Unable to verify the managed CareQFlow service status",
         ):
             verify_managed_service_stopped(
                 service_name="CareQueue",
@@ -1371,7 +1371,7 @@ def test_verify_managed_service_wraps_service_manager_timeout():
     ):
         with pytest.raises(
             RecoveryActivationError,
-            match="Unable to verify the managed CareQueue service status",
+            match="Unable to verify the managed CareQFlow service status",
         ):
             verify_managed_service_stopped(
                 service_name="CareQueue",
@@ -1398,7 +1398,7 @@ def test_verify_windows_service_rejects_unverifiable_status():
     ):
         with pytest.raises(
             RecoveryActivationError,
-            match="Unable to verify the managed CareQueue service status",
+            match="Unable to verify the managed CareQFlow service status",
         ):
             verify_managed_service_stopped(
                 service_name="CareQueue",
@@ -1429,7 +1429,7 @@ def test_verify_linux_service_rejects_unknown_service():
     ):
         with pytest.raises(
             RecoveryActivationError,
-            match="Unable to verify the managed CareQueue service status",
+            match="Unable to verify the managed CareQFlow service status",
         ):
             verify_managed_service_stopped(
                 service_name="carequeue.service",

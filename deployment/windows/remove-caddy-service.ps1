@@ -38,7 +38,7 @@ $installedService = Get-Service `
     -ErrorAction SilentlyContinue
 
 if (-not $installedService) {
-    Write-Host "The CareQueue Caddy service is not installed."
+    Write-Host "The CareQFlow HTTPS service is not installed."
     return
 }
 
@@ -50,18 +50,18 @@ if (
     )
 ) {
     throw (
-        "The CareQueue Caddy service exists, but its WinSW " +
+        "The CareQFlow HTTPS service exists, but its WinSW " +
         "executable was not found at: $serviceExecutable"
     )
 }
 
 if ($installedService.Status -ne "Stopped") {
-    Write-Host "Stopping the CareQueue Caddy service..."
+    Write-Host "Stopping the CareQFlow HTTPS service..."
 
     & $serviceExecutable stop
 
     if ($LASTEXITCODE -ne 0) {
-        throw "WinSW failed to stop the CareQueue Caddy service."
+        throw "WinSW failed to stop the CareQFlow HTTPS service."
     }
 
     $installedService.WaitForStatus(
@@ -70,12 +70,12 @@ if ($installedService.Status -ne "Stopped") {
     )
 }
 
-Write-Host "Removing the CareQueue Caddy service..."
+Write-Host "Removing the CareQFlow HTTPS service..."
 
 & $serviceExecutable uninstall
 
 if ($LASTEXITCODE -ne 0) {
-    throw "WinSW failed to remove the CareQueue Caddy service."
+    throw "WinSW failed to remove the CareQFlow HTTPS service."
 }
 
 $serviceRemovalDeadline = (Get-Date).AddSeconds(30)
@@ -94,7 +94,7 @@ while (
 
 if ($remainingService) {
     throw (
-        "The CareQueue Caddy service did not disappear within " +
+        "The CareQFlow HTTPS service did not disappear within " +
         "the expected time."
     )
 }
@@ -109,4 +109,4 @@ Remove-Item `
     -Force `
     -ErrorAction SilentlyContinue
 
-Write-Host "CareQueue Caddy service removed successfully."
+Write-Host "CareQFlow HTTPS service removed successfully."

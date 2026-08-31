@@ -1,8 +1,8 @@
-#define MyAppName "CareQueue"
+#define MyAppName "CareQFlow"
 #define MyAppVersion "0.5.0"
-#define MyAppPublisher "CareQueue"
+#define MyAppPublisher "CareQFlow"
 #define MyAppURL "https://github.com/BlessedCow/CareQueue"
-#define MyAppExeName "CareQueue-Setup.exe"
+#define MyAppExeName "CareQFlow-Setup.exe"
 
 [Setup]
 AppId={{D692047A-3051-47D7-95C1-451C39702F44}
@@ -25,7 +25,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 OutputDir=..\..\..\build\windows\installer
-OutputBaseFilename=CareQueue-Setup-{#MyAppVersion}
+OutputBaseFilename=CareQFlow-Setup-{#MyAppVersion}
 SetupIconFile=
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -34,10 +34,10 @@ LicenseFile=..\..\..\build\windows\payload\LICENSE
 
 VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
-VersionInfoDescription=CareQueue Windows Setup
+VersionInfoDescription=CareQFlow Windows Setup
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
-VersionInfoCopyright=Copyright CareQueue
+VersionInfoCopyright=Copyright CareQFlow
 
 CloseApplications=no
 RestartApplications=no
@@ -62,7 +62,7 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
   
 [Code]
 const
-  CareQueueApplicationOrigin = 'https://carequeue.local';
+  CareQueueApplicationOrigin = 'https://careqflow.local';
   CareQueueInstallDirectory = 'C:\Program Files\CareQueue';
   CareQueueDataDirectory = 'C:\ProgramData\CareQueue';
   CareQueueUpgradeRecoveryDirectory =
@@ -205,10 +205,10 @@ begin
   if OperationMode = 'Uninstall' then
   begin
     Result :=
-      'Setup is ready to uninstall CareQueue from this computer.' +
+      'Setup is ready to uninstall CareQFlow from this computer.' +
       NewLine +
       NewLine +
-      'CareQueue Windows services and application files will be removed.' +
+      'CareQFlow Windows services and application files will be removed.' +
       NewLine +
       'Runtime data in C:\ProgramData\CareQueue will be preserved.';
     exit;
@@ -217,10 +217,10 @@ begin
   if OperationMode = 'Repair' then
   begin
     Result :=
-      'Setup is ready to repair the existing CareQueue installation.' +
+      'Setup is ready to repair the existing CareQFlow installation.' +
       NewLine +
       NewLine +
-      'CareQueue application files, services, and packaged runtime files will be restored.' +
+      'CareQFlow application files, services, and packaged runtime files will be restored.' +
       NewLine +
       'Existing runtime data and secrets will be preserved.';
     exit;
@@ -229,10 +229,10 @@ begin
   if OperationMode = 'Upgrade' then
   begin
     Result :=
-      'Setup is ready to upgrade the existing CareQueue installation.' +
+      'Setup is ready to upgrade the existing CareQFlow installation.' +
       NewLine +
       NewLine +
-      'CareQueue application files, services, and packaged runtime files will be updated.' +
+      'CareQFlow application files, services, and packaged runtime files will be updated.' +
       NewLine +
       'Existing runtime data and secrets will be preserved.';
     exit;
@@ -241,7 +241,7 @@ begin
   if OperationMode = 'Rollback' then
   begin
     Result :=
-      'Setup is ready to roll back the most recent failed CareQueue upgrade.' +
+      'Setup is ready to roll back the most recent failed CareQFlow upgrade.' +
       NewLine +
       NewLine +
       'The verified pre-upgrade application and database recovery assets will be restored.' +
@@ -251,10 +251,10 @@ begin
   end;
 
   Result :=
-    'Setup is ready to install CareQueue.' +
+    'Setup is ready to install CareQFlow.' +
     NewLine +
     NewLine +
-    'CareQueue will be installed as Windows services and made available at:' +
+    'CareQFlow will be installed as Windows services and made available at:' +
     NewLine +
     CareQueueApplicationOrigin;
 end;
@@ -322,7 +322,7 @@ begin
   OperationMode := GetOperationMode();
 
   Log(
-    'Starting CareQueue operation: ' +
+    'Starting CareQFlow operation: ' +
     OperationMode
   );
 
@@ -341,19 +341,19 @@ begin
   ) then
   begin
     RaiseException(
-      'CareQueue setup could not start the installer engine.'
+      'CareQFlow setup could not start the installer engine.'
     );
   end;
 
   Log(
-    'CareQueue installer exit code: ' +
+    'CareQFlow installer exit code: ' +
     IntToStr(InstallerExitCode)
   );
 
   if InstallerExitCode <> 0 then
   begin
     RaiseException(
-      'CareQueue ' +
+      'CareQFlow ' +
       OperationMode +
       ' failed with exit code ' +
       IntToStr(InstallerExitCode) +
@@ -388,31 +388,31 @@ begin
     begin
       WizardForm.NextButton.Caption := '&Uninstall';
       WizardForm.ReadyLabel.Caption :=
-        'Click Uninstall to remove CareQueue application files and services.';
+        'Click Uninstall to remove CareQFlow application files and services.';
     end
     else if OperationMode = 'Repair' then
     begin
       WizardForm.NextButton.Caption := '&Repair';
       WizardForm.ReadyLabel.Caption :=
-        'Click Repair to repair the existing CareQueue installation.';
+        'Click Repair to repair the existing CareQFlow installation.';
     end
     else if OperationMode = 'Upgrade' then
     begin
       WizardForm.NextButton.Caption := '&Upgrade';
       WizardForm.ReadyLabel.Caption :=
-        'Click Upgrade to upgrade the existing CareQueue installation.';
+        'Click Upgrade to upgrade the existing CareQFlow installation.';
     end
     else if OperationMode = 'Rollback' then
     begin
       WizardForm.NextButton.Caption := '&Rollback';
       WizardForm.ReadyLabel.Caption :=
-        'Click Rollback to recover from the most recent failed CareQueue upgrade.';
+        'Click Rollback to recover from the most recent failed CareQFlow upgrade.';
     end
     else
     begin
       WizardForm.NextButton.Caption := '&Install';
       WizardForm.ReadyLabel.Caption :=
-        'Click Install to begin installing CareQueue.';
+        'Click Install to begin installing CareQFlow.';
     end;
   end;
 end;
@@ -453,13 +453,13 @@ begin
   begin
     if RollbackOperationAvailable then
       WizardForm.WelcomeLabel2.Caption :=
-        'CareQueue is already installed.' +
+        'CareQFlow is already installed.' +
         Chr(13) + Chr(10) +
         Chr(13) + Chr(10) +
         'Choose whether to upgrade, repair, roll back, or uninstall the existing installation.'
     else
       WizardForm.WelcomeLabel2.Caption :=
-        'CareQueue is already installed.' +
+        'CareQFlow is already installed.' +
         Chr(13) + Chr(10) +
         Chr(13) + Chr(10) +
         'Choose whether to upgrade, repair, or uninstall the existing installation.';
@@ -467,9 +467,9 @@ begin
     OperationModePage :=
       CreateInputOptionPage(
         wpWelcome,
-        'Choose CareQueue operation',
+        'Choose CareQFlow operation',
         'Select what you want the setup program to do.',
-        'CareQueue is already installed on this computer.',
+        'CareQFlow is already installed on this computer.',
         True,
         False
       );
@@ -488,7 +488,7 @@ begin
       );
 
     OperationModePage.Add(
-      'Uninstall CareQueue'
+      'Uninstall CareQFlow'
     );
 
     OperationModePage.Values[0] := True;
@@ -496,12 +496,12 @@ begin
   else
   begin
     WizardForm.WelcomeLabel2.Caption :=
-      'This setup will install CareQueue.' +
+      'This setup will install CareQFlow.' +
       Chr(13) + Chr(10) +
       Chr(13) + Chr(10) +
-      'CareQueue will be installed as two Windows services and ' +
+      'CareQFlow will be installed as two Windows services and ' +
       'will be available at:' +
       Chr(13) + Chr(10) +
-      'https://carequeue.local';
+      'https://careqflow.local';
   end;
 end;

@@ -1,12 +1,12 @@
 # Health Checks
 
-CareQueue exposes public health endpoints for operational validation.
+CareQFlow exposes public health endpoints for operational validation.
 
 Use health checks to confirm that the API process is responding and that the configured database is reachable. Health checks are intentionally narrow. They do not replace login testing, browser testing, governance validation, MFA testing, backup verification, or representative workflow testing.
 
 ## Health Endpoints
 
-CareQueue exposes:
+CareQFlow exposes:
 
 ```text
 GET /api/health
@@ -30,7 +30,7 @@ A successful readiness response returns:
 }
 ```
 
-If the readiness database check fails, CareQueue returns HTTP `503` with:
+If the readiness database check fails, CareQFlow returns HTTP `503` with:
 
 ```json
 {
@@ -113,7 +113,7 @@ Prefer the explicit `/api/health/live` and `/api/health/ready` endpoints in oper
 
 ## Authentication and Information Exposure
 
-Health endpoints are public and do not require an authenticated CareQueue session.
+Health endpoints are public and do not require an authenticated CareQFlow session.
 
 Their responses are intentionally minimal.
 
@@ -133,7 +133,7 @@ Health responses must not expose:
 
 ## Production Request Path
 
-Packaged CareQueue deployments keep the API on loopback:
+Packaged CareQFlow deployments keep the API on loopback:
 
 ```text
 127.0.0.1:8000
@@ -144,7 +144,7 @@ Caddy serves the frontend over HTTPS and proxies `/api` requests to the loopback
 The packaged private application origin is:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 Two types of health checks are useful:
@@ -164,7 +164,7 @@ Use this to isolate API and database behavior.
 An HTTPS check uses the same request path as the browser:
 
 ```text
-https://carequeue.local/api/health/...
+https://careqflow.local/api/health/...
 ```
 
 Use this to validate:
@@ -202,7 +202,7 @@ Status: Running
 StartType: Automatic
 ```
 
-A running service does not by itself prove that CareQueue is healthy. Continue with endpoint checks.
+A running service does not by itself prove that CareQFlow is healthy. Continue with endpoint checks.
 
 ## Windows Direct API Liveness
 
@@ -247,7 +247,7 @@ If direct liveness succeeds but direct readiness fails, focus troubleshooting on
 ```powershell
 Invoke-RestMethod `
     -Method Get `
-    -Uri "https://carequeue.local/api/health/live" `
+    -Uri "https://careqflow.local/api/health/live" `
     -TimeoutSec 10
 ```
 
@@ -258,7 +258,7 @@ This checks the complete HTTPS request path without requiring authentication.
 ```powershell
 Invoke-RestMethod `
     -Method Get `
-    -Uri "https://carequeue.local/api/health/ready" `
+    -Uri "https://careqflow.local/api/health/ready" `
     -TimeoutSec 10
 ```
 
@@ -269,7 +269,7 @@ This is the preferred Windows production readiness check because it validates bo
 Open:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 Confirm:
@@ -399,7 +399,7 @@ curl \
   --fail \
   --silent \
   --show-error \
-  https://carequeue.local/api/health/live
+  https://careqflow.local/api/health/live
 ```
 
 ## Linux HTTPS Readiness
@@ -409,7 +409,7 @@ curl \
   --fail \
   --silent \
   --show-error \
-  https://carequeue.local/api/health/ready
+  https://careqflow.local/api/health/ready
 ```
 
 Do not permanently disable TLS verification to make a health check pass.
@@ -421,7 +421,7 @@ If the certificate is not trusted, resolve the Caddy internal certificate-author
 From a browser on an approved client system, open:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 Confirm:
@@ -431,7 +431,7 @@ Confirm:
 - Static assets load.
 - Requests to `/api` succeed through the same HTTPS origin.
 
-The packaged Linux deployment is designed around the private `carequeue.local` origin. A different hostname or broader network deployment requires separate Caddy, DNS, and certificate planning.
+The packaged Linux deployment is designed around the private `careqflow.local` origin. A different hostname or broader network deployment requires separate Caddy, DNS, and certificate planning.
 
 ## Local Development
 
@@ -525,7 +525,7 @@ Possible causes include:
 - Browser cookies are blocked
 - Session or CSRF behavior is failing
 - Client and server clocks are incorrect
-- Browser is using the wrong CareQueue installation
+- Browser is using the wrong CareQFlow installation
 - Frontend build or origin configuration is incorrect
 
 Review authentication audit events when appropriate.
@@ -618,13 +618,13 @@ Check listeners:
 sudo ss -lntp
 ```
 
-The expected CareQueue API listener is:
+The expected CareQFlow API listener is:
 
 ```text
 127.0.0.1:8000
 ```
 
-The HTTPS listener should be provided by the CareQueue Caddy service.
+The HTTPS listener should be provided by the CareQFlow Caddy service.
 
 Check service state before changing firewall or Caddy configuration.
 
@@ -674,16 +674,16 @@ A browser on another client computer also needs appropriate trust for the privat
 Check Windows:
 
 ```powershell
-ping carequeue.local
+ping careqflow.local
 ```
 
 Check Linux:
 
 ```bash
-getent hosts carequeue.local
+getent hosts careqflow.local
 ```
 
-For the default packaged private installation, the hostname should resolve to the intended private CareQueue host.
+For the default packaged private installation, the hostname should resolve to the intended private CareQFlow host.
 
 On a single-machine installation this is normally the local system.
 
@@ -739,7 +739,7 @@ Do not:
 
 ## Windows Logs
 
-API service and wrapper logs are stored under the configured CareQueue logging paths in:
+API service and wrapper logs are stored under the configured CareQFlow logging paths in:
 
 ```text
 C:\ProgramData\CareQueue
@@ -841,7 +841,7 @@ After a fresh packaged installation:
 5. Check HTTPS liveness.
 6. Check HTTPS readiness.
 7. Complete first-time Admin setup if no users exist.
-8. Open `https://carequeue.local`.
+8. Open `https://careqflow.local`.
 9. Sign in as the first Admin.
 10. Complete the current governance attestation.
 11. Confirm the dashboard loads.
@@ -866,14 +866,14 @@ After an upgrade:
 5. Open the frontend.
 6. Sign in with an approved account.
 7. Confirm governance status is appropriate for the installed governance version.
-8. Confirm the Admin System page reports the expected CareQueue application version.
+8. Confirm the Admin System page reports the expected CareQFlow application version.
 9. Verify representative protected pages.
 10. Confirm existing authorization data remains available.
 11. Confirm governance history remains available to an Admin.
 12. Confirm logout and subsequent login work.
 13. Review installer and service logs for unexpected errors.
 
-A new CareQueue application version does not automatically require a new governance attestation version or governance document revision. Governance acceptance remains current only while both required governance values match the accepted record.
+A new CareQFlow application version does not automatically require a new governance attestation version or governance document revision.Governance acceptance remains current only while both required governance values match the accepted record.
 
 ## Post-Repair Smoke Test
 
@@ -896,13 +896,13 @@ Repair should restore packaged application and service components without replac
 
 After a supported failed-upgrade rollback:
 
-1. Confirm the required CareQueue services are running.
+1. Confirm the required CareQFlow services are running.
 2. Confirm the backup schedule remains enabled.
 3. Check HTTPS liveness.
 4. Check HTTPS readiness.
 5. Open the frontend.
 6. Sign in with an approved account.
-7. Confirm the Admin System page reports the expected previous CareQueue version.
+7. Confirm the Admin System page reports the expected previous CareQFlow version.
 8. Confirm existing authorization data is available.
 9. Confirm governance status and governance history remain available.
 10. Confirm representative protected pages load.

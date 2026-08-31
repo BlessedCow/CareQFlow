@@ -434,7 +434,7 @@ if (
     )
 }
 
-Write-Status "Assembling CareQueue application files..."
+Write-Status "Assembling CareQFlow application files..."
 
 $payloadDirectories = @(
     $payloadBackendDirectory,
@@ -625,11 +625,11 @@ Invoke-CheckedCommand `
         "import cryptography; " +
         "import fastapi; " +
         "import uvicorn; " +
-        "print('CareQueue payload runtime validated.')"
+        "print('CareQFlow payload runtime validated.')"
     )
 ) `
     -FailureMessage (
-    "The assembled private runtime could not load CareQueue."
+    "The assembled private runtime could not load CareQFlow."
 )
 
 $payloadCaddyExecutable = Join-Path `
@@ -743,7 +743,7 @@ Set-Content `
     -Encoding ascii
 
 Write-Status ""
-Write-Status "CareQueue Windows payload created successfully."
+Write-Status "CareQFlow Windows payload created successfully."
 Write-Status "Payload:   $resolvedOutputDirectory"
 Write-Status "Python:    $pythonVersion"
 Write-Status "Caddy:     $($vendorMetadata.caddy.version)"

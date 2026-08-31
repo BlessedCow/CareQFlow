@@ -59,7 +59,7 @@ fail() {
 
 require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
-        fail "CareQueue setup must be run as root."
+        fail "CareQFlow setup must be run as root."
     fi
 }
 
@@ -163,19 +163,19 @@ validate_mode() {
     case "${MODE}" in
         install)
             if installation_exists; then
-                fail "CareQueue is already installed. Use upgrade or repair."
+                fail "CareQFlow is already installed. Use upgrade or repair."
             fi
             ;;
 
         upgrade|repair|rollback)
             if ! installation_exists; then
-                fail "CareQueue is not currently installed. Use install."
+                fail "CareQFlow is not currently installed. Use install."
             fi
             ;;
 
         uninstall)
             if ! installation_exists; then
-                fail "CareQueue is not currently installed. Use install."
+                fail "CareQFlow is not currently installed. Use install."
             fi
             ;;
     esac
@@ -190,12 +190,12 @@ require_license_acceptance() {
 
     if [[ ! -f "${LICENSE_NOTICE_FILE}" ]]; then
         fail \
-            "CareQueue license notice was not found: " \
+            "CareQFlow license notice was not found: " \
             "${LICENSE_NOTICE_FILE}"
     fi
 
     printf '\n'
-    printf '%s\n' 'CareQueue License Agreement'
+    printf '%s\n' 'CareQFlow License Agreement'
     printf '%s\n' '==========================='
     printf '\n'
 
@@ -203,7 +203,7 @@ require_license_acceptance() {
 
     printf '\n'
     printf '%s\n' \
-        'You must accept the CareQueue license terms to continue.'
+        'You must accept the CareQFlow license terms to continue.'
 
     while true; do
         printf '%s' 'Type ACCEPT to agree and continue: '
@@ -215,7 +215,7 @@ require_license_acceptance() {
         case "${response}" in
             ACCEPT)
                 printf '%s\n' \
-                    'CareQueue license terms accepted.'
+                    'CareQFlow license terms accepted.'
                 printf '\n'
                 return
                 ;;
@@ -238,7 +238,7 @@ validate_upgrade_version() {
 
     if [[ ! -f "${RELEASE_METADATA_FILE}" ]]; then
         fail \
-            "CareQueue release metadata was not found: " \
+            "CareQFlow release metadata was not found: " \
             "${RELEASE_METADATA_FILE}"
     fi
 
@@ -250,13 +250,13 @@ validate_upgrade_version() {
 
     if ! validate_version_string "${INCOMING_VERSION}"; then
         fail \
-            "Incoming CareQueue package has an invalid application version: " \
+            "Incoming CareQFlow package has an invalid application version: " \
             "${INCOMING_VERSION:-missing}"
     fi
 
     if [[ ! -f "${INSTALL_STATE_FILE}" ]]; then
         printf '%s\n' \
-            'Installed CareQueue version metadata is unavailable. Continuing legacy upgrade validation.'
+            'Installed CareQFlow version metadata is unavailable. Continuing legacy upgrade validation.'
         return
     fi
 
@@ -268,13 +268,13 @@ validate_upgrade_version() {
 
     if [[ -z "${INSTALLED_VERSION}" ]]; then
         printf '%s\n' \
-            'Installed CareQueue version metadata is unavailable. Continuing legacy upgrade validation.'
+            'Installed CareQFlow version metadata is unavailable. Continuing legacy upgrade validation.'
         return
     fi
 
     if ! validate_version_string "${INSTALLED_VERSION}"; then
         fail \
-            "Installed CareQueue version metadata is invalid: " \
+            "Installed CareQFlow version metadata is invalid: " \
             "${INSTALLED_VERSION}"
     fi
 
@@ -287,25 +287,25 @@ validate_upgrade_version() {
     case "${comparison}" in
         1)
             printf \
-                'Validated CareQueue upgrade path: %s -> %s\n' \
+                'Validated CareQFlow upgrade path: %s -> %s\n' \
                 "${INSTALLED_VERSION}" \
                 "${INCOMING_VERSION}"
             ;;
 
         0)
             fail \
-                "CareQueue ${INCOMING_VERSION} is already installed. " \
+                "CareQFlow ${INCOMING_VERSION} is already installed. " \
                 "Use repair instead of upgrade."
             ;;
 
         -1)
             fail \
-                "CareQueue downgrade refused: installed version " \
+                "CareQFlow downgrade refused: installed version " \
                 "${INSTALLED_VERSION}, incoming version ${INCOMING_VERSION}."
             ;;
 
         *)
-            fail "Unable to compare CareQueue release versions."
+            fail "Unable to compare CareQFlow release versions."
             ;;
     esac
 }
@@ -325,19 +325,19 @@ create_verified_pre_upgrade_backup() {
 
     if [[ ! -f "${backup_service}" ]]; then
         fail \
-            "CareQueue upgrade requires the installed backup service: " \
+            "CareQFlow upgrade requires the installed backup service: " \
             "${backup_service}"
     fi
 
     if [[ ! -f "${backup_script}" ]]; then
         fail \
-            "CareQueue upgrade requires the installed backup script: " \
+            "CareQFlow upgrade requires the installed backup script: " \
             "${backup_script}"
     fi
 
     if [[ ! -f "${CONFIG_DIRECTORY}/carequeue.env" ]]; then
         fail \
-            "CareQueue upgrade requires the production configuration: " \
+            "CareQFlow upgrade requires the production configuration: " \
             "${CONFIG_DIRECTORY}/carequeue.env"
     fi
 
@@ -357,7 +357,7 @@ create_verified_pre_upgrade_backup() {
 
         fail \
             "Pre-upgrade backup creation or verification failed. " \
-            "The CareQueue application has not been replaced."
+            "The CareQFlow application has not been replaced."
     fi
 
     backup_path="$(
@@ -376,9 +376,9 @@ create_verified_pre_upgrade_backup() {
 
     if [[ -z "${backup_path}" ]]; then
         fail \
-            "The CareQueue backup service completed but no new " \
+            "The CareQFlow backup service completed but no new " \
             "pre-upgrade backup could be identified. " \
-            "The CareQueue application has not been replaced."
+            "The CareQFlow application has not been replaced."
     fi
 
     if [[ ! -s "${backup_path}" ]]; then
@@ -417,7 +417,7 @@ create_verified_pre_upgrade_application_archive() {
         || [[ ! -d "${INSTALL_DIRECTORY}/frontend" ]] \
         || [[ ! -d "${INSTALL_DIRECTORY}/deployment" ]]; then
         fail \
-            "Cannot preserve the installed CareQueue application because required application directories are missing."
+            "Cannot preserve the installed CareQFlow application because required application directories are missing."
     fi
 
     mkdir -p "${UPGRADE_APPLICATION_RECOVERY_DIRECTORY}"
@@ -434,7 +434,7 @@ create_verified_pre_upgrade_application_archive() {
     checksum_path="${PRE_UPGRADE_APPLICATION_ARCHIVE}.sha256"
 
     printf \
-        'Preserving installed CareQueue %s application payload...\n' \
+        'Preserving installed CareQFlow %s application payload...\n' \
         "${INSTALLED_VERSION}"
 
     rm -f \
@@ -626,13 +626,13 @@ restore_previous_install_state_version() {
     if [[ -z "${ROLLBACK_PREVIOUS_VERSION}" ]] \
         || [[ "${ROLLBACK_PREVIOUS_VERSION}" == "unknown" ]]; then
         printf '%s\n' \
-            "Previous CareQueue version metadata is unavailable; installed version metadata was not changed."
+            "Previous CareQFlow version metadata is unavailable; installed version metadata was not changed."
         return
     fi
 
     if ! validate_version_string "${ROLLBACK_PREVIOUS_VERSION}"; then
         fail \
-            "Cannot restore installed version metadata because the previous CareQueue version is invalid: ${ROLLBACK_PREVIOUS_VERSION}"
+            "Cannot restore installed version metadata because the previous CareQFlow version is invalid: ${ROLLBACK_PREVIOUS_VERSION}"
     fi
 
     if [[ ! -f "${INSTALL_STATE_FILE}" ]]; then
@@ -666,7 +666,7 @@ restore_previous_install_state_version() {
     mv -f "${temporary_state}" "${INSTALL_STATE_FILE}"
 
     printf \
-        'Installed CareQueue version metadata restored to %s\n' \
+        'Installed CareQFlow version metadata restored to %s\n' \
         "${ROLLBACK_PREVIOUS_VERSION}"
 }
 
@@ -704,7 +704,7 @@ resolve_failed_upgrade_recovery_record() {
 
     if [[ ! -d "${UPGRADE_RECOVERY_DIRECTORY}" ]]; then
         fail \
-            "No CareQueue upgrade recovery records are available."
+            "No CareQFlow upgrade recovery records are available."
     fi
 
     record_path="$(
@@ -731,7 +731,7 @@ resolve_failed_upgrade_recovery_record() {
 
     if [[ -z "${record_path}" ]]; then
         fail \
-            "No failed CareQueue upgrade recovery record was found."
+            "No failed CareQFlow upgrade recovery record was found."
     fi
 
     ROLLBACK_RECOVERY_RECORD="${record_path}"
@@ -816,7 +816,7 @@ resolve_failed_upgrade_recovery_record() {
         "${ROLLBACK_RECOVERY_RECORD}"
 
     printf \
-        'Previous CareQueue version: %s\n' \
+        'Previous CareQFlow version: %s\n' \
         "${ROLLBACK_PREVIOUS_VERSION:-unknown}"
 
     printf \
@@ -914,7 +914,7 @@ preserve_failed_application_before_rollback() {
         || [[ ! -d "${INSTALL_DIRECTORY}/frontend" ]] \
         || [[ ! -d "${INSTALL_DIRECTORY}/deployment" ]]; then
         fail \
-            "Cannot preserve the failed CareQueue application because required application directories are missing."
+            "Cannot preserve the failed CareQFlow application because required application directories are missing."
     fi
 
     mkdir -p "${UPGRADE_APPLICATION_RECOVERY_DIRECTORY}"
@@ -1136,7 +1136,7 @@ restore_failed_application_after_swap_failure() {
         "Upgrade recovery status: rollback_application_restored"
 
     printf '%s\n' \
-        "CareQueue services remain stopped pending administrator review."
+        "CareQFlow services remain stopped pending administrator review."
 
     return 0
 }
@@ -1152,27 +1152,27 @@ replace_failed_application_with_rollback_payload() {
     if [[ -z "${ROLLBACK_APPLICATION_STAGING_ROOT}" ]] \
         || [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}" ]]; then
         fail \
-            "Cannot restore the previous CareQueue application because the staged rollback payload is unavailable."
+            "Cannot restore the previous CareQFlow application because the staged rollback payload is unavailable."
     fi
 
     if [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}/backend" ]] \
         || [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}/frontend" ]] \
         || [[ ! -d "${ROLLBACK_APPLICATION_STAGING_ROOT}/deployment" ]]; then
         fail \
-            "Cannot restore the previous CareQueue application because the staged rollback payload is incomplete."
+            "Cannot restore the previous CareQFlow application because the staged rollback payload is incomplete."
     fi
 
     printf '%s\n' \
-        "Stopping CareQueue services before application rollback..."
+        "Stopping CareQFlow services before application rollback..."
 
     if ! systemctl stop carequeue-api.service; then
         fail \
-            "CareQueue rollback could not stop carequeue-api.service before application replacement."
+            "CareQFlow rollback could not stop carequeue-api.service before application replacement."
     fi
 
     if ! systemctl stop carequeue-caddy.service; then
         fail \
-            "CareQueue rollback could not stop carequeue-caddy.service before application replacement."
+            "CareQFlow rollback could not stop carequeue-caddy.service before application replacement."
     fi
 
     FAILED_APPLICATION_STAGING_DIRECTORY="$(
@@ -1225,7 +1225,7 @@ replace_failed_application_with_rollback_payload() {
     fi
 
     printf '%s\n' \
-        "Restoring the previous CareQueue application payload..."
+        "Restoring the previous CareQFlow application payload..."
 
     if ! cp -a --no-preserve=context \
         "${ROLLBACK_APPLICATION_STAGING_ROOT}/backend" \
@@ -1233,11 +1233,11 @@ replace_failed_application_with_rollback_payload() {
 
         if ! restore_failed_application_after_swap_failure; then
             fail \
-                "Failed to restore the previous CareQueue backend, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+                "Failed to restore the previous CareQFlow backend, and automatic restoration of the failed application also failed. CareQFlow services remain stopped."
         fi
 
         fail \
-            "Failed to restore the previous CareQueue backend. The failed application was restored and CareQueue services remain stopped."
+            "Failed to restore the previous CareQFlow backend. The failed application was restored and CareQFlow services remain stopped."
     fi
 
     if ! cp -a --no-preserve=context \
@@ -1246,11 +1246,11 @@ replace_failed_application_with_rollback_payload() {
 
         if ! restore_failed_application_after_swap_failure; then
             fail \
-                "Failed to restore the previous CareQueue frontend, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+                "Failed to restore the previous CareQFlow frontend, and automatic restoration of the failed application also failed. CareQFlow services remain stopped."
         fi
 
         fail \
-            "Failed to restore the previous CareQueue frontend. The failed application was restored and CareQueue services remain stopped."
+            "Failed to restore the previous CareQFlow frontend. The failed application was restored and CareQFlow services remain stopped."
     fi
 
     if ! cp -a --no-preserve=context \
@@ -1259,11 +1259,11 @@ replace_failed_application_with_rollback_payload() {
 
         if ! restore_failed_application_after_swap_failure; then
             fail \
-                "Failed to restore the previous CareQueue deployment files, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+                "Failed to restore the previous CareQFlow deployment files, and automatic restoration of the failed application also failed. CareQFlow services remain stopped."
         fi
 
         fail \
-            "Failed to restore the previous CareQueue deployment files. The failed application was restored and CareQueue services remain stopped."
+            "Failed to restore the previous CareQFlow deployment files. The failed application was restored and CareQFlow services remain stopped."
     fi
 
     if command -v restorecon >/dev/null 2>&1; then
@@ -1274,16 +1274,16 @@ replace_failed_application_with_rollback_payload() {
     virtual_environment="${backend_directory}/.venv"
 
     printf '%s\n' \
-        "Rebuilding the previous CareQueue Python environment..."
+        "Rebuilding the previous CareQFlow Python environment..."
 
     if ! python3 -m venv "${virtual_environment}"; then
     if ! restore_failed_application_after_swap_failure; then
         fail \
-            "Failed to rebuild the previous CareQueue Python environment, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+            "Failed to rebuild the previous CareQFlow Python environment, and automatic restoration of the failed application also failed. CareQFlow services remain stopped."
     fi
 
     fail \
-        "Failed to rebuild the previous CareQueue Python environment. The failed application was restored and CareQueue services remain stopped."
+        "Failed to rebuild the previous CareQFlow Python environment. The failed application was restored and CareQFlow services remain stopped."
 fi
 
     if ! "${virtual_environment}/bin/python" \
@@ -1295,11 +1295,11 @@ fi
 
         if ! restore_failed_application_after_swap_failure; then
             fail \
-                "Failed to prepare the previous CareQueue Python environment, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+                "Failed to prepare the previous CareQFlow Python environment, and automatic restoration of the failed application also failed. CareQFlow services remain stopped."
         fi
 
         fail \
-            "Failed to prepare the previous CareQueue Python environment. The failed application was restored and CareQueue services remain stopped."
+            "Failed to prepare the previous CareQFlow Python environment. The failed application was restored and CareQFlow services remain stopped."
     fi
 
     if ! "${virtual_environment}/bin/python" \
@@ -1308,11 +1308,11 @@ fi
 
         if ! restore_failed_application_after_swap_failure; then
             fail \
-                "Failed to install the previous CareQueue backend dependencies, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+                "Failed to install the previous CareQFlow backend dependencies, and automatic restoration of the failed application also failed. CareQFlow services remain stopped."
         fi
 
         fail \
-            "Failed to install the previous CareQueue backend dependencies. The failed application was restored and CareQueue services remain stopped."
+            "Failed to install the previous CareQFlow backend dependencies. The failed application was restored and CareQFlow services remain stopped."
     fi
 
     if ! (
@@ -1323,15 +1323,15 @@ fi
     ); then
         if ! restore_failed_application_after_swap_failure; then
             fail \
-                "The restored CareQueue backend failed validation, and automatic restoration of the failed application also failed. CareQueue services remain stopped."
+                "The restored CareQFlow backend failed validation, and automatic restoration of the failed application also failed. CareQFlow services remain stopped."
         fi
 
         fail \
-            "The restored CareQueue backend failed validation. The failed application was restored and CareQueue services remain stopped."
+            "The restored CareQFlow backend failed validation. The failed application was restored and CareQFlow services remain stopped."
     fi
 
     printf '%s\n' \
-        "Previous CareQueue application payload restored successfully."
+        "Previous CareQFlow application payload restored successfully."
 }
 
 restore_rollback_service_definitions() {
@@ -1345,7 +1345,7 @@ restore_rollback_service_definitions() {
 
     if [[ ! -d "${systemd_directory}" ]]; then
         fail \
-            "The restored CareQueue application does not contain Linux systemd definitions."
+            "The restored CareQFlow application does not contain Linux systemd definitions."
     fi
 
     install \
@@ -1379,7 +1379,7 @@ restore_rollback_service_definitions() {
     systemctl daemon-reload
 
     printf '%s\n' \
-        "Previous CareQueue systemd service definitions restored."
+        "Previous CareQFlow systemd service definitions restored."
 }
 
 prepare_failed_upgrade_rollback() {
@@ -1393,7 +1393,7 @@ prepare_failed_upgrade_rollback() {
 
     if [[ ! -f "${restore_script}" ]]; then
         fail \
-            "CareQueue rollback requires the installed restore script: ${restore_script}"
+            "CareQFlow rollback requires the installed restore script: ${restore_script}"
     fi
 
     printf 'Staging the verified pre-upgrade database backup for recovery...\n'
@@ -1402,7 +1402,7 @@ prepare_failed_upgrade_rollback() {
         "${restore_script}" \
         "${ROLLBACK_BACKUP_PATH}"; then
         fail \
-            "CareQueue rollback preparation failed while staging the pre-upgrade backup."
+            "CareQFlow rollback preparation failed while staging the pre-upgrade backup."
     fi
 
     update_rollback_recovery_status "rollback_staged"
@@ -1417,7 +1417,7 @@ prepare_failed_upgrade_rollback() {
         "The active database has not been replaced."
 
     printf '%s\n' \
-        "Complete recovery activation using the staged CareQueue recovery workflow."
+        "Complete recovery activation using the staged CareQFlow recovery workflow."
 }
 
 validate_post_rollback_services() {
@@ -1434,12 +1434,12 @@ validate_post_rollback_services() {
 
         if ! systemctl is-active --quiet "${service_name}"; then
             fail \
-                "CareQueue rollback service validation failed because ${service_name} is not active."
+                "CareQFlow rollback service validation failed because ${service_name} is not active."
         fi
     done
 
     printf '%s\n' \
-        "CareQueue rollback service validation passed."
+        "CareQFlow rollback service validation passed."
 }
 
 validate_post_rollback_health() {
@@ -1457,11 +1457,11 @@ validate_post_rollback_health() {
     )"
 
     if [[ -z "${application_origin}" ]]; then
-        application_origin="https://carequeue.local"
+        application_origin="https://careqflow.local"
     fi
 
     printf '%s\n' \
-        "Validating CareQueue health after rollback..."
+        "Validating CareQFlow health after rollback..."
 
     for attempt in $(seq 1 30); do
         if curl \
@@ -1480,7 +1480,7 @@ validate_post_rollback_health() {
                 >/dev/null 2>&1; then
 
             printf '%s\n' \
-                "CareQueue health and readiness checks passed after rollback."
+                "CareQFlow health and readiness checks passed after rollback."
 
             return
         fi
@@ -1489,7 +1489,7 @@ validate_post_rollback_health() {
     done
 
     fail \
-        "CareQueue did not pass health and readiness checks after rollback. Recovery remains activated, but rollback was not marked complete."
+        "CareQFlow did not pass health and readiness checks after rollback. Recovery remains activated, but rollback was not marked complete."
 }
 
 activate_failed_upgrade_rollback() {
@@ -1503,20 +1503,20 @@ activate_failed_upgrade_rollback() {
 
     if [[ ! -f "${activation_script}" ]]; then
         fail \
-            "CareQueue rollback requires the installed recovery activation script: ${activation_script}"
+            "CareQFlow rollback requires the installed recovery activation script: ${activation_script}"
     fi
 
     if [[ ! -x "${INSTALL_DIRECTORY}/backend/.venv/bin/python" ]]; then
         fail \
-            "CareQueue rollback requires the installed Python environment."
+            "CareQFlow rollback requires the installed Python environment."
     fi
 
     printf '%s\n' \
-        "Stopping the CareQueue API before rollback activation..."
+        "Stopping the CareQFlow API before rollback activation..."
 
     if ! systemctl stop carequeue-api.service; then
         fail \
-            "CareQueue rollback could not stop carequeue-api.service."
+            "CareQFlow rollback could not stop carequeue-api.service."
     fi
 
     printf '%s\n' \
@@ -1539,7 +1539,7 @@ activate_failed_upgrade_rollback() {
             "Rollback activation did not complete successfully."
 
         printf '%s\n' \
-            "CareQueue API remains stopped for safety."
+            "CareQFlow API remains stopped for safety."
 
         fail \
             "Review the recovery output before attempting another recovery operation."
@@ -1551,7 +1551,7 @@ activate_failed_upgrade_rollback() {
         "Rollback database activation completed."
 
     printf '%s\n' \
-        "Starting the CareQueue API..."
+        "Starting the CareQFlow API..."
 
     if ! systemctl start carequeue-api.service; then
         fail \
@@ -1559,7 +1559,7 @@ activate_failed_upgrade_rollback() {
     fi
 
     printf '%s\n' \
-        "Starting the CareQueue HTTPS service..."
+        "Starting the CareQFlow HTTPS service..."
 
     if ! systemctl start carequeue-caddy.service; then
         fail \
@@ -1567,7 +1567,7 @@ activate_failed_upgrade_rollback() {
     fi
 
     printf '%s\n' \
-        "Restoring the CareQueue backup schedule..."
+        "Restoring the CareQFlow backup schedule..."
 
     if ! systemctl enable --now carequeue-backup.timer; then
         fail \
@@ -1582,7 +1582,7 @@ activate_failed_upgrade_rollback() {
     cleanup_successful_rollback_staging
 
     printf '%s\n' \
-        "CareQueue services started after rollback activation."
+        "CareQFlow services started after rollback activation."
 
     printf '%s\n' \
         "Upgrade recovery status: rollback_completed"
@@ -1602,7 +1602,7 @@ prepare_logging() {
 
     LOG_PATH="$(
         printf \
-            '%s/CareQueue-%s-%s.log' \
+            '%s/CareQFlow-%s-%s.log' \
             "${installer_log_directory}" \
             "${MODE}" \
             "${timestamp}"
@@ -1615,7 +1615,7 @@ prepare_logging() {
 }
 
 print_header() {
-    printf 'CareQueue Linux Installer\n'
+    printf 'CareQFlow Linux Installer\n'
     printf 'Mode: %s\n' "${MODE}"
     printf 'Started UTC: %s\n' "$(date -u --iso-8601=seconds)"
     printf 'Install directory: %s\n' "${INSTALL_DIRECTORY}"
@@ -1626,7 +1626,7 @@ print_header() {
 
 run_install_operation() {
     if [[ ! -f "${INSTALL_SCRIPT}" ]]; then
-        fail "CareQueue production install script was not found: ${INSTALL_SCRIPT}"
+        fail "CareQFlow production install script was not found: ${INSTALL_SCRIPT}"
     fi
 
     bash "${INSTALL_SCRIPT}"
@@ -1634,7 +1634,7 @@ run_install_operation() {
 
 run_uninstall_operation() {
     if [[ ! -f "${UNINSTALL_SCRIPT}" ]]; then
-        fail "CareQueue production uninstall script was not found: ${UNINSTALL_SCRIPT}"
+        fail "CareQFlow production uninstall script was not found: ${UNINSTALL_SCRIPT}"
     fi
 
     bash "${UNINSTALL_SCRIPT}"
@@ -1646,7 +1646,7 @@ run_initial_admin_setup() {
     admin_setup_script="${INSTALL_DIRECTORY}/deployment/linux/CareQueue-AdminSetup.sh"
 
     if [[ ! -f "${admin_setup_script}" ]]; then
-        fail "CareQueue admin setup script was not installed."
+        fail "CareQFlow admin setup script was not installed."
     fi
 
     bash "${admin_setup_script}"
@@ -1672,7 +1672,7 @@ main() {
             ;;
 
         upgrade)
-            printf 'Upgrading CareQueue while preserving configuration and data...\n'
+            printf 'Upgrading CareQFlow while preserving configuration and data...\n'
 
             if run_install_operation; then
                 update_upgrade_recovery_status "completed"
@@ -1680,18 +1680,18 @@ main() {
                 update_upgrade_recovery_status "failed"
 
                 fail \
-                    "CareQueue upgrade failed. Recovery information was preserved at: " \
+                    "CareQFlow upgrade failed. Recovery information was preserved at: " \
                     "${UPGRADE_RECOVERY_RECORD}"
             fi
             ;;
 
         repair)
-            printf 'Repairing CareQueue while preserving configuration and data...\n'
+            printf 'Repairing CareQFlow while preserving configuration and data...\n'
             run_install_operation
             ;;
 
         rollback)
-            printf 'Preparing CareQueue rollback from the latest failed upgrade...\n'
+            printf 'Preparing CareQFlow rollback from the latest failed upgrade...\n'
             stage_verified_rollback_application
             preserve_failed_application_before_rollback
             record_failed_application_for_rollback
@@ -1707,7 +1707,7 @@ main() {
     esac
 
     printf '\n'
-    printf 'CareQueue %s completed successfully.\n' "${MODE}"
+    printf 'CareQFlow %s completed successfully.\n' "${MODE}"
     printf 'Completed UTC: %s\n' "$(date -u --iso-8601=seconds)"
     printf 'Log: %s\n' "${LOG_PATH}"
 }

@@ -63,7 +63,7 @@ $existingService = Get-Service `
 
 if ($existingService) {
     throw (
-        "The CareQueue API service is already installed. " +
+        "The CareQFlow API service is already installed. " +
         "Remove or refresh it before reinstalling."
     )
 }
@@ -71,14 +71,14 @@ if ($existingService) {
 & $serviceExecutable install
 
 if ($LASTEXITCODE -ne 0) {
-    throw "WinSW failed to install the CareQueue API service."
+    throw "WinSW failed to install the CareQFlow API service."
 }
 
 $installedService = Get-Service `
     -Name "CareQueueApi" `
     -ErrorAction Stop
 
-Write-Host "CareQueue API service installed successfully."
+Write-Host "CareQFlow API service installed successfully."
 Write-Host "Service status: $($installedService.Status)"
 Write-Host "Service executable: $serviceExecutable"
 Write-Host "Service configuration: $serviceConfiguration"
@@ -87,7 +87,7 @@ if ($StartService) {
     & $serviceExecutable start
 
     if ($LASTEXITCODE -ne 0) {
-        throw "The CareQueue API service was installed but failed to start."
+        throw "The CareQFlow API service was installed but failed to start."
     }
 
     $installedService.Refresh()

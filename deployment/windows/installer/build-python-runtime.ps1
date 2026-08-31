@@ -296,7 +296,7 @@ Invoke-CheckedCommand `
             "import fastapi; " +
             "import pydantic; " +
             "import uvicorn; " +
-            "print('CareQueue private Python runtime validated.')"
+            "print('CareQFlow private Python runtime validated.')"
         )
     ) `
     -FailureMessage (
@@ -343,7 +343,7 @@ Set-Content `
     -Encoding ascii
 
 Write-Host ""
-Write-Host "CareQueue private Python runtime created successfully."
+Write-Host "CareQFlow private Python runtime created successfully."
 Write-Host "Runtime:  $resolvedOutputDirectory"
 Write-Host "Python:   $runtimeVersion"
 Write-Host "Manifest: $manifestPath"

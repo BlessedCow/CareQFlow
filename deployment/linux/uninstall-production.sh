@@ -14,12 +14,12 @@ fail() {
 
 require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
-        fail "CareQueue uninstall must be run as root."
+        fail "CareQFlow uninstall must be run as root."
     fi
 }
 
 stop_services() {
-    printf 'Stopping CareQueue services...\n'
+    printf 'Stopping CareQFlow services...\n'
 
     systemctl disable --now carequeue-backup.timer \
         2>/dev/null || true
@@ -32,7 +32,7 @@ stop_services() {
 }
 
 remove_systemd_units() {
-    printf 'Removing CareQueue systemd units...\n'
+    printf 'Removing CareQFlow systemd units...\n'
 
     rm -f \
         /etc/systemd/system/carequeue-api.service \
@@ -45,7 +45,7 @@ remove_systemd_units() {
 }
 
 remove_application_files() {
-    printf 'Removing CareQueue application files...\n'
+    printf 'Removing CareQFlow application files...\n'
 
     rm -rf "${INSTALL_DIRECTORY}"
 }
@@ -58,7 +58,7 @@ remove_local_hostname() {
     temporary_file="$(mktemp)"
 
     awk '
-        $0 !~ /# CareQueue$/ {
+        $0 !~ /# CareQFlow$/ {
             print
         }
     ' "${hosts_file}" > "${temporary_file}"
@@ -70,14 +70,14 @@ remove_local_hostname() {
 
 print_preserved_data() {
     printf '\n'
-    printf 'CareQueue application files and services were removed.\n'
+    printf 'CareQFlow application files and services were removed.\n'
     printf '\n'
     printf 'The following data was preserved intentionally:\n'
     printf '  Configuration: %s\n' "${CONFIG_DIRECTORY}"
     printf '  Runtime data:  %s\n' "${DATA_DIRECTORY}"
     printf '  Logs:          %s\n' "${LOG_DIRECTORY}"
     printf '\n'
-    printf 'A normal uninstall does not delete the CareQueue database or encryption keys.\n'
+    printf 'A normal uninstall does not delete the CareQFlow database or encryption keys.\n'
 }
 
 main() {

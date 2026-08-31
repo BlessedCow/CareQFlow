@@ -1,10 +1,10 @@
 # Audit Log
 
-CareQueue records selected security, governance, authorization, document, timeline, user-management, registered-option, PDF-intake, backup, and recovery activity in an application audit log.
+CareQFlow records selected security, governance, authorization, document, timeline, user-management, registered-option, PDF-intake, backup, and recovery activity in an application audit log.
 
 The audit log supports accountability, operational review, and investigation. It is application-managed evidence and should be used alongside operating-system logs, deployment records, organizational access records, and any external monitoring required by the deployment.
 
-CareQueue also maintains a tamper-evident cryptographic hash chain for current audit events and provides an Admin-only integrity verification action.
+CareQFlow also maintains a tamper-evident cryptographic hash chain for current audit events and provides an Admin-only integrity verification action.
 
 ## Access
 
@@ -74,7 +74,7 @@ invalid
 not_initialized
 ```
 
-Integrity verification is itself audited when CareQueue is able to append the verification event safely.
+Integrity verification is itself audited when CareQFlow is able to append the verification event safely.
 
 ## Event Structure
 
@@ -157,7 +157,7 @@ The recorded username remains available even when the user reference is no longe
 
 Current audit events are linked through cryptographic hashes.
 
-For each chained event, CareQueue:
+For each chained event, CareQFlow:
 
 1. Reads and validates the current audit-chain head state.
 2. Uses the prior event hash as the new event's `previous_hash`.
@@ -168,7 +168,7 @@ For each chained event, CareQueue:
 
 The first chained event uses the defined audit-chain genesis value as its previous hash.
 
-Before appending a new event, CareQueue checks that the stored chain-head state matches the current head event. If the chain state or head is inconsistent, the audit writer refuses to append the new event.
+Before appending a new event, CareQFlow checks that the stored chain-head state matches the current head event. If the chain state or head is inconsistent, the audit writer refuses to append the new event.
 
 The integrity verifier checks:
 
@@ -181,7 +181,7 @@ A failed verification identifies the first failed event when one can be determin
 
 ### Legacy Events
 
-Databases upgraded from an earlier CareQueue version may contain audit events created before cryptographic chaining was introduced.
+Databases upgraded from an earlier CareQFlow version may contain audit events created before cryptographic chaining was introduced.
 
 Those records can have:
 
@@ -199,7 +199,7 @@ Legacy events are not retroactively rewritten into the current cryptographic cha
 
 ## What Tamper-Evident Means
 
-The audit hash chain is designed to detect changes to chained audit records and chain state when CareQueue later verifies or appends to the chain.
+The audit hash chain is designed to detect changes to chained audit records and chain state when CareQFlow later verifies or appends to the chain.
 
 It does not make the database write-once or immune to a fully privileged attacker who can modify the application, database, secrets, backups, and host state together.
 
@@ -270,7 +270,7 @@ auth_event.create
 auth_document.create
 ```
 
-CareQueue escapes SQL wildcard characters before constructing the search pattern.
+CareQFlow escapes SQL wildcard characters before constructing the search pattern.
 
 ## Current Action Names
 
@@ -373,7 +373,7 @@ This list reflects the current application implementation.
 
 Audit metadata is serialized as JSON with sorted keys.
 
-When no metadata is supplied, CareQueue stores:
+When no metadata is supplied, CareQFlow stores:
 
 ```json
 {}
@@ -716,7 +716,7 @@ recovery.stage_failed
 recovery.cancel
 ```
 
-Recovery activation is performed through the separate recovery process. Application audit events cover the application-side staging, verification, and cancellation workflows implemented by CareQueue.
+Recovery activation is performed through the separate recovery process. Application audit events cover the application-side staging, verification, and cancellation workflows implemented by CareQFlow.
 
 ### Audit Integrity Verification
 
@@ -738,7 +738,7 @@ legacy_events
 failed_event_id
 ```
 
-If the audit chain is already damaged in a way that prevents the writer from safely appending a new event, CareQueue returns the verification result without forcing an additional audit write.
+If the audit chain is already damaged in a way that prevents the writer from safely appending a new event, CareQFlow returns the verification result without forcing an additional audit write.
 
 ## Prohibited Audit Content
 
@@ -918,7 +918,7 @@ audit_integrity
 
 ## Retention
 
-Audit events are stored in the CareQueue database.
+Audit events are stored in the CareQFlow database.
 
 They therefore follow the database's:
 
@@ -938,7 +938,7 @@ Organizations should define audit retention requirements based on applicable con
 
 ## Integrity Scope and Limitations
 
-CareQueue provides cryptographic chaining and an integrity-verification workflow for current chained audit events.
+CareQFlow provides cryptographic chaining and an integrity-verification workflow for current chained audit events.
 
 The audit system is not currently:
 

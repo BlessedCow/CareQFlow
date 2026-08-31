@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This page is a symptom-based index for common CareQueue problems.
+This page is a symptom-based index for common CareQFlow problems.
 
 Detailed procedures live in the documents that own each workflow. Use this page to identify the correct guide without duplicating complete recovery procedures in several places.
 
@@ -51,7 +51,7 @@ docs/deployment/windows.md
 docs/operations/upgrades.md
 ```
 
-The operation selection page appears only when CareQueue is already installed and the installer can detect the installed application files.
+The operation selection page appears only when CareQFlow is already installed and the installer can detect the installed application files.
 
 A clean machine or a machine after uninstall should show only the normal Install flow. After a successful install, running the installer again should show Upgrade, Repair, and Uninstall. Rollback appears only when an eligible failed-upgrade recovery record exists.
 
@@ -159,9 +159,9 @@ Initial Admin setup is available only while no users exist in the active product
 
 After any user exists, the bootstrap endpoint is disabled and the setup utility should report that setup is already complete.
 
-Packaged first-time setup sends credentials only to the loopback CareQueue API.
+Packaged first-time setup sends credentials only to the loopback CareQFlow API.
 
-If setup is unexpectedly reported as complete, confirm that CareQueue is using the intended production database before changing any database or encryption configuration.
+If setup is unexpectedly reported as complete, confirm that CareQFlow is using the intended production database before changing any database or encryption configuration.
 
 ## Governance Attestation Problems
 
@@ -202,9 +202,9 @@ If governance was accepted previously but is required again, check whether:
 - The previous attestation belongs to another environment or database.
 - The historical attestation predates document-revision tracking and therefore has no stored revision.
 
-The CareQueue application version, governance attestation version, and governance document revision are separate values.
+The CareQFlow application version, governance attestation version, and governance document revision are separate values.
 
-An ordinary CareQueue application-version increase does not by itself require re-attestation. A current attestation must match both the required attestation version and required document revision.
+An ordinary CareQFlow application-version increase does not by itself require re-attestation. A current attestation must match both the required attestation version and required document revision.
 
 Do not manually edit governance history to bypass the requirement.
 
@@ -212,7 +212,7 @@ Do not manually edit governance history to bypass the requirement.
 
 Symptoms:
 
-- CareQueue page does not load
+- CareQFlow page does not load
 - API service is stopped
 - Caddy service is stopped
 - Port `8000` is not listening
@@ -250,7 +250,7 @@ If direct API health works but HTTPS does not, focus on Caddy, hostname resoluti
 
 Symptoms:
 
-- `carequeue.local` does not resolve
+- `careqflow.local` does not resolve
 - Browser shows a certificate warning
 - Direct API health works but HTTPS fails
 - Caddy stops immediately
@@ -325,7 +325,7 @@ docs/administration/audit-log.md
 Check:
 
 - The account is active.
-- The authenticator is using the current CareQueue enrollment.
+- The authenticator is using the current CareQFlow enrollment.
 - The submitted code is the current 6-digit TOTP value.
 - The authenticator device clock is accurate.
 - The MFA challenge has not expired.
@@ -384,13 +384,13 @@ docs/administration/users-and-security.md
 docs/operations/health-checks.md
 ```
 
-CareQueue uses a server-enforced inactivity timeout with a 20-minute default.
+CareQFlow uses a server-enforced inactivity timeout with a 20-minute default.
 
 Authenticated activity can extend a valid session, but an expired session cannot be revived.
 
-CareQueue permits one active authenticated session per account. A new authenticated login revokes the previous active session.
+CareQFlow permits one active authenticated session per account. A new authenticated login revokes the previous active session.
 
-Logout and expiration information is synchronized across open CareQueue tabs when supported by the browser.
+Logout and expiration information is synchronized across open CareQFlow tabs when supported by the browser.
 
 Session renewal and session-activity requests require valid CSRF protection.
 
@@ -414,7 +414,7 @@ docs/operations/upgrades.md
 The production frontend should use same-origin requests:
 
 ```text
-https://carequeue.local/api/...
+https://careqflow.local/api/...
 ```
 
 Development API overrides should remain in development-only frontend configuration and must not be included in a production build.
@@ -506,7 +506,7 @@ docs/workflows/backup-and-recovery.md
 
 Recovery activation is an offline administrative operation.
 
-Stop the CareQueue HTTPS service first, then stop the API service before activation.
+Stop the CareQFlow HTTPS service first, then stop the API service before activation.
 
 Windows services:
 
@@ -554,13 +554,13 @@ docs/operations/health-checks.md
 
 If an upgrade fails while the API is starting, review the service and installer logs before changing database state.
 
-CareQueue applies registered schema migrations during database initialization. Successfully applied migrations are recorded in `schema_migrations`; previously applied migrations are skipped.
+CareQFlow applies registered schema migrations during database initialization. Successfully applied migrations are recorded in `schema_migrations`; previously applied migrations are skipped.
 
 Do not delete migration records or manually alter the production schema to force startup.
 
 If an upgrade cannot be completed safely, preserve the current database, verified pre-upgrade backup, encryption keys, installer logs, and application release artifacts before beginning recovery.
 
-A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older application release. Use the supported failed-upgrade rollback workflow when eligible because it restores the preserved previous application together with the verified pre-upgrade database backup.
+A database migrated by a newer CareQFlow release is not automatically guaranteed to be compatible with an older application release. Use the supported failed-upgrade rollback workflow when eligible because it restores the preserved previous application together with the verified pre-upgrade database backup.
 
 ### Rollback option is unavailable
 
@@ -602,7 +602,7 @@ Do not manually mark the recovery record complete.
 
 ### Windows
 
-A normal packaged uninstall removes application files and CareQueue services while preserving runtime data under:
+A normal packaged uninstall removes application files and CareQFlow services while preserving runtime data under:
 
 ```text
 C:\ProgramData\CareQueue
@@ -610,7 +610,7 @@ C:\ProgramData\CareQueue
 
 ### Linux
 
-A normal packaged uninstall removes `/opt/carequeue` and CareQueue systemd units while preserving:
+A normal packaged uninstall removes `/opt/carequeue` and CareQFlow systemd units while preserving:
 
 ```text
 /etc/carequeue
@@ -879,7 +879,7 @@ Use synthetic data whenever possible.
 
 Include:
 
-- CareQueue release version
+- CareQFlow release version
 - Source commit or tag when known
 - Operating system and version
 - Development or packaged environment

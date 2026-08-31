@@ -71,13 +71,13 @@ def test_production_disables_api_documentation(
     )
     monkeypatch.setenv(
         "AUTHSTATUS_CORS_ORIGINS",
-        '["https://carequeue.local"]',
+        '["https://careqflow.local"]',
     )
 
     try:
         with TestClient(
             create_app(),
-            base_url="https://carequeue.local",
+            base_url="https://careqflow.local",
         ) as client:
             assert client.get("/docs").status_code == 404
             assert client.get("/redoc").status_code == 404

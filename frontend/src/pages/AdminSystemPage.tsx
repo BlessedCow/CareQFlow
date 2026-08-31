@@ -570,7 +570,7 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                   darkMode ? "text-gray-400" : "text-gray-600"
                 )}
               >
-                CareQueue API process status
+                CareQFlow API process status
               </p>
             </div>
           </div>
@@ -972,7 +972,7 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                   darkMode ? "text-gray-500" : "text-gray-500"
                 )}
               >
-                CareQueue version at attestation
+                CareQFlow version at attestation
               </dt>
 
               <dd className="mt-1">
@@ -1034,7 +1034,7 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                   <th className="px-3 py-3 font-medium">Accepted by</th>
                   <th className="px-3 py-3 font-medium">Accepted</th>
                   <th className="px-3 py-3 font-medium">
-                    CareQueue version at attestation
+                    CareQFlow version at attestation
                   </th>
                 </tr>
               </thead>
@@ -1815,7 +1815,7 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                 darkMode ? "text-gray-300" : "text-gray-700"
               )}
             >
-              CareQueue will decrypt and validate this restore point into a
+              CareQFlow will decrypt and validate this restore point into a
               separate staged database:
             </p>
 

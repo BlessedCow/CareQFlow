@@ -102,7 +102,7 @@ if (
     )
 ) {
     throw (
-        "The CareQueue Caddy WinSW executable was not found at: " +
+        "The CareQFlow HTTPS WinSW executable was not found at: " +
         $serviceExecutable
     )
 }
@@ -142,8 +142,8 @@ $apiService = Get-Service `
 
 if (-not $apiService) {
     throw (
-        "The CareQueue API service must be installed before the " +
-        "CareQueue Caddy service."
+        "The CareQFlow API service must be installed before the " +
+        "CareQFlow HTTPS service."
     )
 }
 
@@ -153,7 +153,7 @@ $existingService = Get-Service `
 
 if ($existingService) {
     throw (
-        "The CareQueue Caddy service is already installed. " +
+        "The CareQFlow HTTPS service is already installed. " +
         "Remove it before reinstalling."
     )
 }
@@ -198,14 +198,14 @@ Copy-Item `
 & $serviceExecutable install
 
 if ($LASTEXITCODE -ne 0) {
-    throw "WinSW failed to install the CareQueue Caddy service."
+    throw "WinSW failed to install the CareQFlow HTTPS service."
 }
 
 $installedService = Get-Service `
     -Name "CareQueueCaddy" `
     -ErrorAction Stop
 
-Write-Host "CareQueue Caddy service installed successfully."
+Write-Host "CareQFlow HTTPS service installed successfully."
 Write-Host "Service status: $($installedService.Status)"
 Write-Host "Service executable: $serviceExecutable"
 Write-Host "Service configuration: $serviceConfiguration"
@@ -216,7 +216,7 @@ if ($StartService) {
 
     if ($LASTEXITCODE -ne 0) {
         throw (
-            "The CareQueue Caddy service was installed but " +
+            "The CareQFlow HTTPS service was installed but " +
             "failed to start."
         )
     }

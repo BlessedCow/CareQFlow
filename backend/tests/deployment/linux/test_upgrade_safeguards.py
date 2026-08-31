@@ -131,7 +131,7 @@ def test_linux_upgrade_rejects_same_version_and_downgrade():
     )
 
     assert "Use repair instead of upgrade." in function
-    assert "CareQueue downgrade refused:" in function
+    assert "CareQFlow downgrade refused:" in function
     assert "compare_versions" in function
 
 
@@ -143,7 +143,7 @@ def test_linux_upgrade_allows_legacy_install_without_version_metadata():
         "validate_upgrade_version",
     )
 
-    assert "Installed CareQueue version metadata is unavailable." in function
+    assert "Installed CareQFlow version metadata is unavailable." in function
     assert "Continuing legacy upgrade validation." in function
 
 
@@ -182,7 +182,7 @@ def test_linux_upgrade_backup_failure_aborts_before_installation():
 
     assert "systemctl start carequeue-backup.service" in backup_function
     assert "Pre-upgrade backup creation or verification failed." in backup_function
-    assert "The CareQueue application has not been replaced." in backup_function
+    assert "The CareQFlow application has not been replaced." in backup_function
 
     main_function = _shell_function(
         content,
@@ -371,7 +371,7 @@ def test_linux_rollback_resolves_latest_failed_upgrade_record():
     assert "-name 'upgrade-*.env'" in function
     assert '"CAREQUEUE_UPGRADE_STATUS"' in function
     assert 'if [[ "${record_status}" == "failed" ]]' in function
-    assert "No failed CareQueue upgrade recovery record was found." in function
+    assert "No failed CareQFlow upgrade recovery record was found." in function
 
 
 def test_linux_rollback_loads_recovery_metadata_as_data():
@@ -426,7 +426,7 @@ def test_linux_rollback_does_not_claim_database_activation():
 
     assert "The active database has not been replaced." in function
     assert (
-        "Complete recovery activation using the staged CareQueue recovery workflow."
+        "Complete recovery activation using the staged CareQFlow recovery workflow."
         in function
     )
 
@@ -531,7 +531,7 @@ def test_linux_rollback_keeps_api_stopped_when_activation_fails():
         "activate_failed_upgrade_rollback",
     )
 
-    assert "CareQueue API remains stopped for safety." in function
+    assert "CareQFlow API remains stopped for safety." in function
     assert (
         "Review the recovery output before attempting another recovery operation."
         in function
@@ -1057,7 +1057,7 @@ def test_linux_rollback_copy_failures_restore_failed_application():
     assert function.count("restore_failed_application_after_swap_failure") >= 3
 
     assert (
-        "The failed application was restored and CareQueue services remain stopped."
+        "The failed application was restored and CareQFlow services remain stopped."
         in function
     )
 
@@ -1092,7 +1092,7 @@ def test_linux_rollback_does_not_continue_after_application_swap_failure():
         "replace_failed_application_with_rollback_payload",
     )
 
-    assert "CareQueue services remain stopped." in function
+    assert "CareQFlow services remain stopped." in function
     assert "fail \\" in function
 
 
@@ -1116,7 +1116,7 @@ def test_linux_failed_application_restore_keeps_services_stopped():
         "restore_failed_application_after_swap_failure",
     )
 
-    assert "CareQueue services remain stopped pending administrator review." in function
+    assert "CareQFlow services remain stopped pending administrator review." in function
     assert "systemctl start carequeue-api.service" not in function
     assert "systemctl start carequeue-caddy.service" not in function
 
@@ -1212,7 +1212,7 @@ def test_linux_rollback_health_uses_recorded_application_origin():
     )
 
     assert '"CAREQUEUE_APPLICATION_ORIGIN"' in function
-    assert 'application_origin="https://carequeue.local"' in function
+    assert 'application_origin="https://careqflow.local"' in function
 
 
 def test_linux_rollback_health_validation_precedes_completion():
@@ -1293,3 +1293,43 @@ def test_linux_rollback_service_validation_precedes_health_check():
     )
 
     assert service_index < health_index < completed_index
+
+
+def test_linux_hostname_setup_uses_careqflow_local():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "configure_local_hostname",
+    )
+
+    assert "careqflow\\.local" in function
+    assert "127.0.0.1 careqflow.local # CareQFlow" in function
+
+
+def test_linux_hostname_setup_removes_legacy_managed_carequeue_entry():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "configure_local_hostname",
+    )
+
+    assert "legacy_managed_pattern" in function
+    assert "carequeue\\.local" in function
+    assert "(CareQueue|CareQFlow)" in function
+    assert "sed" in function
+    assert "Removing legacy CareQueue local hostname entry" in function
+
+
+def test_linux_hostname_migration_keeps_legacy_match_narrow():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "configure_local_hostname",
+    )
+
+    assert "127\\.0\\.0\\.1" in function
+    assert "carequeue\\.local" in function
+    assert "#[[:space:]]*(CareQueue|CareQFlow)" in function

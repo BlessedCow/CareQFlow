@@ -46,7 +46,7 @@ EXIT_CANCELED = 2
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Activate a staged CareQueue database recovery while "
+            "Activate a staged CareQFlow database recovery while "
             "the application service is stopped."
         )
     )
@@ -87,13 +87,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--api-host",
         default="127.0.0.1",
-        help="CareQueue API host used for the offline socket check.",
+        help="CareQFlow API host used for the offline socket check.",
     )
     parser.add_argument(
         "--api-port",
         type=int,
         default=8000,
-        help="CareQueue API port that must not be accepting connections.",
+        help="CareQFlow API port that must not be accepting connections.",
     )
 
     return parser.parse_args()
@@ -171,7 +171,7 @@ def main() -> int:
     print(f"Safety backup:     {result['safety_backup']}")
     print()
     print(
-        "CareQueue remains stopped. Start the service only after "
+        "CareQFlow remains stopped. Start the service only after "
         "reviewing the activation result."
     )
 

@@ -23,7 +23,7 @@ $outputDirectory = Join-Path `
     $buildRoot `
     "installer"
 
-$packageName = "CareQueue-Linux-Setup-$Version.tar.gz"
+$packageName = "CareQFlow-Linux-Setup-$Version.tar.gz"
 
 $packagePath = Join-Path `
     $outputDirectory `
@@ -52,7 +52,7 @@ $requiredPaths = @(
     "deployment\linux\systemd\carequeue-backup.timer"
 )
 
-Write-Host "Validating CareQueue Linux payload sources..."
+Write-Host "Validating CareQFlow Linux payload sources..."
 
 foreach ($relativePath in $requiredPaths) {
     $fullPath = Join-Path `
@@ -181,7 +181,7 @@ Copy-Item `
     -Recurse `
     -Force
 
-Write-Host "Copying CareQueue licensing files..."
+Write-Host "Copying CareQFlow licensing files..."
 
 Copy-Item `
     -LiteralPath (
@@ -198,7 +198,7 @@ Copy-Item `
     -Recurse `
     -Force
 
-Write-Host "Writing CareQueue release metadata..."
+Write-Host "Writing CareQFlow release metadata..."
 
 $releaseMetadataPath = Join-Path `
     $stagingDirectory `
@@ -294,7 +294,7 @@ Set-Content `
     -Encoding ascii
 
 Write-Host ""
-Write-Host "CareQueue Linux installer package created successfully."
+Write-Host "CareQFlow Linux installer package created successfully."
 Write-Host "Package:  $($package.FullName)"
 Write-Host "Size:     $($package.Length) bytes"
 Write-Host "SHA256:   $($hash.Hash)"

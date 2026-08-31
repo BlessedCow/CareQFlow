@@ -4,7 +4,7 @@ param(
 
     [string]$InstallerPath,
 
-    [string]$ApplicationUrl = "https://carequeue.local",
+    [string]$ApplicationUrl = "https://careqflow.local",
 
     [string]$ApiHealthUrl = "http://127.0.0.1:8000/api/health",
 
@@ -114,7 +114,7 @@ if (-not $PayloadDirectory) {
 if (-not $InstallerPath) {
     $InstallerPath = Join-Path `
         $repositoryRoot `
-        "build\windows\installer\CareQueue-Setup-0.5.0.exe"
+        "build\windows\installer\CareQFlow-Setup-0.5.0.exe"
 }
 
 $resolvedPayloadDirectory = (

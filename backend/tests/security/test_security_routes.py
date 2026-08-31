@@ -449,7 +449,7 @@ def test_user_can_start_mfa_enrollment(client):
 
     assert data["secret"]
     assert data["provisioning_uri"].startswith("otpauth://totp/")
-    assert "CareQueue" in data["provisioning_uri"]
+    assert "CareQFlow" in data["provisioning_uri"]
 
     with get_conn() as conn:
         row = conn.execute(

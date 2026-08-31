@@ -1,6 +1,6 @@
 # Local Development
 
-This guide covers setting up and running CareQueue locally for development and testing.
+This guide covers setting up and running CareQFlow locally for development and testing.
 
 Development is separate from packaged Windows and Linux deployment. Use this guide when working on source code, running tests, or testing the application with the backend and frontend development servers.
 
@@ -15,7 +15,7 @@ For backup and restore procedures, see [Backup and Recovery](../workflows/backup
 
 ## Development Stack
 
-CareQueue development uses:
+CareQFlow development uses:
 
 - Python and FastAPI for the backend
 - React, TypeScript, Vite, and Tailwind for the frontend
@@ -43,7 +43,7 @@ FastAPI
 SQLite or SQLCipher database
 ```
 
-Packaged production deployment uses a different shape: operating-system services, packaged runtime dependencies, Caddy, and `https://carequeue.local`. Do not use the development server setup as proof that a packaged Windows or Linux release works.
+Packaged production deployment uses a different shape: operating-system services, packaged runtime dependencies, Caddy, and `https://careqflow.local`. Do not use the development server setup as proof that a packaged Windows or Linux release works.
 
 ## Prerequisites
 
@@ -76,7 +76,7 @@ A clean checkout should not contain environment files, local databases, backups,
 ## Repository Layout
 
 ```text
-CareQueue/
+CareQFlow/
 ├── backend/
 │   ├── authstatus_api/
 │   ├── scripts/
@@ -181,7 +181,7 @@ Do not use production keys or real patient data in development.
 
 ## Required Development Keys
 
-CareQueue uses three separate keys:
+CareQFlow uses three separate keys:
 
 ```text
 AUTHSTATUS_ENCRYPTION_KEY
@@ -321,7 +321,7 @@ Do not commit `node_modules`.
 
 ## Create the First Development User
 
-CareQueue has no public registration.
+CareQFlow has no public registration.
 
 From the repository root with the backend environment active:
 
@@ -363,7 +363,7 @@ Deleting or changing the local database may remove development accounts.
 
 ## Seed Synthetic Data
 
-CareQueue includes:
+CareQFlow includes:
 
 ```text
 backend/scripts/seed_dev_auths.py
@@ -512,10 +512,10 @@ Compile the installer:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQueue `0.5.0`, run:
+For CareQFlow `0.5.0`, run:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.5.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.5.0.exe
 ```
 
 Validate the package:
@@ -538,10 +538,10 @@ Build the Linux release archive:
 .\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
 ```
 
-For CareQueue `0.5.0`, the resulting archive is:
+For CareQFlow `0.5.0`, the resulting archive is:
 
 ```text
-build\linux\installer\CareQueue-Linux-Setup-0.5.0.tar.gz
+build\linux\installer\CareQFlow-Linux-Setup-0.5.0.tar.gz
 ```
 
 Local package creation is not sufficient release validation. Test the exact release artifact on clean supported virtual machines before publishing it.
@@ -588,9 +588,9 @@ Replace `0.5.0` with the intended application release version when preparing a l
 
 The helper updates controlled backend and deployment version declarations without blindly replacing matching strings in tests, dependency versions, documentation examples, or historical governance fixtures.
 
-The governance attestation version and governance document revision are independent of the CareQueue application version. Do not change either value only because the application release number changes.
+The governance attestation version and governance document revision are independent of the CareQFlow application version. Do not change either value only because the application release number changes.
 
-Application release licensing is also version-sensitive. CareQueue `0.4.x` and earlier releases retain their historical MIT terms, while CareQueue `0.5.0` and later versions expressly released under the current licensing model use Business Source License 1.1 until the applicable Change Date.
+Application release licensing is also version-sensitive. CareQueue `0.4.x` and earlier releases retain their historical MIT terms, while CareQFlow `0.5.0` and later versions expressly released under the current licensing model use Business Source License 1.1 until the applicable Change Date.
 
 Before publishing a release, review:
 
@@ -661,7 +661,7 @@ AUTHSTATUS_SESSION_INACTIVITY_MINUTES=20
 
 Supported values range from 5 to 480 minutes.
 
-CareQueue also uses a separate remembered-device cookie for optional MFA trust:
+CareQFlow also uses a separate remembered-device cookie for optional MFA trust:
 
 ```env
 AUTHSTATUS_TRUSTED_DEVICE_COOKIE_NAME=carequeue_trusted_device

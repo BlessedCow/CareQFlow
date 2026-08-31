@@ -31,7 +31,7 @@ $existingService = Get-Service `
     -ErrorAction SilentlyContinue
 
 if (-not $existingService) {
-    Write-Host "CareQueue API service is not installed."
+    Write-Host "CareQFlow API service is not installed."
     exit 0
 }
 
@@ -39,14 +39,14 @@ if ($existingService.Status -ne "Stopped") {
     & $serviceExecutable stop
 
     if ($LASTEXITCODE -ne 0) {
-        throw "WinSW failed to stop the CareQueue API service."
+        throw "WinSW failed to stop the CareQFlow API service."
     }
 }
 
 & $serviceExecutable uninstall
 
 if ($LASTEXITCODE -ne 0) {
-    throw "WinSW failed to uninstall the CareQueue API service."
+    throw "WinSW failed to uninstall the CareQFlow API service."
 }
 
-Write-Host "CareQueue API service removed successfully."
+Write-Host "CareQFlow API service removed successfully."

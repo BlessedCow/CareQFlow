@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 if ($HostAddress -notin @("127.0.0.1", "::1", "localhost")) {
     throw (
-        "CareQueue production API must bind only to loopback. " +
+        "CareQFlow production API must bind only to loopback. " +
         "Unsupported host address: $HostAddress"
     )
 }
@@ -44,17 +44,17 @@ elseif (
 }
 else {
     throw (
-        "CareQueue Python executable was not found. Checked: " +
+        "CareQFlow Python executable was not found. Checked: " +
         "$privatePythonExecutable and $legacyPythonExecutable"
     )
 }
 
 if (-not (Test-Path -LiteralPath $backendDirectory -PathType Container)) {
-    throw "CareQueue backend directory was not found at: $backendDirectory"
+    throw "CareQFlow backend directory was not found at: $backendDirectory"
 }
 
 if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
-    throw "CareQueue environment file was not found at: $EnvironmentFile"
+    throw "CareQFlow environment file was not found at: $EnvironmentFile"
 }
 
 Get-Content -LiteralPath $EnvironmentFile | ForEach-Object {
@@ -104,7 +104,7 @@ try {
         --no-access-log
 
     if ($LASTEXITCODE -ne 0) {
-        throw "CareQueue API exited with code $LASTEXITCODE."
+        throw "CareQFlow API exited with code $LASTEXITCODE."
     }
 }
 finally {

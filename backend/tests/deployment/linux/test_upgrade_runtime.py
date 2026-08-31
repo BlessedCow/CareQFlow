@@ -818,7 +818,7 @@ exit 0
 
     install_state = config_directory / "install-state.env"
     install_state.write_text(
-        "CAREQUEUE_APPLICATION_ORIGIN=https://carequeue.local\n",
+        "CAREQUEUE_APPLICATION_ORIGIN=https://careqflow.local\n",
         encoding="utf-8",
     )
 
@@ -2445,7 +2445,7 @@ def test_post_rollback_health_failure_does_not_mark_rollback_completed(
     install_state.write_text(
         "\n".join(
             [
-                "CAREQUEUE_APPLICATION_ORIGIN=https://carequeue.local",
+                "CAREQUEUE_APPLICATION_ORIGIN=https://careqflow.local",
                 "",
             ]
         ),

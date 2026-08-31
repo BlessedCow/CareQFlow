@@ -14,8 +14,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 sys.path.insert(0, str(BACKEND_ROOT))
 
 os.environ.setdefault(
-    "AUTHSTATUS_RESTORE_DIRECTORY",
-    str(PROJECT_ROOT / "backend" / "restores")
+    "AUTHSTATUS_RESTORE_DIRECTORY", str(PROJECT_ROOT / "backend" / "restores")
 )
 
 from authstatus_api.backups.service import (  # noqa: E402
@@ -27,7 +26,7 @@ from authstatus_api.backups.service import (  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Restore an encrypted CareQueue database backup to a safe restore file."
+        description="Restore an encrypted CareQFlow database backup to a safe restore file."
     )
     parser.add_argument(
         "backup_path",

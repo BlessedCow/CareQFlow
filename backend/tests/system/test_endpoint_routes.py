@@ -124,7 +124,7 @@ def test_admin_can_get_system_info(client):
 
     assert response.status_code == 200
     assert response.json() == {
-        "app": "AuthStatus API",
+        "app": "CareQFlow API",
         "version": get_settings().app_version,
     }
 

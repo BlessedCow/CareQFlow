@@ -129,7 +129,7 @@ export function GovernanceAttestationPage({
       >
         <div className="mb-8 flex items-center justify-center">
           <Activity className="mr-2 h-7 w-7 text-blue-500" />
-          <span className="text-2xl font-bold tracking-wide">CareQueue</span>
+          <span className="text-2xl font-bold tracking-wide">CareQFlow</span>
         </div>
 
         <div className="mb-8 text-center">
@@ -145,7 +145,7 @@ export function GovernanceAttestationPage({
               darkMode ? "text-gray-400" : "text-gray-600"
             )}
           >
-            CareQueue may be used to process protected health information. An
+            CareQFlow may be used to process protected health information. An
             administrator must confirm the organization&apos;s governance
             responsibilities before normal application access is enabled.
           </p>
@@ -179,7 +179,7 @@ export function GovernanceAttestationPage({
             )}
           >
             An administrator must complete the required governance attestation
-            before you can access CareQueue.
+            before you can access CareQFlow.
           </div>
         )}
 
@@ -243,7 +243,7 @@ export function GovernanceAttestationPage({
                       )}
                     >
                       The organization operates and administers its own
-                      CareQueue deployment.
+                      CareQFlow deployment.
                     </span>
                   </span>
                 </label>
@@ -276,7 +276,7 @@ export function GovernanceAttestationPage({
                         darkMode ? "text-gray-400" : "text-gray-600"
                       )}
                     >
-                      CareQueue is operated or administered on behalf of the
+                      CareQFlow is operated or administered on behalf of the
                       organization.
                     </span>
                   </span>
@@ -310,7 +310,7 @@ export function GovernanceAttestationPage({
                 <span>
                   I confirm that the organization is responsible for maintaining
                   the privacy and security safeguards required for its use of
-                  CareQueue and any PHI or ePHI processed through it.
+                  CareQFlow and any PHI or ePHI processed through it.
                 </span>
               </label>
 
@@ -344,7 +344,7 @@ export function GovernanceAttestationPage({
                 />
 
                 <span>
-                  I confirm that CareQueue access will be limited to authorized
+                  I confirm that CareQFlow access will be limited to authorized
                   users with individual accounts and appropriate access levels.
                 </span>
               </label>

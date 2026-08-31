@@ -163,7 +163,7 @@ def verify_managed_service_stopped(
         subprocess.SubprocessError,
     ) as exc:
         raise RecoveryActivationError(
-            "Unable to verify the managed CareQueue service status."
+            "Unable to verify the managed CareQFlow service status."
         ) from exc
 
     combined_output = "\n".join(
@@ -178,18 +178,18 @@ def verify_managed_service_stopped(
     if service_manager == "windows":
         if result.returncode != 0:
             raise RecoveryActivationError(
-                "Unable to verify the managed CareQueue service status."
+                "Unable to verify the managed CareQFlow service status."
             )
 
         if "state" not in combined_output:
             raise RecoveryActivationError(
-                "Unable to verify the managed CareQueue service status."
+                "Unable to verify the managed CareQFlow service status."
             )
 
         if "stopped" not in combined_output:
             raise RecoveryActivationError(
                 "Recovery activation refused: the managed "
-                "CareQueue service is not stopped."
+                "CareQFlow service is not stopped."
             )
 
         return
@@ -205,11 +205,11 @@ def verify_managed_service_stopped(
 
     if "unknown" in combined_output or "not-found" in combined_output:
         raise RecoveryActivationError(
-            "Unable to verify the managed CareQueue service status."
+            "Unable to verify the managed CareQFlow service status."
         )
 
     raise RecoveryActivationError(
-        "Recovery activation refused: the managed " "CareQueue service is not stopped."
+        "Recovery activation refused: the managed " "CareQFlow service is not stopped."
     )
 
 
@@ -262,7 +262,7 @@ def verify_api_port_available(
             ) from exc
 
         raise RecoveryActivationError(
-            "Unable to determine whether the CareQueue API " "port is available."
+            "Unable to determine whether the CareQFlow API " "port is available."
         ) from exc
 
 
@@ -425,7 +425,7 @@ def format_recovery_activation_plan(
 
     return "\n".join(
         (
-            "CareQueue Database Recovery Activation Plan",
+            "CareQFlow Database Recovery Activation Plan",
             "",
             f"Active database:  {plan['active_database']}",
             f"Staged database:  {plan['staged_database']}",
@@ -486,7 +486,7 @@ def validate_active_database() -> None:
         if missing_tables:
             raise RecoveryActivationError(
                 "The activated database is missing required "
-                f"CareQueue tables: {missing_tables}"
+                f"CareQFlow tables: {missing_tables}"
             )
     except RecoveryActivationError:
         raise

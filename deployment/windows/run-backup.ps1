@@ -12,15 +12,15 @@ $pythonExecutable = Join-Path $backendDirectory ".venv\Scripts\python.exe"
 $backupScript = Join-Path $backendDirectory "scripts\create_encrypted_backup.py"
 
 if (-not (Test-Path -LiteralPath $pythonExecutable -PathType Leaf)) {
-    throw "CareQueue Python executable was not found at: $pythonExecutable"
+    throw "CareQFlow Python executable was not found at: $pythonExecutable"
 }
 
 if (-not (Test-Path -LiteralPath $backupScript -PathType Leaf)) {
-    throw "CareQueue backup script was not found at: $backupScript"
+    throw "CareQFlow backup script was not found at: $backupScript"
 }
 
 if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
-    throw "CareQueue environment file was not found at: $EnvironmentFile"
+    throw "CareQFlow environment file was not found at: $EnvironmentFile"
 }
 
 if (-not (Test-Path -LiteralPath $BackupDirectory -PathType Container)) {
@@ -71,7 +71,7 @@ try {
         --backup-directory $BackupDirectory
 
     if ($LASTEXITCODE -ne 0) {
-        throw "CareQueue backup creation failed with exit code $LASTEXITCODE."
+        throw "CareQFlow backup creation failed with exit code $LASTEXITCODE."
     }
 }
 finally {

@@ -1,6 +1,6 @@
 # Registered Options
 
-CareQueue uses registered options to keep frequently reused workflow values consistent.
+CareQFlow uses registered options to keep frequently reused workflow values consistent.
 
 Current categories:
 
@@ -107,7 +107,7 @@ Do not store:
 
 ## Built-In `Other`
 
-CareQueue initializes one protected option in every category:
+CareQFlow initializes one protected option in every category:
 
 ```text
 Other
@@ -164,7 +164,7 @@ category
 normalized_name
 ```
 
-When an option is created, CareQueue:
+When an option is created, CareQFlow:
 
 - Trims leading and trailing whitespace
 - Collapses repeated internal whitespace
@@ -392,7 +392,7 @@ Do not depend on insertion order.
 
 PDF intake compares extracted facility and insurance values with registered options.
 
-When a match exists, CareQueue applies the registered value.
+When a match exists, CareQFlow applies the registered value.
 
 When no match exists, the review workflow warns that the value is not registered.
 
@@ -417,7 +417,7 @@ Example Health Plan, Inc.
 EHP
 ```
 
-CareQueue does not currently provide aliases.
+CareQFlow does not currently provide aliases.
 
 Before adding another option, confirm whether the existing naming standard should be used instead.
 
@@ -464,17 +464,17 @@ category
 
 The option name is not intentionally included in audit metadata.
 
-These events participate in CareQueue's normal application audit pipeline and tamper-evident audit chain.
+These events participate in CareQFlow's normal application audit pipeline and tamper-evident audit chain.
 
 See [Audit Log](audit-log.md) for audit integrity behavior, review guidance, and limitations.
 
 ## Session and Governance Behavior
 
-Registered-option management follows the same session and governance protections as other normal CareQueue workflows.
+Registered-option management follows the same session and governance protections as other normal CareQFlow workflows.
 
-CareQueue uses a server-enforced inactivity timeout for authenticated sessions. Normal authenticated activity can extend a valid session, but an expired session cannot be revived.
+CareQFlow uses a server-enforced inactivity timeout for authenticated sessions. Normal authenticated activity can extend a valid session, but an expired session cannot be revived.
 
-CareQueue also permits one active authenticated session per account. If the same account signs in again elsewhere, the previous active session is revoked.
+CareQFlow also permits one active authenticated session per account. If the same account signs in again elsewhere, the previous active session is revoked.
 
 Remembered-device MFA is separate from the authenticated session. It can affect whether TOTP is required on a later login, but it does not extend the lifetime of a registered-options management session.
 

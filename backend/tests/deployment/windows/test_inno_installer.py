@@ -68,7 +68,7 @@ def test_inno_installer_has_rollback_ready_summary():
     assert "if OperationMode = 'Rollback' then" in content
     assert (
         "Setup is ready to roll back the most recent failed "
-        "CareQueue upgrade." in content
+        "CareQFlow upgrade." in content
     )
     assert (
         "The verified pre-upgrade application and database recovery "
@@ -86,7 +86,7 @@ def test_inno_installer_uses_rollback_ready_button():
     assert "WizardForm.NextButton.Caption := '&Rollback';" in content
     assert (
         "Click Rollback to recover from the most recent failed "
-        "CareQueue upgrade." in content
+        "CareQFlow upgrade." in content
     )
 
 

@@ -3,8 +3,8 @@
 	skip_install_trust
 }
 
-# Replace carequeue.example.com with the production hostname.
-carequeue.example.com {
+# Replace careqflow.example.com with the production hostname.
+careqflow.example.com {
 	encode zstd gzip
 
 	header {

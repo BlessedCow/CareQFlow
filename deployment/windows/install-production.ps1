@@ -791,7 +791,7 @@ try {
         -Recurse `
         -Force
 
-    Write-Host "Copying CareQueue licensing files..."
+    Write-Host "Copying CareQFlow licensing files..."
 
     Copy-Item `
         -LiteralPath (
@@ -952,7 +952,7 @@ try {
 
     if (
         -not $caddyConfiguration.Contains(
-            "carequeue.example.com"
+            "careqflow.example.com"
         )
     ) {
         throw (
@@ -964,7 +964,7 @@ try {
     $caddyHostname = $applicationUri.Authority
 
     $caddyConfiguration = $caddyConfiguration.Replace(
-        "carequeue.example.com",
+        "careqflow.example.com",
         $caddyHostname
     )
 
@@ -1116,11 +1116,11 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
     $caddyServiceWasStoppedForUpgrade = Stop-CareQueueService `
         -Name "CareQueueCaddy" `
-        -DisplayName "CareQueue HTTPS service"
+        -DisplayName "CareQFlow HTTPS service"
 
     $apiServiceWasStoppedForUpgrade = Stop-CareQueueService `
         -Name "CareQueueApi" `
-        -DisplayName "CareQueue API service"
+        -DisplayName "CareQFlow API service"
 
     Write-Host "Installing staged application files..."
 
@@ -1401,7 +1401,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
                 "import fastapi; " +
                 "import pydantic; " +
                 "import uvicorn; " +
-                "print('CareQueue private Python runtime validated.')"
+                "print('CareQFlow private Python runtime validated.')"
             )
         ) `
             -FailureMessage (
@@ -1544,18 +1544,18 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
             (
                 "import authstatus_api.main; " +
                 "import uvicorn; " +
-                "print('CareQueue production backend validated.')"
+                "print('CareQFlow production backend validated.')"
             )
         ) `
             -FailureMessage (
-            "The installed CareQueue backend could not be imported."
+            "The installed CareQFlow backend could not be imported."
         )
     }
     finally {
         Pop-Location
     }
 
-    Write-Host "Writing CareQueue installation state..."
+    Write-Host "Writing CareQFlow installation state..."
 
     $installationState = [ordered]@{
         schema_version     = 1
@@ -1581,7 +1581,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         -Force
 
     Write-Host (
-        "Installed CareQueue version metadata written: " +
+        "Installed CareQFlow version metadata written: " +
         $ReleaseVersion
     )
 
@@ -1654,13 +1654,13 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     if ($apiServiceWasStoppedForUpgrade) {
         Start-CareQueueService `
             -Name "CareQueueApi" `
-            -DisplayName "CareQueue API service"
+            -DisplayName "CareQFlow API service"
     }
 
     if ($caddyServiceWasStoppedForUpgrade) {
         Start-CareQueueService `
             -Name "CareQueueCaddy" `
-            -DisplayName "CareQueue HTTPS service"
+            -DisplayName "CareQFlow HTTPS service"
     }
 
     $serviceStatesRestored = $true
@@ -1668,7 +1668,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
 
     Write-Host ""
-    Write-Host "CareQueue production files installed successfully."
+    Write-Host "CareQFlow production files installed successfully."
     Write-Host "Application directory: $InstallDirectory"
     Write-Host "Runtime data directory: $DataDirectory"
     Write-Host "Environment file: $environmentFile"
@@ -1685,7 +1685,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     }
     else {
         Write-Host (
-            "No running CareQueue services required restoration."
+            "No running CareQFlow services required restoration."
         )
     }
 }
@@ -1695,11 +1695,11 @@ finally {
             try {
                 Start-CareQueueService `
                     -Name "CareQueueApi" `
-                    -DisplayName "CareQueue API service"
+                    -DisplayName "CareQFlow API service"
             }
             catch {
                 Write-Warning (
-                    "The CareQueue API service could not be " +
+                    "The CareQFlow API service could not be " +
                     "restored after the installation failure: " +
                     $_.Exception.Message
                 )
@@ -1710,11 +1710,11 @@ finally {
             try {
                 Start-CareQueueService `
                     -Name "CareQueueCaddy" `
-                    -DisplayName "CareQueue HTTPS service"
+                    -DisplayName "CareQFlow HTTPS service"
             }
             catch {
                 Write-Warning (
-                    "The CareQueue HTTPS service could not be " +
+                    "The CareQFlow HTTPS service could not be " +
                     "restored after the installation failure: " +
                     $_.Exception.Message
                 )

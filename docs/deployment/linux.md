@@ -1,10 +1,10 @@
 # Linux Deployment
 
-CareQueue includes a packaged Linux installation workflow for supported Debian-based systems.
+CareQFlow includes a packaged Linux installation workflow for supported Debian-based systems.
 
 The Linux release is distributed as a versioned tar archive containing the production backend, prebuilt frontend, Linux installer scripts, Caddy configuration, and systemd service definitions.
 
-CareQueue is intended for private or controlled deployment. This guide does not describe a general public internet hosting architecture, managed hosting service, or complete compliance program. Organizations remain responsible for their own security, privacy, legal, operational, and compliance requirements.
+CareQFlow is intended for private or controlled deployment. This guide does not describe a general public internet hosting architecture, managed hosting service, or complete compliance program. Organizations remain responsible for their own security, privacy, legal, operational, and compliance requirements.
 
 ## Current Status
 
@@ -28,7 +28,7 @@ deployment/linux/
 
 Implemented Linux deployment capabilities include:
 
-- Versioned `CareQueue-Linux-Setup-<version>.tar.gz` release packages
+- Versioned `CareQFlow-Linux-Setup-<version>.tar.gz` release packages
 - Install, upgrade, repair, rollback, and uninstall modes
 - Ubuntu and Debian distribution validation
 - Dedicated `carequeue` system account and group
@@ -44,12 +44,12 @@ Implemented Linux deployment capabilities include:
 - Rollback of the previous application, database, systemd service definitions, and installed-version metadata
 - Trusted production data-root migration for existing configuration
 - SQLCipher production database configuration
-- Hardened CareQueue API systemd service
-- Hardened CareQueue Caddy systemd service
+- Hardened CareQFlow API systemd service
+- Hardened CareQFlow Caddy systemd service
 - Encrypted backup service and daily backup timer
 - Automatic Caddy installation when it is not already available
 - Same-origin HTTPS through Caddy
-- Local `carequeue.local` hostname configuration
+- Local `careqflow.local` hostname configuration
 - Caddy internal certificate-authority trust setup on the Linux host
 - Automatic service enablement and startup
 - HTTPS frontend, liveness, and readiness validation after installation
@@ -61,7 +61,7 @@ The Linux installer is intended for an administrator comfortable with Linux, sys
 Current limitations include:
 
 - Linux support is currently limited to Ubuntu and Debian.
-- The packaged Caddy configuration is designed around the private `carequeue.local` deployment model.
+- The packaged Caddy configuration is designed around the private `careqflow.local` deployment model.
 - Trusting the Caddy internal CA on the server does not automatically distribute trust to other client devices.
 - Public DNS and publicly trusted certificate deployment require separate planning and configuration.
 - Production disaster-recovery activation still requires operator review and validation.
@@ -76,14 +76,14 @@ Browser
   |
   | HTTPS
   v
-CareQueue Caddy service
+CareQFlow Caddy service
   |\
   | \__ Serves /opt/carequeue/frontend/dist
   |
   \____ Proxies /api to 127.0.0.1:8000
            |
            v
-       CareQueue API
+       CareQFlow API
            |
            v
    SQLCipher database
@@ -154,7 +154,7 @@ The installer creates or reuses the dedicated system account and group:
 carequeue
 ```
 
-The service account is created without an interactive login shell and is used by the CareQueue API, Caddy, and backup services.
+The service account is created without an interactive login shell and is used by the CareQFlow API, Caddy, and backup services.
 
 Do not run the long-lived application services under an ordinary administrator account.
 
@@ -184,10 +184,10 @@ The package is written under:
 build/linux/installer/
 ```
 
-For CareQueue v0.5.0, the expected release filename is:
+For CareQFlow v0.5.0, the expected release filename is:
 
 ```text
-CareQueue-Linux-Setup-0.5.0.tar.gz
+CareQFlow-Linux-Setup-0.5.0.tar.gz
 ```
 
 The build script validates required payload sources, requires an existing production frontend build, stages the production files, normalizes Linux deployment text files to LF line endings, and creates the compressed tar archive.
@@ -201,7 +201,7 @@ For example:
 ```bash
 mkdir carequeue-installer
 
-tar -xzf CareQueue-Linux-Setup-0.5.0.tar.gz \
+tar -xzf CareQFlow-Linux-Setup-0.5.0.tar.gz \
   -C carequeue-installer
 
 cd carequeue-installer
@@ -213,7 +213,7 @@ Run the installer as root:
 sudo bash deployment/linux/installer/invoke-install.sh install
 ```
 
-The installer rejects `install` mode if an existing CareQueue installation is already detected. Use `upgrade` or `repair` for an existing installation.
+The installer rejects `install` mode if an existing CareQFlow installation is already detected. Use `upgrade` or `repair` for an existing installation.
 
 Installer logs are written under:
 
@@ -248,18 +248,18 @@ A new installation performs the following high-level sequence:
 6. Installs required operating-system packages.
 7. Creates or reuses the `carequeue` service account and group.
 8. Creates the application, data, configuration, and log directories.
-9. Installs the CareQueue backend, prebuilt frontend, and Linux deployment files.
+9. Installs the CareQFlow backend, prebuilt frontend, and Linux deployment files.
 10. Recreates the production Python virtual environment.
 11. Installs backend Python requirements.
 12. Validates that the backend imports successfully.
 13. Creates the production environment file on a new installation or preserves and migrates it on upgrade or repair.
-14. Installs CareQueue systemd units.
+14. Installs CareQFlow systemd units.
 15. Installs Caddy if needed.
-16. Disables the distribution's default Caddy service so CareQueue can use its dedicated Caddy unit.
-17. Installs and validates the CareQueue Caddy configuration.
-18. Ensures the local `carequeue.local` hosts entry exists.
-19. Enables and starts the CareQueue API, Caddy, and backup timer.
-20. Trusts the CareQueue Caddy internal root certificate on the Linux host.
+16. Disables the distribution's default Caddy service so CareQFlow can use its dedicated Caddy unit.
+17. Installs and validates the CareQFlow Caddy configuration.
+18. Ensures the local `careqflow.local` hosts entry exists.
+19. Enables and starts the CareQFlow API, Caddy, and backup timer.
+20. Trusts the CareQFlow Caddy internal root certificate on the Linux host.
 21. Validates the HTTPS frontend, liveness endpoint, and readiness endpoint.
 22. On a new installation, launches the interactive first-Admin setup utility.
 
@@ -270,7 +270,7 @@ If a required step fails, the installer stops with an error rather than continui
 The installer defaults to:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 The installer validates that `APPLICATION_ORIGIN` is an absolute HTTPS origin containing only a hostname and optional port.
@@ -278,12 +278,12 @@ The installer validates that `APPLICATION_ORIGIN` is an absolute HTTPS origin co
 The packaged `deployment/linux/Caddyfile` is currently configured specifically for:
 
 ```text
-carequeue.local
+careqflow.local
 ```
 
 and uses Caddy's internal certificate authority.
 
-Because the packaged Caddyfile and local hosts-entry management are currently centered on `carequeue.local`, use of a different application origin requires a reviewed Caddy and hostname configuration change. Do not assume that setting `APPLICATION_ORIGIN` alone completely reconfigures the packaged HTTPS deployment.
+Because the packaged Caddyfile and local hosts-entry management are currently centered on `careqflow.local`, use of a different application origin requires a reviewed Caddy and hostname configuration change. Do not assume that setting `APPLICATION_ORIGIN` alone completely reconfigures the packaged HTTPS deployment.
 
 ## Production Environment File
 
@@ -370,7 +370,7 @@ The installer installs SQLCipher development libraries and the application's Pyt
 
 Before using real sensitive data, validate that the deployed database is actually encrypted and cannot be read as ordinary plaintext SQLite.
 
-## CareQueue API Service
+## CareQFlow API Service
 
 The repository includes:
 
@@ -401,7 +401,7 @@ The service:
 - Uses a private temporary directory
 - Restricts home-directory visibility
 - Makes the general filesystem read-only
-- Allows writes only under the CareQueue runtime and log roots
+- Allows writes only under the CareQFlow runtime and log roots
 
 Check status:
 
@@ -417,7 +417,7 @@ sudo journalctl \
   --since today
 ```
 
-## CareQueue Caddy Service
+## CareQFlow Caddy Service
 
 The repository includes:
 
@@ -431,12 +431,12 @@ The installer installs it as:
 /etc/systemd/system/carequeue-caddy.service
 ```
 
-CareQueue uses this dedicated unit instead of the distribution's default `caddy.service`.
+CareQFlow uses this dedicated unit instead of the distribution's default `caddy.service`.
 
 The service:
 
 - Runs as `carequeue:carequeue`
-- Requires the CareQueue API service
+- Requires the CareQFlow API service
 - Uses Caddy data under `/var/lib/carequeue/caddy`
 - Loads `/etc/carequeue/Caddyfile`
 - Uses only the capability needed to bind low-numbered network ports
@@ -444,7 +444,7 @@ The service:
 - Uses a private temporary directory
 - Restricts home-directory visibility
 - Makes the general filesystem read-only
-- Allows writes to the CareQueue Caddy data directory
+- Allows writes to the CareQFlow Caddy data directory
 
 Check status:
 
@@ -476,7 +476,7 @@ The installer copies it to:
 
 The current configuration:
 
-- Serves `https://carequeue.local`
+- Serves `https://careqflow.local`
 - Uses `tls internal`
 - Enables `zstd` and `gzip`
 - Adds security response headers
@@ -485,27 +485,27 @@ The current configuration:
 - Serves the frontend from `/opt/carequeue/frontend/dist`
 - Uses `/index.html` as the SPA fallback
 
-The installer validates the Caddyfile before starting CareQueue services.
+The installer validates the Caddyfile before starting CareQFlow services.
 
 ## Local Hostname
 
 For the default private deployment, the installer ensures `/etc/hosts` contains:
 
 ```text
-127.0.0.1 carequeue.local # CareQueue
+127.0.0.1 careqflow.local # CareQFlow
 ```
 
-This makes `carequeue.local` resolvable on the Linux server itself.
+This makes `careqflow.local` resolvable on the Linux server itself.
 
-This hosts entry does not automatically make `carequeue.local` resolvable from other computers. Client devices need an approved DNS, hosts-file, or other name-resolution strategy if users will access CareQueue from another machine.
+This hosts entry does not automatically make `careqflow.local` resolvable from other computers. Client devices need an approved DNS, hosts-file, or other name-resolution strategy if users will access CareQFlow from another machine.
 
 ## Certificate Trust
 
 The packaged Caddy configuration uses Caddy's internal CA.
 
-After starting the CareQueue Caddy service, the installer runs Caddy's trust operation using the CareQueue Caddy data and configuration directories. This establishes trust on the Linux installation host.
+After starting the CareQFlow Caddy service, the installer runs Caddy's trust operation using the CareQFlow Caddy data and configuration directories. This establishes trust on the Linux installation host.
 
-For other client devices, the internal CA root certificate must be distributed and trusted through an approved process before browsers on those devices will trust the CareQueue certificate.
+For other client devices, the internal CA root certificate must be distributed and trusted through an approved process before browsers on those devices will trust the CareQFlow certificate.
 
 Do not bypass browser certificate warnings or disable certificate validation.
 
@@ -548,7 +548,7 @@ curl \
   --fail \
   --silent \
   --show-error \
-  https://carequeue.local/api/health/live
+  https://careqflow.local/api/health/live
 ```
 
 ```bash
@@ -556,7 +556,7 @@ curl \
   --fail \
   --silent \
   --show-error \
-  https://carequeue.local/api/health/ready
+  https://careqflow.local/api/health/ready
 ```
 
 ## First-Time Admin Setup
@@ -575,7 +575,7 @@ If initial setup has already been completed, the first-Admin endpoint is no long
 
 ## Governance Attestation
 
-After the first Admin signs in through the browser, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
+After the first Admin signs in through the browser, CareQFlow requires the current organization governance attestation before normal protected application functionality becomes available.
 
 The attestation records information including:
 
@@ -583,7 +583,7 @@ The attestation records information including:
 - Deployment mode
 - Accepting Admin
 - Acceptance timestamp
-- CareQueue application version
+- CareQFlow application version
 - Governance attestation version
 
 Governance history is append-only and is visible to Admin users on the System page.
@@ -592,9 +592,9 @@ The in-application governance workflow supports organizational security and comp
 
 ## Browser Smoke Test
 
-After installation, open CareQueue in a supported browser and confirm:
+After installation, open CareQFlow in a supported browser and confirm:
 
-- The CareQueue HTTPS certificate is trusted on the client device.
+- The CareQFlow HTTPS certificate is trusted on the client device.
 - The login page loads over HTTPS.
 - Browser API calls use the same HTTPS origin.
 - No browser request goes directly to `127.0.0.1:8000`.
@@ -742,7 +742,7 @@ Review listening sockets:
 sudo ss -lntp
 ```
 
-Only the approved HTTPS service should be exposed to CareQueue users.
+Only the approved HTTPS service should be exposed to CareQFlow users.
 
 Do not expose:
 
@@ -770,7 +770,7 @@ sudo journalctl \
   --since today
 ```
 
-CareQueue Caddy logs:
+CareQFlow Caddy logs:
 
 ```bash
 sudo journalctl \
@@ -809,13 +809,13 @@ sudo bash deployment/linux/installer/invoke-install.sh upgrade
 
 Upgrade mode requires an existing installation. It preserves the existing production configuration and runtime data while reinstalling application files, recreating the Python environment, reinstalling service definitions, validating Caddy, restarting services, and rerunning health checks.
 
-When the upgraded CareQueue API starts, database initialization may apply registered versioned schema migrations that have not yet been recorded in the database's `schema_migrations` ledger.
+When the upgraded CareQFlow API starts, database initialization may apply registered versioned schema migrations that have not yet been recorded in the database's `schema_migrations` ledger.
 
 Already applied migrations are skipped. Each new migration is applied through the migration framework and is recorded only after successful application.
 
 Do not manually edit the migration ledger to bypass a failed upgrade.
 
-A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older CareQueue application release. Keep the verified pre-upgrade backup available until rollback is no longer required.
+A database migrated by a newer CareQFlow release is not automatically guaranteed to be compatible with an older CareQFlow application release. Keep the verified pre-upgrade backup available until rollback is no longer required.
 
 After the installer completes, verify:
 
@@ -865,7 +865,7 @@ After repair, confirm service health, HTTPS access, login, governance state, and
 
 ## Uninstall
 
-Run uninstall from an extracted CareQueue release package:
+Run uninstall from an extracted CareQFlow release package:
 
 ```bash
 sudo bash deployment/linux/installer/invoke-install.sh uninstall
@@ -873,12 +873,12 @@ sudo bash deployment/linux/installer/invoke-install.sh uninstall
 
 The uninstall workflow:
 
-- Disables and stops the CareQueue backup timer
-- Disables and stops the CareQueue Caddy service
-- Disables and stops the CareQueue API service
-- Removes the CareQueue systemd unit files
+- Disables and stops the CareQFlow backup timer
+- Disables and stops the CareQFlow Caddy service
+- Disables and stops the CareQFlow API service
+- Removes the CareQFlow systemd unit files
 - Removes `/opt/carequeue`
-- Removes the installer-managed `carequeue.local` hosts entry
+- Removes the installer-managed `careqflow.local` hosts entry
 
 A normal uninstall intentionally preserves:
 
@@ -894,15 +894,15 @@ Do not manually remove preserved production data unless retention, recovery, and
 
 ## Rollback
 
-Rollback is available for a supported failed upgrade when CareQueue preserved a valid failed-upgrade recovery record and the required pre-upgrade recovery assets.
+Rollback is available for a supported failed upgrade when CareQFlow preserved a valid failed-upgrade recovery record and the required pre-upgrade recovery assets.
 
-Run rollback from an extracted CareQueue release package:
+Run rollback from an extracted CareQFlow release package:
 
 ```bash
 sudo bash deployment/linux/installer/invoke-install.sh rollback
 ```
 
-Rollback mode requires an existing CareQueue installation and resolves the newest eligible failed-upgrade recovery record under:
+Rollback mode requires an existing CareQFlow installation and resolves the newest eligible failed-upgrade recovery record under:
 
 ```text
 /var/lib/carequeue/recovery/upgrades
@@ -940,7 +940,7 @@ The packaged rollback workflow performs the following high-level sequence:
 3. Stage and validate the previous application payload.
 4. Preserve the failed incoming application before replacing it.
 5. Record the failed application recovery asset.
-6. Stop CareQueue services before application replacement.
+6. Stop CareQFlow services before application replacement.
 7. Replace the failed application with the staged previous application.
 8. Restore the previous systemd service definitions and reload systemd.
 9. Stage the verified pre-upgrade encrypted database backup.
@@ -1011,16 +1011,16 @@ sudo systemctl status carequeue-backup.timer
 Then confirm application health:
 
 ```bash
-curl   --fail   --silent   --show-error   https://carequeue.local/api/health/live
+curl   --fail   --silent   --show-error   https://careqflow.local/api/health/live
 ```
 
 ```bash
-curl   --fail   --silent   --show-error   https://carequeue.local/api/health/ready
+curl   --fail   --silent   --show-error   https://careqflow.local/api/health/ready
 ```
 
 Also verify:
 
-- The expected previous CareQueue version is reported.
+- The expected previous CareQFlow version is reported.
 - Login succeeds.
 - Governance state remains available.
 - A representative authorization workflow can access the restored data.
@@ -1032,7 +1032,7 @@ See [Upgrades](../operations/upgrades.md), [Backup and Recovery](../workflows/ba
 
 ## Troubleshooting
 
-### The installer says CareQueue is already installed
+### The installer says CareQFlow is already installed
 
 Use:
 
@@ -1054,9 +1054,9 @@ sudo bash deployment/linux/installer/invoke-install.sh rollback
 
 `install` mode intentionally refuses to overwrite an existing detected installation.
 
-### Upgrade, repair, or rollback says CareQueue is not installed
+### Upgrade, repair, or rollback says CareQFlow is not installed
 
-The installer considers CareQueue installed when both of these exist:
+The installer considers CareQFlow installed when both of these exist:
 
 ```text
 /opt/carequeue/backend
@@ -1101,7 +1101,7 @@ Then review the newest installer log and relevant service journals.
 
 Do not mark the recovery record complete manually.
 
-### CareQueue API service is not running
+### CareQFlow API service is not running
 
 Check status:
 
@@ -1119,7 +1119,7 @@ sudo journalctl \
 
 Confirm the environment file exists and the database and runtime paths are accessible to the `carequeue` service account.
 
-### CareQueue Caddy service is not running
+### CareQFlow Caddy service is not running
 
 Check status:
 
@@ -1159,19 +1159,19 @@ curl \
   http://127.0.0.1:8000/api/health/live
 ```
 
-If direct health succeeds but HTTPS fails, inspect the CareQueue Caddy service and Caddy configuration.
+If direct health succeeds but HTTPS fails, inspect the CareQFlow Caddy service and Caddy configuration.
 
 ### Browser does not trust the certificate
 
 The installer trusts the Caddy internal root CA on the Linux server, not automatically on every client device.
 
-Confirm that the CareQueue internal root certificate has been distributed and trusted on the browser's device through an approved process.
+Confirm that the CareQFlow internal root certificate has been distributed and trusted on the browser's device through an approved process.
 
 Do not bypass the certificate warning.
 
-### `carequeue.local` does not resolve from another computer
+### `careqflow.local` does not resolve from another computer
 
-The installer adds `carequeue.local` only to the Linux server's `/etc/hosts` file.
+The installer adds `careqflow.local` only to the Linux server's `/etc/hosts` file.
 
 Configure approved name resolution for each client or through your private DNS environment.
 
@@ -1245,7 +1245,7 @@ Before using real sensitive data, confirm:
 
 - The target operating system and version have been validated.
 - The API binds only to loopback.
-- The CareQueue Caddy service is the intended user-facing HTTP service.
+- The CareQFlow Caddy service is the intended user-facing HTTP service.
 - HTTPS is valid and trusted on every approved client device.
 - The deployment hostname resolves only where intended.
 - The production environment file remains restricted.
@@ -1278,7 +1278,7 @@ The primary remaining Linux deployment work includes:
 - Expanded disaster-recovery activation testing and documentation
 - Validation of reboot, interrupted-upgrade, rollback-interruption, and service-failure scenarios across supported systems
 - Continued hardening and documentation of private certificate distribution and lifecycle management
-- Better support for deployments that use an application hostname other than the packaged `carequeue.local` model
+- Better support for deployments that use an application hostname other than the packaged `careqflow.local` model
 
 The packaged Linux installation path should still be validated on the exact target environment before introducing sensitive production data.
 
@@ -1294,7 +1294,7 @@ Useful Linux deployment screenshots may include:
 - Successful HTTPS health response
 - Successful backup result
 - Successful rollback completion using synthetic recovery data
-- CareQueue login page over trusted HTTPS
+- CareQFlow login page over trusted HTTPS
 - Governance attestation screen using synthetic organization information
 
 Before committing screenshots:

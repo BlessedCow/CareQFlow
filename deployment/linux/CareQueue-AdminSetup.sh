@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 SETUP_STATUS_URL="${SETUP_STATUS_URL:-http://127.0.0.1:8000/api/security/setup-initial-admin/status}"
 SETUP_URL="${SETUP_URL:-http://127.0.0.1:8000/api/security/setup-initial-admin}"
-APPLICATION_ORIGIN="${APPLICATION_ORIGIN:-https://carequeue.local}"
+APPLICATION_ORIGIN="${APPLICATION_ORIGIN:-https://careqflow.local}"
 APPLICATION_HOST_HEADER=""
 
 fail() {
@@ -70,7 +70,7 @@ setup_is_available() {
     local response
 
     response="$(get_setup_status)" \
-        || fail "Unable to check CareQueue initial admin setup status."
+        || fail "Unable to check CareQFlow initial admin setup status."
 
     python3 - "${response}" <<'PY'
 import json
@@ -93,7 +93,7 @@ create_admin() {
     local http_status
 
     printf '\n'
-    printf 'CareQueue First-Time Admin Setup\n'
+    printf 'CareQFlow First-Time Admin Setup\n'
     printf '================================\n\n'
 
     read -r -p 'Admin username: ' username
@@ -162,12 +162,12 @@ PY
 
     if [[ "${http_status}" == "201" ]]; then
         printf '\nInitial administrator account created successfully.\n'
-        printf 'Open CareQueue at: %s\n' "${APPLICATION_ORIGIN}"
+        printf 'Open CareQFlow at: %s\n' "${APPLICATION_ORIGIN}"
 
         return
     fi
 
-    printf '\nCareQueue rejected the setup request.\n'
+    printf '\nCareQFlow rejected the setup request.\n'
 
     if [[ -s "${response_file}" ]]; then
         python3 - "${response_file}" <<'PY'
@@ -203,7 +203,7 @@ main() {
 
     if ! setup_is_available; then
         printf 'Initial admin setup is already complete.\n'
-        printf 'Open CareQueue at: %s\n' "${APPLICATION_ORIGIN}"
+        printf 'Open CareQFlow at: %s\n' "${APPLICATION_ORIGIN}"
         exit 0
     fi
 

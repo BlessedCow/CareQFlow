@@ -1,6 +1,6 @@
 # Authorization Workflow
 
-CareQueue’s primary workflow is the creation, tracking, review, and completion of authorization records.
+CareQFlow’s primary workflow is the creation, tracking, review, and completion of authorization records.
 
 This guide covers the authorization record itself, the queue, filters, dashboard and calendar behavior, editing, deletion, and the relationship between the current record and its timeline.
 
@@ -37,7 +37,7 @@ If the attestation is incomplete:
 - Protected authorization endpoints return HTTP `428` until the requirement is completed.
 - Login, logout, required password change, session management, and governance setup remain available as needed to complete setup safely.
 
-The governance requirement is versioned independently from the CareQueue application release version.
+The governance requirement is versioned independently from the CareQFlow application release version.
 
 ## Authorization Record
 
@@ -413,13 +413,13 @@ See [PDF Intake](pdf-intake.md) for supported templates, confidence, review requ
 
 ## Session Behavior During Authorization Work
 
-CareQueue uses a server-enforced inactivity timeout for authenticated sessions.
+CareQFlow uses a server-enforced inactivity timeout for authenticated sessions.
 
 Normal authenticated use can extend a valid session, while an already expired session cannot be revived.
 
-The frontend may display a warning before expiration and can offer explicit session renewal. Logout and expiration state are synchronized across open CareQueue tabs when supported by the browser.
+The frontend may display a warning before expiration and can offer explicit session renewal. Logout and expiration state are synchronized across open CareQFlow tabs when supported by the browser.
 
-If the same account signs in again from another browser or device, the previous active session is revoked because CareQueue allows one active authenticated session per account.
+If the same account signs in again from another browser or device, the previous active session is revoked because CareQFlow allows one active authenticated session per account.
 
 A remembered device affects only whether the TOTP MFA step can be skipped on a later login. It does not extend an active authorization-workflow session.
 
@@ -427,7 +427,7 @@ A remembered device affects only whether the TOTP MFA step can be skipped on a l
 
 Selected authorization fields are encrypted before database storage.
 
-CareQueue's storage protections do not change the need to limit collected information to what is operationally necessary.
+CareQFlow's storage protections do not change the need to limit collected information to what is operationally necessary.
 
 Adding a new sensitive field requires review of:
 
@@ -461,7 +461,7 @@ auth_event.delete
 
 Audit metadata should contain field names and resource identifiers, not sensitive values.
 
-These events participate in CareQueue's application audit pipeline and tamper-evident audit chain. See [Audit Log](../administration/audit-log.md) for integrity-verification behavior and audit limitations.
+These events participate in CareQFlow's application audit pipeline and tamper-evident audit chain. See [Audit Log](../administration/audit-log.md) for integrity-verification behavior and audit limitations.
 
 ## Common Problems
 

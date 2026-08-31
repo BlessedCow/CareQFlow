@@ -1,6 +1,6 @@
-# CareQueue Command Reference
+# CareQFlow Command Reference
 
-This reference collects commonly used commands for CareQueue development, testing, packaging, release preparation, and installed-service validation.
+This reference collects commonly used commands for CareQFlow development, testing, packaging, release preparation, and installed-service validation.
 
 Run commands from the repository root unless a section says otherwise.
 
@@ -134,7 +134,7 @@ VITE_AUTHSTATUS_API_BASE_URL=http://localhost:8001
 
 ## Create a Development Admin User
 
-CareQueue does not provide public registration.
+CareQFlow does not provide public registration.
 
 From the repository root, with the backend environment available:
 
@@ -278,7 +278,7 @@ git diff
 
 ## Release Version
 
-CareQueue keeps the application release version in several backend and deployment files.
+CareQFlow keeps the application release version in several backend and deployment files.
 
 Use the repository release-version helper rather than editing those locations individually:
 
@@ -298,7 +298,7 @@ The script updates the controlled release-version declarations used by:
 
 It intentionally does not replace arbitrary matching version strings in tests, documentation, dependency versions, or historical governance fixtures.
 
-The governance attestation version and governance document revision are independent of the CareQueue application version and should not be changed merely because the application release number changes.
+The governance attestation version and governance document revision are independent of the CareQFlow application version and should not be changed merely because the application release number changes.
 
 Change the required governance metadata deliberately when governance text or required acknowledgments change. A change to either the required attestation version or required document revision causes existing acceptance records that do not match both values to no longer be current.
 
@@ -351,10 +351,10 @@ After the Windows payload has been built:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQueue `0.5.0`, the resulting installer is:
+For CareQFlow `0.5.0`, the resulting installer is:
 
 ```text
-build\windows\installer\CareQueue-Setup-0.5.0.exe
+build\windows\installer\CareQFlow-Setup-0.5.0.exe
 ```
 
 Future releases use the version configured by the release-version tooling.
@@ -375,28 +375,28 @@ Use this validation before publishing the Windows release artifact.
 
 ## Run the Windows Installer
 
-For CareQueue `0.5.0`:
+For CareQFlow `0.5.0`:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.5.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.5.0.exe
 ```
 
 An explicit invocation path can also be used:
 
 ```powershell
-& ".\build\windows\installer\CareQueue-Setup-0.5.0.exe"
+& ".\build\windows\installer\CareQFlow-Setup-0.5.0.exe"
 ```
 
 The installer requires administrator elevation because it installs Windows services and writes to protected locations.
 
-When CareQueue is not installed, the installer uses the fresh-install flow.
+When CareQFlow is not installed, the installer uses the fresh-install flow.
 
 When an existing installation is detected, the installer normally offers:
 
 ```text
 Upgrade existing installation
 Repair existing installation
-Uninstall CareQueue
+Uninstall CareQFlow
 ```
 
 If an eligible failed-upgrade recovery record exists, the installer also offers:
@@ -416,14 +416,14 @@ Get-Service CareQueueApi, CareQueueCaddy |
     Select-Object Name, Status, StartType
 ```
 
-Start CareQueue:
+Start CareQFlow:
 
 ```powershell
 Start-Service CareQueueApi
 Start-Service CareQueueCaddy
 ```
 
-Stop CareQueue:
+Stop CareQFlow:
 
 ```powershell
 Stop-Service CareQueueCaddy
@@ -437,7 +437,7 @@ The proxy is stopped before the API.
 The packaged private application is available at:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 Liveness:
@@ -445,7 +445,7 @@ Liveness:
 ```powershell
 Invoke-RestMethod `
     -Method Get `
-    -Uri "https://carequeue.local/api/health/live" `
+    -Uri "https://careqflow.local/api/health/live" `
     -TimeoutSec 5
 ```
 
@@ -454,14 +454,14 @@ Readiness:
 ```powershell
 Invoke-RestMethod `
     -Method Get `
-    -Uri "https://carequeue.local/api/health/ready" `
+    -Uri "https://careqflow.local/api/health/ready" `
     -TimeoutSec 5
 ```
 
 If the hostname does not resolve:
 
 ```powershell
-ping carequeue.local
+ping careqflow.local
 ```
 
 Then review the local hosts entry and packaged Caddy configuration.
@@ -518,7 +518,7 @@ After installing or repairing the packaged Windows application:
 
 ```powershell
 Invoke-WebRequest `
-    -Uri "https://carequeue.local" `
+    -Uri "https://careqflow.local" `
     -UseBasicParsing |
 Select-Object -ExpandProperty Headers
 ```
@@ -536,31 +536,31 @@ Permissions-Policy
 
 ## Generate a Windows Installer Checksum
 
-For CareQueue `0.5.0`:
+For CareQFlow `0.5.0`:
 
 ```powershell
 Get-FileHash `
     -Algorithm SHA256 `
-    ".\build\windows\installer\CareQueue-Setup-0.5.0.exe" |
+    ".\build\windows\installer\CareQFlow-Setup-0.5.0.exe" |
 ForEach-Object {
-    "$($_.Hash)  CareQueue-Setup-0.5.0.exe"
+    "$($_.Hash)  CareQFlow-Setup-0.5.0.exe"
 } |
 Set-Content `
     -Encoding ASCII `
-    ".\build\windows\installer\CareQueue-Setup-0.5.0.exe.sha256"
+    ".\build\windows\installer\CareQFlow-Setup-0.5.0.exe.sha256"
 ```
 
 Verify it:
 
 ```powershell
 $expectedHash = (
-    Get-Content ".\build\windows\installer\CareQueue-Setup-0.5.0.exe.sha256"
+    Get-Content ".\build\windows\installer\CareQFlow-Setup-0.5.0.exe.sha256"
 ).Split(" ")[0]
 
 $actualHash = (
     Get-FileHash `
         -Algorithm SHA256 `
-        ".\build\windows\installer\CareQueue-Setup-0.5.0.exe"
+        ".\build\windows\installer\CareQFlow-Setup-0.5.0.exe"
 ).Hash
 
 $actualHash -eq $expectedHash
@@ -585,7 +585,7 @@ powershell.exe `
     -ExecutionPolicy Bypass `
     -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
     -Mode Repair `
-    -ApplicationOrigin "https://carequeue.local" `
+    -ApplicationOrigin "https://careqflow.local" `
     -PayloadDirectory ".\build\windows\payload" `
     -InstallDirectory "C:\Program Files\CareQueue" `
     -DataDirectory "C:\ProgramData\CareQueue"
@@ -605,7 +605,7 @@ Uninstall
 
 Use the compiled installer for ordinary release validation. Direct engine invocation is primarily a troubleshooting tool.
 
-For direct Rollback troubleshooting against an installed CareQueue deployment:
+For direct Rollback troubleshooting against an installed CareQFlow deployment:
 
 ```powershell
 powershell.exe `
@@ -614,7 +614,7 @@ powershell.exe `
     -ExecutionPolicy Bypass `
     -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
     -Mode Rollback `
-    -ApplicationOrigin "https://carequeue.local" `
+    -ApplicationOrigin "https://careqflow.local" `
     -PayloadDirectory ".\build\windows\payload" `
     -InstallDirectory "C:\Program Files\CareQueue" `
     -DataDirectory "C:\ProgramData\CareQueue"
@@ -677,10 +677,10 @@ Because the release script also has a version default, after the repository has 
 .\deployment\linux\installer\build-payload.ps1
 ```
 
-For CareQueue `0.5.0`, the artifact is:
+For CareQFlow `0.5.0`, the artifact is:
 
 ```text
-build\linux\installer\CareQueue-Linux-Setup-0.5.0.tar.gz
+build\linux\installer\CareQFlow-Linux-Setup-0.5.0.tar.gz
 ```
 
 The build script reports the resulting package path, size, and SHA256 value.
@@ -691,12 +691,12 @@ On the Linux target:
 
 ```bash
 mkdir carequeue-installer
-tar -xzf CareQueue-Linux-Setup-0.5.0.tar.gz \
+tar -xzf CareQFlow-Linux-Setup-0.5.0.tar.gz \
   -C carequeue-installer
 cd carequeue-installer
 ```
 
-## Install CareQueue on Linux
+## Install CareQFlow on Linux
 
 From the extracted release package:
 
@@ -707,12 +707,12 @@ sudo bash deployment/linux/installer/invoke-install.sh install
 The packaged private origin is:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 The Linux installer requires root privileges because it installs system packages, writes to protected system directories, creates a service account, installs systemd units, and configures certificate trust.
 
-## Upgrade CareQueue on Linux
+## Upgrade CareQFlow on Linux
 
 From a newly extracted reviewed release package:
 
@@ -722,7 +722,7 @@ sudo bash deployment/linux/installer/invoke-install.sh upgrade
 
 Before upgrading, confirm that a recent verified encrypted backup is available.
 
-## Repair CareQueue on Linux
+## Repair CareQFlow on Linux
 
 From the extracted release package:
 
@@ -732,7 +732,7 @@ sudo bash deployment/linux/installer/invoke-install.sh repair
 
 Repair preserves the existing production configuration and data.
 
-## Roll Back a Failed CareQueue Upgrade on Linux
+## Roll Back a Failed CareQFlow Upgrade on Linux
 
 Rollback requires an eligible failed-upgrade recovery record and the referenced recovery assets.
 
@@ -750,9 +750,9 @@ Linux upgrade recovery records are stored under:
 
 Do not create or edit recovery records manually to force rollback.
 
-After rollback succeeds, verify the API service, Caddy service, backup timer, liveness endpoint, readiness endpoint, and expected previous CareQueue version.
+After rollback succeeds, verify the API service, Caddy service, backup timer, liveness endpoint, readiness endpoint, and expected previous CareQFlow version.
 
-## Uninstall CareQueue on Linux
+## Uninstall CareQFlow on Linux
 
 From the extracted release package:
 
@@ -760,7 +760,7 @@ From the extracted release package:
 sudo bash deployment/linux/installer/invoke-install.sh uninstall
 ```
 
-Review the Linux deployment documentation before uninstalling. The packaged uninstall workflow preserves documented CareQueue configuration, data, and logs rather than treating uninstall as secure data destruction.
+Review the Linux deployment documentation before uninstalling. The packaged uninstall workflow preserves documented CareQFlow configuration, data, and logs rather than treating uninstall as secure data destruction.
 
 ## Linux Service Status
 
@@ -826,14 +826,14 @@ From the installed Linux host:
 
 ```bash
 curl --fail --silent --show-error \
-  https://carequeue.local/api/health/live
+  https://careqflow.local/api/health/live
 ```
 
 Readiness:
 
 ```bash
 curl --fail --silent --show-error \
-  https://carequeue.local/api/health/ready
+  https://careqflow.local/api/health/ready
 ```
 
 If the local Caddy root has not yet been trusted by the invoking environment, resolve certificate trust rather than permanently disabling TLS verification.
@@ -852,7 +852,7 @@ Run it manually when initial setup is still available:
 sudo bash /opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
 ```
 
-The utility submits the initial Admin credentials only to the loopback CareQueue API.
+The utility submits the initial Admin credentials only to the loopback CareQFlow API.
 
 After the first Admin signs in through the browser, the current organization governance attestation must also be completed before normal protected application functionality becomes available.
 
@@ -869,13 +869,13 @@ Development API documentation:
 http://127.0.0.1:8000/docs
 
 Packaged private application:
-https://carequeue.local
+https://careqflow.local
 
 Packaged API liveness:
-https://carequeue.local/api/health/live
+https://careqflow.local/api/health/live
 
 Packaged API readiness:
-https://carequeue.local/api/health/ready
+https://careqflow.local/api/health/ready
 ```
 
 ## Common Windows Paths
@@ -926,7 +926,7 @@ docs/licensing.md
 
 CareQueue `0.4.x` and earlier releases remain under their historical MIT terms.
 
-CareQueue `0.5.0` and later versions expressly released under the current terms use Business Source License 1.1 until the applicable Change Date.
+CareQFlow `0.5.0` and later versions expressly released under the current terms use Business Source License 1.1 until the applicable Change Date.
 
 Do not describe a current BSL release as Open Source before its applicable Change Date.
 

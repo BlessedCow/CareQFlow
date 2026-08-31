@@ -1,5 +1,5 @@
 [Unit]
-Description=CareQueue API
+Description=CareQFlow API
 Documentation=file:/opt/carequeue/docs/deployment/linux.md
 After=network.target local-fs.target
 RequiresMountsFor=/var/lib/carequeue/data

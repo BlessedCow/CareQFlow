@@ -1,7 +1,7 @@
 <service>
   <id>CareQueueApi</id>
-  <name>CareQueue API</name>
-  <description>Runs the CareQueue FastAPI backend behind the local Caddy reverse proxy.</description>
+  <name>CareQFlow API</name>
+  <description>Runs the CareQFlow FastAPI backend behind the local Caddy reverse proxy.</description>
 
   <executable>powershell.exe</executable>
   <arguments>-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "C:\Program Files\CareQueue\deployment\windows\run-api.ps1"</arguments>

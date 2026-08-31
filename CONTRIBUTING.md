@@ -1,14 +1,14 @@
-# Contributing to CareQueue
+# Contributing to CareQFlow
 
-Thank you for your interest in contributing to CareQueue.
+Thank you for your interest in contributing to CareQFlow.
 
-CareQueue is a local-first utilization review workflow and authorization management application focused on authorization tracking, payer and facility workflows, timeline events, documentation intake, encrypted storage, audit logging, MFA, session security, governance controls, and operational backup support.
+CareQFlow is a local-first utilization review workflow and authorization management application focused on authorization tracking, payer and facility workflows, timeline events, documentation intake, encrypted storage, audit logging, MFA, session security, governance controls, and operational backup support.
 
 The project is actively evolving. Contributions should remain focused, reviewable, privacy-conscious, and consistent with the existing repository structure.
 
 ## Project Status
 
-CareQueue is under active development.
+CareQFlow is under active development.
 
 Application structure, deployment guidance, security controls, release packaging, and workflow behavior may continue to change as the project matures.
 
@@ -72,7 +72,7 @@ to inspect the pending commit.
 
 ## Privacy and Data Safety
 
-CareQueue is designed for healthcare-related workflows, so privacy requirements apply to all contributions.
+CareQFlow is designed for healthcare-related workflows, so privacy requirements apply to all contributions.
 
 Do not submit:
 
@@ -201,7 +201,7 @@ Build outputs should normally remain uncommitted unless a release process specif
 
 ## Repository Organization
 
-CareQueue is organized by application domain.
+CareQFlow is organized by application domain.
 
 Backend source:
 
@@ -406,7 +406,7 @@ Confirm that:
 - Session inactivity expiration remains backend-enforced.
 - Expired sessions cannot be revived by browser activity.
 - Explicit renewal requires an active session and rotates session and CSRF state.
-- CareQueue continues to enforce one active authenticated session per account.
+- CareQFlow continues to enforce one active authenticated session per account.
 - Frontend timers and cross-tab synchronization do not replace backend validation.
 - Logout and expiration clear protected frontend data.
 - MFA secrets and TOTP values never reach logs or audit metadata.
@@ -421,7 +421,7 @@ Confirm that:
 
 The first-time Admin setup endpoint is only for bootstrap. It must remain unavailable after any user exists and must not replace normal authenticated Admin user management.
 
-The governance attestation version and governance document revision are independent of the CareQueue application release version.
+The governance attestation version and governance document revision are independent of the CareQFlow application release version.
 
 Do not increase the governance attestation version or change the governance document revision merely because the application version changes.
 
@@ -877,19 +877,19 @@ for additional reporting guidance.
 
 ## Licensing and Contributions
 
-CareQueue uses version-based licensing.
+CareQFlow uses version-based licensing.
 
-CareQueue versions `0.4.x` and earlier were released under the MIT License. CareQueue version `0.5.0` and later versions expressly released under the current terms use the Business Source License 1.1.
+CareQueue versions `0.4.x` and earlier were released under the MIT License. CareQFlow version `0.5.0` and later versions expressly released under the current terms use the Business Source License 1.1.
 
 See [LICENSE](LICENSE) for the authoritative licensing notice and [LICENSES/](LICENSES/) for the applicable license texts.
 
 ### Contribution Licensing
 
-Unless separate written contributor terms apply, contributions accepted into a Business Source License release are distributed as part of CareQueue under the license applicable to that release.
+Unless separate written contributor terms apply, contributions accepted into a Business Source License release are distributed as part of CareQFlow under the license applicable to that release.
 
 Submitting a contribution does not by itself transfer ownership of the contributor's copyright.
 
-CareQueue may require a separate Contributor License Agreement or other contributor terms before accepting substantive source-code contributions. Such terms may be required to preserve the project's ability to distribute, commercially license, relicense, and transfer CareQueue while respecting contributor ownership.
+CareQFlow may require a separate Contributor License Agreement or other contributor terms before accepting substantive source-code contributions. Such terms may be required to preserve the project's ability to distribute, commercially license, relicense, and transfer CareQFlow while respecting contributor ownership.
 
 Until a contributor agreement process is published, maintainers may decline substantive external source-code contributions that would create unclear copyright or relicensing rights.
 
@@ -899,4 +899,4 @@ Do not submit code or other material that you do not have the legal right to con
 
 By submitting material, you represent that you have the right to provide it and that doing so does not knowingly violate another party's copyright, license terms, confidentiality obligations, or other rights.
 
-Commercial production licensing is separate from contribution licensing. See [LICENSE](LICENSE) for the current CareQueue licensing model.
+Commercial production licensing is separate from contribution licensing. See [LICENSE](LICENSE) for the current CareQFlow licensing model.

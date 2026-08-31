@@ -1,6 +1,6 @@
-# CareQueue Documentation
+# CareQFlow Documentation
 
-This directory contains CareQueue’s detailed deployment, operations, administration, workflow, development, security, licensing, and troubleshooting documentation.
+This directory contains CareQFlow’s detailed deployment, operations, administration, workflow, development, security, licensing, and troubleshooting documentation.
 
 The root-level documents provide the project overview:
 
@@ -191,7 +191,7 @@ Use it for:
 - Dedicated service account
 - Application, configuration, data, and log paths
 - Production environment and encryption-key setup
-- CareQueue API and Caddy systemd services
+- CareQFlow API and Caddy systemd services
 - Private HTTPS and certificate trust
 - Encrypted backup service and timer
 - First-time Admin setup
@@ -199,7 +199,7 @@ Use it for:
 - Failed-upgrade recovery and rollback workflow
 - Current Linux limitations
 
-CareQueue includes a packaged Linux installation workflow for supported Debian-based systems. Linux deployment remains more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
+CareQFlow includes a packaged Linux installation workflow for supported Debian-based systems. Linux deployment remains more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
 
 ## Operations
 
@@ -569,7 +569,7 @@ docs/licensing.md
 
 CareQueue versions `0.4.x` and earlier were released under the MIT License.
 
-CareQueue version `0.5.0` and later versions expressly released under the current terms use the Business Source License 1.1 until the applicable Change Date.
+CareQFlow version `0.5.0` and later versions expressly released under the current terms use the Business Source License 1.1 until the applicable Change Date.
 
 Current BSL releases are source-available and should not be described as Open Source before the applicable Change Date.
 

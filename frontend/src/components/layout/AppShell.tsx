@@ -100,8 +100,8 @@ const PAGE_DESCRIPTIONS: Record<AppPage, string> = {
   "denials-pipeline":
     "Track denials, peer reviews, appeals, and retro auth follow-up",
   calendar: "Track review dates and LCDs",
-  settings: "Configure CareQueue preferences",
-  adminUsers: "Manage local CareQueue users and roles",
+  settings: "Configure CareQFlow preferences",
+  adminUsers: "Manage local CareQFlow users and roles",
   adminAudit: "Review recorded security and workflow activity",
   adminSystem: "Monitor health and manage encrypted restore points",
 };
@@ -132,7 +132,7 @@ export function AppShell({
       >
         <div className="flex h-16 items-center border-b border-inherit px-6">
           <Activity className="mr-2 h-6 w-6 text-blue-500" />
-          <span className="text-lg font-bold tracking-wide">CareQueue</span>
+          <span className="text-lg font-bold tracking-wide">CareQFlow</span>
         </div>
         <nav className="flex-1 space-y-2 px-4 py-6">
           {[
@@ -194,7 +194,7 @@ export function AppShell({
         >
           <div className="flex items-center md:hidden">
             <Activity className="mr-2 h-6 w-6 text-blue-500" />
-            <span className="text-lg font-bold tracking-wide">CareQueue</span>
+            <span className="text-lg font-bold tracking-wide">CareQFlow</span>
           </div>
 
           <div className="hidden md:block">

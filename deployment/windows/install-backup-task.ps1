@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$TaskName = "CareQueue Encrypted Backup",
+    [string]$TaskName = "CareQFlow Encrypted Backup",
     [string]$InstallDirectory = "C:\Program Files\CareQueue",
     [string]$BackupDirectory = "C:\ProgramData\CareQueue\Backups",
     [string]$EnvironmentFile = "C:\ProgramData\CareQueue\Config\carequeue.env",
@@ -9,17 +9,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$legacyTaskName = "CareQueue Encrypted Backup"
 
 $runnerScript = Join-Path `
     $InstallDirectory `
     "deployment\windows\run-backup.ps1"
 
 if (-not (Test-Path -LiteralPath $runnerScript -PathType Leaf)) {
-    throw "CareQueue backup runner was not found at: $runnerScript"
+    throw "CareQFlow backup runner was not found at: $runnerScript"
 }
 
 if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
-    throw "CareQueue environment file was not found at: $EnvironmentFile"
+    throw "CareQFlow environment file was not found at: $EnvironmentFile"
 }
 
 if (-not (Test-Path -LiteralPath $BackupDirectory -PathType Container)) {
@@ -95,9 +96,9 @@ $task = New-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description "Creates an encrypted CareQueue database backup."
+    -Description "Creates an encrypted CareQFlow database backup."
 
-$existingTask = Get-ScheduledTask `
+    $existingTask = Get-ScheduledTask `
     -TaskName $TaskName `
     -ErrorAction SilentlyContinue
 
@@ -105,6 +106,23 @@ if ($existingTask) {
     Unregister-ScheduledTask `
         -TaskName $TaskName `
         -Confirm:$false
+}
+
+if ($TaskName -ne $legacyTaskName) {
+    $legacyTask = Get-ScheduledTask `
+        -TaskName $legacyTaskName `
+        -ErrorAction SilentlyContinue
+
+    if ($legacyTask) {
+        Write-Host (
+            "Removing legacy CareQueue backup task before " +
+            "installing the CareQFlow backup task."
+        )
+
+        Unregister-ScheduledTask `
+            -TaskName $legacyTaskName `
+            -Confirm:$false
+    }
 }
 
 if ($ServiceAccount -eq "SYSTEM") {
@@ -117,7 +135,7 @@ if ($ServiceAccount -eq "SYSTEM") {
 else {
     $credential = Get-Credential `
         -UserName $ServiceAccount `
-        -Message "Enter the password for the CareQueue backup service account."
+        -Message "Enter the password for the CareQFlow backup service account."
 
     Register-ScheduledTask `
         -TaskName $TaskName `

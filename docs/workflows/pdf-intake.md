@@ -1,8 +1,8 @@
 # PDF Intake
 
-CareQueue includes a local PDF-assisted intake workflow for supported verification-of-benefits documents.
+CareQFlow includes a local PDF-assisted intake workflow for supported verification-of-benefits documents.
 
-The workflow reduces repetitive entry, but it does not treat the PDF as authoritative. CareQueue extracts candidate values, identifies the source of each candidate, assigns confidence, and requires user review before values are copied into the authorization form.
+The workflow reduces repetitive entry, but it does not treat the PDF as authoritative. CareQFlow extracts candidate values, identifies the source of each candidate, assigns confidence, and requires user review before values are copied into the authorization form.
 
 Current supported template family:
 
@@ -101,7 +101,7 @@ The current preview workflow processes the PDF in memory through an isolated ext
 
 The worker has timeout handling so a stalled parser can be terminated without blocking the API process indefinitely.
 
-It does not write the uploaded document to the CareQueue database or a permanent upload directory.
+It does not write the uploaded document to the CareQFlow database or a permanent upload directory.
 
 Operators must still account for browser behavior, proxy limits, crash dumps, endpoint security, operating-system protections, and infrastructure logging.
 
@@ -109,7 +109,7 @@ Do not add request-body logging around the PDF endpoint, and do not log extracte
 
 ## Validation
 
-CareQueue checks that:
+CareQFlow checks that:
 
 1. The request is not empty.
 2. The file is within the size limit.
@@ -162,7 +162,7 @@ Embedded text is more sensitive to layout order, line breaks, and PDF-generation
 
 ## Usable Text
 
-CareQueue considers embedded text usable when it contains at least:
+CareQFlow considers embedded text usable when it contains at least:
 
 ```text
 20 alphanumeric characters
@@ -379,7 +379,7 @@ The user must confirm that this is the actual original admit date.
 
 ## Registered Facility and Insurance Matching
 
-CareQueue attempts to match extracted facility and insurance values against registered options.
+CareQFlow attempts to match extracted facility and insurance values against registered options.
 
 When no match exists, the value is not added automatically. The user must select an existing value, correct the extracted value, or ask an Admin to add the approved option.
 
@@ -429,7 +429,7 @@ has_usable_text
 
 It does not include PDF bytes, extracted text, candidate values, patient identifiers, or authorization data.
 
-The audit event participates in CareQueue's normal application audit pipeline. See [Audit Log](../administration/audit-log.md) for audit-chain and integrity-verification behavior.
+The audit event participates in CareQFlow's normal application audit pipeline. See [Audit Log](../administration/audit-log.md) for audit-chain and integrity-verification behavior.
 
 ## Local Inspection Tool
 

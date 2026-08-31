@@ -78,7 +78,7 @@ export function TrustedDevicesCard({ darkMode }: TrustedDevicesCardProps) {
         )}
       >
         Revoke all remembered devices if you no longer recognize or trust a
-        device. Your current CareQueue session will remain signed in.
+        device. Your current CareQFlow session will remain signed in.
       </p>
 
       {message && (

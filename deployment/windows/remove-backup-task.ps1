@@ -1,24 +1,41 @@
 [CmdletBinding()]
 param(
-    [string]$TaskName = "CareQueue Encrypted Backup"
+    [string]$TaskName = "CareQFlow Encrypted Backup"
 )
 
-$ErrorActionPreference = "Stop"
+$legacyTaskName = "CareQueue Encrypted Backup"
 
-$existingTask = Get-ScheduledTask `
-    -TaskName $TaskName `
-    -ErrorAction SilentlyContinue
+$taskNames = @(
+    $TaskName
+)
 
-if (-not $existingTask) {
-    Write-Host "Scheduled task was not found."
-    Write-Host "Task name: $TaskName"
-    exit 0
+if ($TaskName -ne $legacyTaskName) {
+    $taskNames += $legacyTaskName
 }
 
-Unregister-ScheduledTask `
-    -TaskName $TaskName `
-    -Confirm:$false `
-    -ErrorAction Stop
+$removedAnyTask = $false
 
-Write-Host "Scheduled task removed successfully."
-Write-Host "Task name: $TaskName"
+foreach ($candidateTaskName in $taskNames) {
+    $existingTask = Get-ScheduledTask `
+        -TaskName $candidateTaskName `
+        -ErrorAction SilentlyContinue
+
+    if (-not $existingTask) {
+        continue
+    }
+
+    Unregister-ScheduledTask `
+        -TaskName $candidateTaskName `
+        -Confirm:$false `
+        -ErrorAction Stop
+
+    Write-Host "Scheduled task removed successfully."
+    Write-Host "Task name: $candidateTaskName"
+
+    $removedAnyTask = $true
+}
+
+if (-not $removedAnyTask) {
+    Write-Host "Scheduled task was not found."
+    Write-Host "Task name: $TaskName"
+}

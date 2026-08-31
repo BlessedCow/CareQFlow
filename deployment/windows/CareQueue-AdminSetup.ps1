@@ -6,7 +6,7 @@ param(
 
     [string]$HealthEndpoint = "http://127.0.0.1:8000/api/health",
 
-    [string]$ApplicationUrl = "https://carequeue.local",
+    [string]$ApplicationUrl = "https://careqflow.local",
 
     [ValidateRange(1, 60)]
     [int]$HealthAttempts = 5,
@@ -97,7 +97,7 @@ $xaml = @"
 <Window
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="CareQueue First-Time Admin Setup"
+    Title="CareQFlow First-Time Admin Setup"
     Height="530"
     Width="560"
     MinHeight="530"
@@ -118,7 +118,7 @@ $xaml = @"
 
         <TextBlock
             Grid.Row="0"
-            Text="Create the first CareQueue admin"
+            Text="Create the first CareQFlow admin"
             FontSize="24"
             FontWeight="SemiBold"
             Foreground="#0F172A"
@@ -126,7 +126,7 @@ $xaml = @"
 
         <TextBlock
             Grid.Row="1"
-            Text="This one-time setup creates the first administrator account through the local CareQueue API. Passwords are never passed through command-line arguments."
+            Text="This one-time setup creates the first administrator account through the local CareQFlow API. Passwords are never passed through command-line arguments."
             TextWrapping="Wrap"
             FontSize="13"
             Foreground="#475569"
@@ -188,7 +188,7 @@ $xaml = @"
             VerticalAlignment="Stretch">
             <TextBlock
                 Name="StatusText"
-                Text="Checking CareQueue setup status..."
+                Text="Checking CareQFlow setup status..."
                 TextWrapping="Wrap"
                 FontSize="13"
                 Foreground="#334155" />
@@ -284,7 +284,7 @@ function Start-SetupStatusCheck {
                             -DelaySeconds $HealthDelaySeconds
                                             )
                 ) {
-                    throw "The local CareQueue API is not responding on 127.0.0.1:8000."
+                    throw "The local CareQFlow API is not responding on 127.0.0.1:8000."
                 }
 
                 $setupAvailable = Get-InitialAdminSetupAvailable `
@@ -293,12 +293,12 @@ function Start-SetupStatusCheck {
 
                 if (-not $setupAvailable) {
                     $script:setupAlreadyComplete = $true
-                    $createButton.Content = "Open CareQueue"
+                    $createButton.Content = "Open CareQFlow"
                     $createButton.IsEnabled = $true
                     Set-SetupFormEnabled -Enabled $false
 
                     Set-SetupStatus `
-                        -Message "Initial admin setup is already complete. You can open CareQueue and sign in with the existing admin account." `
+                        -Message "Initial admin setup is already complete. You can open CareQFlow and sign in with the existing admin account." `
                         -Kind Success
 
                     return
@@ -331,7 +331,7 @@ $window.Add_ContentRendered({
         Set-SetupFormEnabled -Enabled $false
 
         Set-SetupStatus `
-            -Message "Checking CareQueue setup status..." `
+            -Message "Checking CareQFlow setup status..." `
             -Kind Info
 
         Start-SetupStatusCheck
@@ -399,7 +399,7 @@ $createButton.Add_Click({
             $confirmPasswordBox.Clear()
 
             Set-SetupStatus `
-                -Message "Setup complete. Launching CareQueue..." `
+                -Message "Setup complete. Launching CareQFlow..." `
                 -Kind Success
 
             Start-Process $ApplicationUrl
@@ -415,7 +415,7 @@ $createButton.Add_Click({
             if ($message -like "*409*") {
                 $message = "Initial admin setup is no longer available because a user already exists."
                 $script:setupAlreadyComplete = $true
-                $createButton.Content = "Open CareQueue"
+                $createButton.Content = "Open CareQFlow"
             }
             elseif ($message -like "*400*") {
                 $message = "The setup request was rejected. Check the username and password, then try again."

@@ -127,7 +127,7 @@ def test_main_runs_preflight_and_activates_recovery(
     assert str(result["active_database"]) in captured.out
     assert str(result["rollback_database"]) in captured.out
     assert str(result["safety_backup"]) in captured.out
-    assert "CareQueue remains stopped." in captured.out
+    assert "CareQFlow remains stopped." in captured.out
 
 
 def test_main_returns_failure_when_preflight_fails(

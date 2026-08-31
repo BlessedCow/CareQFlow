@@ -84,7 +84,7 @@ export function RequiredPasswordChangePage({
         <div className="mb-8 flex items-center justify-center">
           <div className="flex items-center">
             <Activity className="mr-2 h-7 w-7 text-blue-500" />
-            <span className="text-2xl font-bold tracking-wide">CareQueue</span>
+            <span className="text-2xl font-bold tracking-wide">CareQFlow</span>
           </div>
         </div>
 
@@ -101,7 +101,7 @@ export function RequiredPasswordChangePage({
               darkMode ? "text-gray-400" : "text-gray-600"
             )}
           >
-            Your password must be changed before you can access CareQueue.
+            Your password must be changed before you can access CareQFlow.
           </p>
 
           <p

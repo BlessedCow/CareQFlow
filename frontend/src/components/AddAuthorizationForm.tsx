@@ -238,7 +238,7 @@ export function AddAuthorizationForm({
                   darkMode ? "text-gray-400" : "text-gray-600"
                 )}
               >
-                The PDF is processed in memory and is not stored by CareQueue.
+                The PDF is processed in memory and is not stored by CareQFlow.
                 Review all extracted values before applying them.
               </p>
             </div>

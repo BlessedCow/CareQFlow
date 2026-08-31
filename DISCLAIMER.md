@@ -1,12 +1,12 @@
 # Disclaimer
 
-CareQueue is a local-first workflow application for utilization review and authorization management. It supports authorization tracking, review dates, payer and facility workflows, timeline events, PDF-assisted intake, dashboards, user access controls, audit records, encrypted storage options, backups, and private packaged deployment.
+CareQFlow is a local-first workflow application for utilization review and authorization management. It supports authorization tracking, review dates, payer and facility workflows, timeline events, PDF-assisted intake, dashboards, user access controls, audit records, encrypted storage options, backups, and private packaged deployment.
 
 This project is provided as software for administrative workflow support. It is not medical advice, legal advice, billing advice, clinical guidance, compliance guidance, or a substitute for verification with an authorized payer, provider, legal professional, compliance professional, or other responsible organization.
 
 ## Healthcare and Compliance Status
 
-CareQueue includes technical and administrative-support features that may help an organization implement parts of its security and compliance program.
+CareQFlow includes technical and administrative-support features that may help an organization implement parts of its security and compliance program.
 
 These include controls such as:
 
@@ -26,17 +26,17 @@ These include controls such as:
 - Restricted production runtime paths
 - Backup and recovery workflows
 
-These controls do not, by themselves, make CareQueue or a CareQueue deployment compliant with HIPAA or any other legal, regulatory, contractual, accreditation, security, or privacy framework.
+These controls do not, by themselves, make CareQFlow or a CareQFlow deployment compliant with HIPAA or any other legal, regulatory, contractual, accreditation, security, or privacy framework.
 
 Compliance depends on the complete environment in which the software is deployed and operated, including organizational policies, workforce practices, agreements, physical safeguards, technical safeguards, risk analysis, access management, incident response, backup practices, device security, network architecture, monitoring, and applicable legal requirements.
 
-CareQueue is not represented as independently certified, formally audited, or approved by a government agency, payer, accreditation body, or standards organization unless a specific release or accompanying documentation explicitly states otherwise.
+CareQFlow is not represented as independently certified, formally audited, or approved by a government agency, payer, accreditation body, or standards organization unless a specific release or accompanying documentation explicitly states otherwise.
 
 Organizations considering use with regulated or sensitive data should perform their own security, legal, compliance, and operational review before deployment.
 
 ## Governance Attestation
 
-CareQueue includes a versioned organization governance attestation that must be completed by an Admin before normal protected application functionality becomes available.
+CareQFlow includes a versioned organization governance attestation that must be completed by an Admin before normal protected application functionality becomes available.
 
 The attestation is intended to:
 
@@ -61,7 +61,7 @@ Required agreements must be executed separately by the appropriate parties.
 
 ## Administrative Workflow Only
 
-CareQueue is intended to support administrative utilization review and authorization workflows.
+CareQFlow is intended to support administrative utilization review and authorization workflows.
 
 It does not provide:
 
@@ -77,19 +77,19 @@ It does not provide:
 - Eligibility guarantees
 - Authorization guarantees
 
-CareQueue may display or organize information entered by users or extracted from documents, but it does not independently verify that the information is correct, current, complete, or authoritative.
+CareQFlow may display or organize information entered by users or extracted from documents, but it does not independently verify that the information is correct, current, complete, or authoritative.
 
 Authorization statuses, payer decisions, review requirements, coverage details, dates, identifiers, and other operational information should be verified with the relevant payer, provider, facility, or other authorized source when accuracy matters.
 
 ## PDF Intake Limitations
 
-CareQueue can assist with extracting information from supported PDF documents.
+CareQFlow can assist with extracting information from supported PDF documents.
 
 PDF-assisted intake is not an authoritative source of record.
 
 Extracted values must be reviewed before they are applied to an authorization record.
 
-CareQueue does not guarantee that:
+CareQFlow does not guarantee that:
 
 - A PDF was parsed completely.
 - Embedded text accurately represents the visible document.
@@ -102,11 +102,11 @@ CareQueue does not guarantee that:
 
 Fields marked as needing review should be confirmed or corrected by an authorized user before use.
 
-CareQueue does not currently provide a general-purpose OCR pipeline for scanned documents.
+CareQFlow does not currently provide a general-purpose OCR pipeline for scanned documents.
 
 ## PHI and PII Warning
 
-CareQueue can process information that may constitute protected health information, personally identifiable information, payer information, authorization information, or other sensitive operational data.
+CareQFlow can process information that may constitute protected health information, personally identifiable information, payer information, authorization information, or other sensitive operational data.
 
 Do not commit, publish, upload, or otherwise expose real sensitive data through source control, public issue trackers, public demonstrations, screenshots, test fixtures, or documentation.
 
@@ -150,7 +150,7 @@ De-identification requirements depend on the applicable context and should be re
 
 ## Authentication and Access-Control Limitations
 
-CareQueue includes authentication, MFA, role-based authorization, session controls, and governance prerequisites.
+CareQFlow includes authentication, MFA, role-based authorization, session controls, and governance prerequisites.
 
 These controls depend on correct deployment and operation.
 
@@ -162,13 +162,13 @@ For example:
 - Single-session enforcement does not prevent compromise of the currently active session.
 - Session timeouts do not replace workstation locking or physical access controls.
 - Role-based access does not replace periodic organizational access review.
-- Account deactivation in CareQueue does not automatically remove operating-system, VPN, network, file-share, or other external access.
+- Account deactivation in CareQFlow does not automatically remove operating-system, VPN, network, file-share, or other external access.
 
 Organizations remain responsible for identity verification, account provisioning, role assignment, MFA policy, access review, offboarding, workstation security, and account recovery procedures.
 
 ## Encryption and Key-Management Limitations
 
-CareQueue supports multiple encryption layers, including selected field-level encryption, SQLCipher-backed database encryption, and separately encrypted backups.
+CareQFlow supports multiple encryption layers, including selected field-level encryption, SQLCipher-backed database encryption, and separately encrypted backups.
 
 Encryption reduces certain risks but does not eliminate them.
 
@@ -192,7 +192,7 @@ Encryption at rest also does not protect data after it has been legitimately dec
 
 ## Backup and Recovery Limitations
 
-CareQueue supports encrypted backup creation, verification, retention controls, staged recovery, controlled recovery activation, and assisted failed-upgrade rollback for supported packaged deployment paths.
+CareQFlow supports encrypted backup creation, verification, retention controls, staged recovery, controlled recovery activation, and assisted failed-upgrade rollback for supported packaged deployment paths.
 
 A successful backup operation does not prove that:
 
@@ -213,7 +213,7 @@ Do not manually alter recovery records, application archive checksums, migration
 
 ## Audit Log Limitations
 
-CareQueue records selected application, security, governance, administrative, backup, recovery, and workflow actions.
+CareQFlow records selected application, security, governance, administrative, backup, recovery, and workflow actions.
 
 Current audit events participate in a tamper-evident cryptographic hash chain and can be checked through the application's integrity-verification workflow.
 
@@ -221,7 +221,7 @@ Tamper-evident does not mean tamper-proof.
 
 A sufficiently privileged attacker who can modify the application, database, keys, backups, and host environment may be able to undermine application-level evidence.
 
-CareQueue's audit log is not currently a substitute for:
+CareQFlow's audit log is not currently a substitute for:
 
 - Independent immutable logging
 - Centralized SIEM collection
@@ -234,14 +234,14 @@ Deployments requiring independent or immutable evidence should use additional ex
 
 ## Private Deployment Model
 
-Packaged CareQueue releases are designed primarily for private or controlled deployment.
+Packaged CareQFlow releases are designed primarily for private or controlled deployment.
 
-The packaged Windows and Linux configurations place the CareQueue API on the loopback interface and use Caddy to provide HTTPS access.
+The packaged Windows and Linux configurations place the CareQFlow API on the loopback interface and use Caddy to provide HTTPS access.
 
 The default packaged private origin is:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 The included configuration should not be treated as a general-purpose public internet deployment template.
@@ -265,11 +265,11 @@ A public or broadly network-accessible deployment requires separate review of ar
 - Denial-of-service exposure
 - Administrative access paths
 
-Do not expose the loopback CareQueue API directly to an untrusted network.
+Do not expose the loopback CareQFlow API directly to an untrusted network.
 
 ## Platform and Deployment Validation
 
-CareQueue includes packaged deployment workflows for Windows and supported Debian-based Linux systems.
+CareQFlow includes packaged deployment workflows for Windows and supported Debian-based Linux systems.
 
 A successful build or installation on one system does not guarantee identical behavior on another system.
 
@@ -299,17 +299,17 @@ Validation should include appropriate checks for:
 
 ## Licensing and Distribution
 
-CareQueue uses version-based licensing.
+CareQFlow uses version-based licensing.
 
 CareQueue versions `0.4.x` and earlier were released under the MIT License.
 
-CareQueue version `0.5.0` and later versions expressly released under the current licensing terms use the Business Source License 1.1 until the applicable Change Date.
+CareQFlow version `0.5.0` and later versions expressly released under the current licensing terms use the Business Source License 1.1 until the applicable Change Date.
 
 Current BSL-licensed releases are source-available. Public availability of the source code does not by itself grant unrestricted production-use, hosting, redistribution, or commercial rights.
 
-Production use of a CareQueue version that remains under the Business Source License requires rights granted by the applicable license or a separate commercial license from the Licensor.
+Production use of a CareQFlow version that remains under the Business Source License requires rights granted by the applicable license or a separate commercial license from the Licensor.
 
-Each BSL-licensed version has its own Change Date. Under the current CareQueue licensing parameters, the Change Date is four years after the first publicly available distribution of that specific version, and the Change License is GNU General Public License version 3 or later.
+Each BSL-licensed version has its own Change Date. Under the current CareQFlow licensing parameters, the Change Date is four years after the first publicly available distribution of that specific version, and the Change License is GNU General Public License version 3 or later.
 
 Historical MIT releases retain the rights granted under the MIT License for those versions.
 
@@ -353,13 +353,13 @@ Release notes should be reviewed for:
 - Changes to governance requirements
 - Changes to licensing or distribution terms
 
-The CareQueue application version, governance attestation version, and governance document revision are separate values.
+The CareQFlow application version, governance attestation version, and governance document revision are separate values.
 
 An application release does not automatically require a new governance attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
 
 ## No Guarantee of Availability
 
-CareQueue does not guarantee continuous availability.
+CareQFlow does not guarantee continuous availability.
 
 Availability can be affected by:
 
@@ -376,11 +376,11 @@ Availability can be affected by:
 - Network problems
 - Software defects
 
-Organizations using CareQueue for operational workflows should maintain appropriate downtime, backup, recovery, and business-continuity procedures.
+Organizations using CareQFlow for operational workflows should maintain appropriate downtime, backup, recovery, and business-continuity procedures.
 
 ## No Warranty
 
-CareQueue is provided as-is, without warranty of any kind, to the extent permitted by applicable law.
+CareQFlow is provided as-is, without warranty of any kind, to the extent permitted by applicable law.
 
 No guarantee is made regarding:
 
@@ -400,7 +400,7 @@ Users and organizations are responsible for evaluating whether the software is a
 
 ## Limitation of Liability
 
-To the extent permitted by applicable law, use, modification, deployment, and distribution of CareQueue are at the user's or organization's own risk.
+To the extent permitted by applicable law, use, modification, deployment, and distribution of CareQFlow are at the user's or organization's own risk.
 
 The project maintainers and contributors are not responsible for claims, damages, losses, privacy incidents, compliance failures, payer disputes, operational errors, data loss, service interruption, or other liabilities arising from use of the software except where liability cannot legally be excluded or limited.
 

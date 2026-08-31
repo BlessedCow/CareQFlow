@@ -8,7 +8,7 @@ from authstatus_api.persistence.schema import init_db
 from authstatus_api.security.mappings import format_datetime
 from authstatus_api.security.sessions import utc_now
 
-MFA_ISSUER_NAME = "CareQueue"
+MFA_ISSUER_NAME = "CareQFlow"
 TOTP_DIGITS = 6
 TOTP_INTERVAL_SECONDS = 30
 

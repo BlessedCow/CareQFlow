@@ -27,7 +27,7 @@ from authstatus_api.security.users import create_user  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create a CareQueue user.")
+    parser = argparse.ArgumentParser(description="Create a CareQFlow user.")
     parser.add_argument("--username", required=True)
     parser.add_argument(
         "--role",

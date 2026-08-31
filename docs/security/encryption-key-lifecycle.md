@@ -1,12 +1,12 @@
 # Encryption Key Lifecycle
 
-CareQueue uses multiple independent encryption keys because each key protects a different layer of data. Key custody, rotation, recovery, and retirement must be handled as operational security procedures rather than as one-time installation steps.
+CareQFlow uses multiple independent encryption keys because each key protects a different layer of data. Key custody, rotation, recovery, and retirement must be handled as operational security procedures rather than as one-time installation steps.
 
-This document describes the expected lifecycle for CareQueue encryption keys and the safeguards that should be in place before a production deployment is considered recoverable.
+This document describes the expected lifecycle for CareQFlow encryption keys and the safeguards that should be in place before a production deployment is considered recoverable.
 
 ## Scope
 
-CareQueue currently uses these encryption settings:
+CareQFlow currently uses these encryption settings:
 
 ```env
 AUTHSTATUS_ENCRYPTION_KEY=
@@ -20,7 +20,7 @@ Their purposes are different:
 - `AUTHSTATUS_ENCRYPTION_KEY` is the current field-level encryption key. It protects selected sensitive authorization fields, authorization event notes, stored MFA secrets, and encrypted authorization documents.
 - `AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY` is a temporary field-level key used only during a controlled field-key rotation window so data encrypted with the prior key can still be read and migrated to the new current key.
 - `AUTHSTATUS_SQLCIPHER_KEY` opens the SQLCipher database when production database encryption is enabled.
-- `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` encrypts and decrypts CareQueue `.db.enc` backup files.
+- `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` encrypts and decrypts CareQFlow `.db.enc` backup files.
 
 These keys are not interchangeable. Production validation requires configured encryption roles to use different key values.
 
@@ -32,9 +32,9 @@ The following rules apply to every production deployment:
 2. Never reuse a key across field encryption, SQLCipher, or backup encryption.
 3. Never commit keys to source control.
 4. Never place keys in issue reports, screenshots, documentation, ordinary chat, email, audit metadata, logs, scheduled-task arguments, or service command lines.
-5. Restrict key access to the CareQueue runtime identity and authorized administrators who require recovery access.
+5. Restrict key access to the CareQFlow runtime identity and authorized administrators who require recovery access.
 6. Keep recoverable key copies separate from the database and backup files they protect.
-7. Maintain at least one approved recovery copy outside the CareQueue host when organizational policy requires recovery after complete host loss.
+7. Maintain at least one approved recovery copy outside the CareQFlow host when organizational policy requires recovery after complete host loss.
 8. Test recovery before retiring a key.
 9. Record key lifecycle actions without recording the secret value itself.
 10. Treat suspected key disclosure as a security incident.
@@ -51,7 +51,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Run the command separately for each Fernet key. Do not generate one value and copy it into multiple settings.
 
-The SQLCipher key is a separate secret and must meet CareQueue's configured production requirements. It must not match any field or backup encryption key.
+The SQLCipher key is a separate secret and must meet CareQFlow's configured production requirements. It must not match any field or backup encryption key.
 
 Generated values should be transferred directly into the approved secret-management process. Avoid leaving generated keys in shell history, clipboard history, notes, screenshots, or temporary files longer than necessary.
 
@@ -77,7 +77,7 @@ Do not record patient information or unrelated application data in the key inven
 
 ## Storage and Access Control
 
-Production keys are normally supplied to CareQueue through the protected environment configuration used by the deployment.
+Production keys are normally supplied to CareQFlow through the protected environment configuration used by the deployment.
 
 Typical production locations include:
 
@@ -92,7 +92,7 @@ Linux:
 The environment file must be restricted to the minimum required operating-system identities. The exact ACL or ownership model depends on the deployment, but the following principles apply:
 
 - Ordinary users should not be able to read the production environment file.
-- The CareQueue runtime account must have only the access required to run the application.
+- The CareQFlow runtime account must have only the access required to run the application.
 - Administrators should review permissions after installation, repair, upgrade, recovery, or service-account changes.
 - Keys should not be duplicated into service definitions when the service can load the protected environment file instead.
 - Backup copies of keys should not be stored beside the database or encrypted backups they protect.
@@ -101,12 +101,12 @@ A host administrator with access to both encrypted data and the matching key may
 
 ## Recovery Copies
 
-A production key that exists only on the CareQueue host creates a single-host recovery dependency.
+A production key that exists only on the CareQFlow host creates a single-host recovery dependency.
 
 Organizations should maintain recoverable copies through an approved secret-management process appropriate to their environment. A recovery copy should be:
 
 - Protected from unauthorized disclosure.
-- Independent from the CareQueue application host when off-host recovery is required.
+- Independent from the CareQFlow application host when off-host recovery is required.
 - Accessible to designated recovery personnel under documented procedures.
 - Included in periodic recovery testing.
 - Removed or archived according to policy after the associated encrypted data no longer requires it.
@@ -115,7 +115,7 @@ Do not assume that an encrypted backup is recoverable merely because the `.db.en
 
 ## Field-Level Encryption Rotation
 
-CareQueue provides a controlled field-key rotation workflow.
+CareQFlow provides a controlled field-key rotation workflow.
 
 The rotation migrates supported encrypted data from the previous field key to the current field key. It covers:
 
@@ -197,7 +197,7 @@ Verify at minimum:
 
 1. The rotation command completed successfully.
 2. The pre-rotation encrypted backup exists and was reported as verified.
-3. CareQueue starts successfully with the new current field key.
+3. CareQFlow starts successfully with the new current field key.
 4. Representative encrypted authorization records can be read through the application.
 5. Stored authorization event notes remain readable.
 6. MFA-backed accounts continue to operate as expected.
@@ -212,8 +212,8 @@ Use synthetic or approved test records for verification when practical. Do not c
 After the rotation has been verified and the organization's recovery procedure confirms that the old key is no longer required for active data:
 
 1. Preserve the verified pre-rotation backup and its required recovery keys for the retention period defined by policy.
-2. Remove `AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY` from the active CareQueue configuration.
-3. Restart or reload CareQueue according to the deployment procedure so the retired previous key is no longer available to the running process.
+2. Remove `AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY` from the active CareQFlow configuration.
+3. Restart or reload CareQFlow according to the deployment procedure so the retired previous key is no longer available to the running process.
 4. Verify normal application startup and access to encrypted data.
 5. Update the key inventory with the retirement date.
 
@@ -247,7 +247,7 @@ Actions:
 
 ### Rotation succeeds but audit recording fails
 
-CareQueue distinguishes a completed rotation from a failure to append the security audit event. The rotation script reports this condition separately.
+CareQFlow distinguishes a completed rotation from a failure to append the security audit event. The rotation script reports this condition separately.
 
 If the script reports that field rotation completed successfully but audit recording failed:
 
@@ -260,22 +260,22 @@ If the script reports that field rotation completed successfully but audit recor
 
 ## SQLCipher Key Lifecycle
 
-`AUTHSTATUS_SQLCIPHER_KEY` protects the database file itself when CareQueue is configured for SQLCipher.
+`AUTHSTATUS_SQLCIPHER_KEY` protects the database file itself when CareQFlow is configured for SQLCipher.
 
-The SQLCipher key must be available before CareQueue opens the database. Losing the key can make the active database and any SQLCipher database snapshots unreadable even when other CareQueue keys are still available.
+The SQLCipher key must be available before CareQFlow opens the database. Losing the key can make the active database and any SQLCipher database snapshots unreadable even when other CareQFlow keys are still available.
 
 ### Current rotation limitation
 
-CareQueue does not currently provide an automated in-place SQLCipher key-rotation command equivalent to the field-key rotation workflow.
+CareQFlow does not currently provide an automated in-place SQLCipher key-rotation command equivalent to the field-key rotation workflow.
 
-Do not change `AUTHSTATUS_SQLCIPHER_KEY` on an existing SQLCipher database and assume the database will automatically re-encrypt under the new key. Doing so may prevent CareQueue from opening the database.
+Do not change `AUTHSTATUS_SQLCIPHER_KEY` on an existing SQLCipher database and assume the database will automatically re-encrypt under the new key. Doing so may prevent CareQFlow from opening the database.
 
 SQLCipher key changes must use a separately tested migration/cutover procedure that:
 
-1. Creates and verifies an encrypted CareQueue safety backup.
+1. Creates and verifies an encrypted CareQFlow safety backup.
 2. Preserves the existing SQLCipher key until the new database is validated.
 3. Produces or rekeys a database using the new SQLCipher key through an approved migration mechanism.
-4. Validates database integrity and required CareQueue tables.
+4. Validates database integrity and required CareQFlow tables.
 5. Performs a deliberate cutover rather than overwriting the only known-good database.
 6. Retains rollback material and the previous SQLCipher key until recovery is proven.
 
@@ -283,7 +283,7 @@ The existing plaintext-to-SQLCipher migration scripts are not a general promise 
 
 ## Backup Encryption Key Lifecycle
 
-`AUTHSTATUS_BACKUP_ENCRYPTION_KEY` protects `.db.enc` files created by CareQueue.
+`AUTHSTATUS_BACKUP_ENCRYPTION_KEY` protects `.db.enc` files created by CareQFlow.
 
 Changing the configured backup key affects newly created backups. It does not automatically re-encrypt backups that were created with an older key.
 
@@ -294,16 +294,16 @@ Therefore:
 - The key inventory should make it possible to determine which backup-key generation is required for retained recovery sets.
 - Before retiring an old backup key, verify that every backup that still matters is either intentionally expired or recoverable through an approved replacement recovery set.
 
-CareQueue does not currently provide an automated bulk re-encryption workflow for historical `.db.enc` backup files. Do not decrypt and re-encrypt production backups through ad hoc scripts without an approved, tested procedure that preserves integrity, provenance, and rollback capability.
+CareQFlow does not currently provide an automated bulk re-encryption workflow for historical `.db.enc` backup files. Do not decrypt and re-encrypt production backups through ad hoc scripts without an approved, tested procedure that preserves integrity, provenance, and rollback capability.
 
 A controlled backup-key change should normally include:
 
 1. Create and verify a final backup using the old backup key if required by policy.
 2. Preserve the old key with any retained backups that depend on it.
 3. Generate a new independent backup key.
-4. Update the protected CareQueue environment configuration.
+4. Update the protected CareQFlow environment configuration.
 5. Create a new backup using the new key.
-6. Verify that the new backup can be decrypted and validated through the normal CareQueue verification workflow.
+6. Verify that the new backup can be decrypted and validated through the normal CareQFlow verification workflow.
 7. Update the key inventory to distinguish the old and new backup-key generations.
 8. Retire the old key only after its dependent backups have expired or been replaced under an approved recovery plan.
 
@@ -382,13 +382,13 @@ Reviewer
 
 Do not record the raw encryption keys in the drill report.
 
-A successful drill should verify more than file presence. The restored database should pass CareQueue validation, and representative encrypted application data should remain readable using the corresponding field and SQLCipher keys.
+A successful drill should verify more than file presence. The restored database should pass CareQFlow validation, and representative encrypted application data should remain readable using the corresponding field and SQLCipher keys.
 
 ## Deployment and Upgrade Review
 
 Review encryption-key handling whenever any of the following changes:
 
-- CareQueue host or virtual machine.
+- CareQFlow host or virtual machine.
 - Windows service account or Linux service user.
 - Environment-file location.
 - Filesystem ownership or ACLs.
@@ -403,7 +403,7 @@ Review encryption-key handling whenever any of the following changes:
 After a deployment or upgrade that changes secret handling:
 
 1. Verify the environment file still has restricted permissions.
-2. Verify CareQueue can read only the intended production keys.
+2. Verify CareQFlow can read only the intended production keys.
 3. Verify key values were not copied into logs, command lines, service definitions, or installer output.
 4. Create and verify an encrypted backup.
 5. Confirm application health and readiness.
@@ -419,7 +419,7 @@ A key should not be considered retired until all applicable conditions are satis
 - Recovery was verified with the new key set.
 - Retained databases and backups that still require the old key have been identified.
 - Retention requirements have been reviewed.
-- The old key has been removed from active CareQueue configuration when no longer required there.
+- The old key has been removed from active CareQFlow configuration when no longer required there.
 - Authorized recovery storage for the old key has been retained or destroyed according to policy.
 - The key inventory records the retirement date and disposition.
 - No raw key material was written into audit logs or change records.

@@ -1,14 +1,14 @@
-# CareQueue
+# CareQFlow
 
-CareQueue is a local-first application for managing utilization review and prior authorization work.
+CareQFlow is a local-first application for managing utilization review and prior authorization work.
 
 It brings authorization records, review dates, payer decisions, timeline events, follow-up work, and PDF-assisted intake into one place. The goal is to make day-to-day authorization tracking easier to follow without relying on scattered spreadsheets, notes, and reminders.
 
-CareQueue is built for private use and controlled deployment. It is not a hosted service, and it is not HIPAA compliant simply because it includes security controls. Any organization using it with protected health information remains responsible for its own legal, administrative, physical, and technical safeguards.
+CareQFlow is built for private use and controlled deployment. It is not a hosted service, and it is not HIPAA compliant simply because it includes security controls. Any organization using it with protected health information remains responsible for its own legal, administrative, physical, and technical safeguards.
 
-## What CareQueue Does
+## What CareQFlow Does
 
-CareQueue supports the main parts of an authorization workflow:
+CareQFlow supports the main parts of an authorization workflow:
 
 - Track initial and continued-stay authorizations
 - Record facilities, payers, levels of care, member details, and review dates
@@ -38,7 +38,7 @@ The frontend includes:
 
 ## Security at a Glance
 
-CareQueue includes several layers of application security:
+CareQFlow includes several layers of application security:
 
 - Argon2id password hashing
 - Shared server-side password policy enforcement
@@ -64,11 +64,11 @@ CareQueue includes several layers of application security:
 - Private HTTPS security headers, including Content Security Policy
 - Automated security checks for backend and frontend dependencies
 
-These controls reduce risk, but they do not replace a complete security or compliance program. See [SECURITY.md](SECURITY.md) and [DISCLAIMER.md](DISCLAIMER.md) before using CareQueue with sensitive information.
+These controls reduce risk, but they do not replace a complete security or compliance program. See [SECURITY.md](SECURITY.md) and [DISCLAIMER.md](DISCLAIMER.md) before using CareQFlow with sensitive information.
 
 ## Technology
 
-CareQueue uses:
+CareQFlow uses:
 
 - **Backend:** Python, FastAPI, Pydantic, SQLite, and SQLCipher
 - **Frontend:** React, TypeScript, Vite, and Tailwind CSS
@@ -82,7 +82,7 @@ CareQueue uses:
 Only the main areas are shown here.
 
 ```text
-CareQueue/
+CareQFlow/
 ├── backend/
 │   ├── authstatus_api/     # API, business logic, storage, security, and backups
 │   ├── scripts/            # User, backup, recovery, PDF, and database utilities
@@ -166,15 +166,15 @@ The development environment file points the frontend directly to the local FastA
 
 ## First-Time Setup
 
-CareQueue does not include public account registration.
+CareQFlow does not include public account registration.
 
-For a packaged Windows installation, the installer can launch the first-time Admin setup window after installation completes. The setup window creates the first Admin through the local CareQueue API without passing the password through command-line arguments.
+For a packaged Windows installation, the installer can launch the first-time Admin setup window after installation completes. The setup window creates the first Admin through the local CareQFlow API without passing the password through command-line arguments.
 
 The first-time setup flow is available only while no users exist. After any user exists, the backend disables the initial Admin setup endpoint and the setup utility reports that setup is already complete.
 
-After the first Admin signs in, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available. The attestation records the organization, deployment mode, accepting Admin, acceptance time, CareQueue application version, governance attestation version, and governance document revision.
+After the first Admin signs in, CareQFlow requires the current organization governance attestation before normal protected application functionality becomes available. The attestation records the organization, deployment mode, accepting Admin, acceptance time, CareQFlow application version, governance attestation version, and governance document revision.
 
-The governance attestation is current only when both its required attestation version and required document revision match the accepted record. A normal CareQueue application-version change does not by itself require re-attestation.
+The governance attestation is current only when both its required attestation version and required document revision match the accepted record. A normal CareQFlow application-version change does not by itself require re-attestation.
 
 The governance workflow supports organizational accountability. Accepting it does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
@@ -196,7 +196,7 @@ Available roles:
 
 ## Private Windows Deployment
 
-CareQueue includes a Windows production installer and service definitions under:
+CareQFlow includes a Windows production installer and service definitions under:
 
 ```text
 deployment/windows/
@@ -212,7 +212,7 @@ The current Windows deployment can:
 - Generate and preserve independent production encryption keys
 - Run the FastAPI backend as a Windows service
 - Serve the frontend and proxy `/api` through Caddy
-- Provide private HTTPS through a local hostname such as `carequeue.local`
+- Provide private HTTPS through a local hostname such as `careqflow.local`
 - Offer installer modes for Install, Upgrade, Repair, Rollback, and Uninstall
 - Preserve runtime data during uninstall
 - Preserve verified pre-upgrade application and database recovery assets during upgrades
@@ -231,7 +231,7 @@ Technical deployment details belong in the deployment scripts and [ARCHITECTURE.
 
 ## Linux Release Package
 
-CareQueue also includes a packaged Linux installation workflow under:
+CareQFlow also includes a packaged Linux installation workflow under:
 
 ```text
 deployment/linux/
@@ -240,7 +240,7 @@ deployment/linux/
 The Linux release is distributed as a versioned archive:
 
 ```text
-CareQueue-Linux-Setup-<version>.tar.gz
+CareQFlow-Linux-Setup-<version>.tar.gz
 ```
 
 The packaged Linux workflow supports:
@@ -250,8 +250,8 @@ The packaged Linux workflow supports:
 - A dedicated `carequeue` service account
 - Production Python environment and frontend installation
 - Protected production configuration and encryption-key setup
-- CareQueue API and Caddy systemd services
-- Private HTTPS through `carequeue.local`
+- CareQFlow API and Caddy systemd services
+- Private HTTPS through `careqflow.local`
 - Caddy internal certificate trust setup
 - Encrypted backup service and timer
 - First-time Admin setup
@@ -265,7 +265,7 @@ See [docs/deployment/linux.md](docs/deployment/linux.md) for installation and op
 
 ## Backups and Recovery
 
-CareQueue can create encrypted backups of the active database:
+CareQFlow can create encrypted backups of the active database:
 
 ```powershell
 python backend/scripts/create_encrypted_backup.py
@@ -277,7 +277,7 @@ A backup can be decrypted and staged in a safe restore location without overwrit
 python backend/scripts/restore_encrypted_backup.py path\to\backup.db.enc
 ```
 
-CareQueue also includes:
+CareQFlow also includes:
 
 - Backup verification
 - Retention rules
@@ -292,7 +292,7 @@ Backups are useful only when restoration is tested. Keep backup keys separate fr
 
 ## PDF Intake
 
-CareQueue can read text from supported PDFs locally and present likely intake values for review.
+CareQFlow can read text from supported PDFs locally and present likely intake values for review.
 
 The intake workflow is designed to:
 
@@ -375,20 +375,20 @@ Use synthetic data in tests, screenshots, examples, and public documentation.
 
 ## Status
 
-CareQueue is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage options, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, packaged Windows and Linux deployment, controlled upgrades, and failed-upgrade rollback workflows are implemented.
+CareQFlow is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage options, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, packaged Windows and Linux deployment, controlled upgrades, and failed-upgrade rollback workflows are implemented.
 
 Current roadmap priorities include production smoke-test tooling, stronger cross-release migration and recovery validation, broader end-to-end browser testing, accessibility work, release-signing and artifact-trust improvements, and continued operational hardening.
 
 ## License
 
-CareQueue uses version-based licensing.
+CareQFlow uses version-based licensing.
 
 - CareQueue versions `0.4.x` and earlier were released under the MIT License.
-- CareQueue version `0.5.0` and later versions expressly released under the new terms use the Business Source License 1.1.
+- CareQFlow version `0.5.0` and later versions expressly released under the new terms use the Business Source License 1.1.
 - Non-production use of current BSL releases is permitted under the applicable license terms.
 - Production use of a version that remains under the Business Source License requires a separate commercial license from the Licensor.
 - Each BSL-licensed version changes to its specified Change License on its applicable Change Date.
 
 See [LICENSE](LICENSE) for the authoritative licensing notice and [LICENSES/](LICENSES/) for the license texts.
 
-CareQueue releases that remain under the Business Source License are source-available and should not be described as Open Source during that period.
+CareQFlow releases that remain under the Business Source License are source-available and should not be described as Open Source during that period.

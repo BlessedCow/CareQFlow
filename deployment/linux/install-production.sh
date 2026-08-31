@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-APPLICATION_ORIGIN="${APPLICATION_ORIGIN:-https://carequeue.local}"
+APPLICATION_ORIGIN="${APPLICATION_ORIGIN:-https://careqflow.local}"
 
 INSTALL_DIRECTORY="${INSTALL_DIRECTORY:-/opt/carequeue}"
 DATA_DIRECTORY="${DATA_DIRECTORY:-/var/lib/carequeue}"
@@ -34,7 +34,7 @@ fail() {
 
 require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
-        fail "CareQueue installation must be run as root."
+        fail "CareQFlow installation must be run as root."
     fi
 }
 
@@ -79,7 +79,7 @@ PY
 validate_release_metadata() {
     if [[ ! -f "${RELEASE_METADATA_FILE}" ]]; then
         fail \
-            "CareQueue release metadata was not found: " \
+            "CareQFlow release metadata was not found: " \
             "${RELEASE_METADATA_FILE}"
     fi
 
@@ -103,27 +103,27 @@ validate_release_metadata() {
 
     if [[ "${RELEASE_METADATA_SCHEMA}" != "1" ]]; then
         fail \
-            "Unsupported CareQueue release metadata schema: " \
+            "Unsupported CareQFlow release metadata schema: " \
             "${RELEASE_METADATA_SCHEMA:-missing}"
     fi
 
     if [[ -z "${RELEASE_APP_VERSION}" ]]; then
-        fail "CareQueue release metadata does not contain an application version."
+        fail "CareQFlow release metadata does not contain an application version."
     fi
 
     if [[ ! "${RELEASE_APP_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         fail \
-            "Invalid CareQueue application version in release metadata: " \
+            "Invalid CareQFlow application version in release metadata: " \
             "${RELEASE_APP_VERSION}"
     fi
 
     if [[ "${RELEASE_PACKAGE_PLATFORM}" != "linux" ]]; then
         fail \
-            "CareQueue package platform is not compatible with this installer: " \
+            "CareQFlow package platform is not compatible with this installer: " \
             "${RELEASE_PACKAGE_PLATFORM:-missing}"
     fi
 
-    printf 'CareQueue release metadata validated: version %s\n' \
+    printf 'CareQFlow release metadata validated: version %s\n' \
         "${RELEASE_APP_VERSION}"
 }
 
@@ -152,7 +152,7 @@ detect_distribution() {
 }
 
 install_system_dependencies() {
-    printf 'Installing CareQueue system dependencies...\n'
+    printf 'Installing CareQFlow system dependencies...\n'
 
     case "${DISTRO_ID}" in
         ubuntu|debian|linuxmint)
@@ -201,13 +201,13 @@ install_system_dependencies() {
 
 ensure_service_account() {
     if getent group "${CAREQUEUE_GROUP}" >/dev/null 2>&1; then
-        printf 'CareQueue group already exists.\n'
+        printf 'CareQFlow group already exists.\n'
     else
         groupadd --system "${CAREQUEUE_GROUP}"
     fi
 
     if id "${CAREQUEUE_USER}" >/dev/null 2>&1; then
-        printf 'CareQueue service account already exists.\n'
+        printf 'CareQFlow service account already exists.\n'
         return
     fi
 
@@ -229,7 +229,7 @@ ensure_service_account() {
 }
 
 create_directories() {
-    printf 'Creating CareQueue directories...\n'
+    printf 'Creating CareQFlow directories...\n'
 
     install \
         -d \
@@ -268,7 +268,7 @@ create_directories() {
 }
 
 copy_application_files() {
-    printf 'Installing CareQueue application files...\n'
+    printf 'Installing CareQFlow application files...\n'
 
     rm -rf \
         "${INSTALL_DIRECTORY}/LICENSE" \
@@ -284,15 +284,15 @@ copy_application_files() {
         "${INSTALL_DIRECTORY}/deployment"
 
     if [[ ! -f "${SOURCE_DIRECTORY}/LICENSE" ]]; then
-        fail "CareQueue license notice was not found in the release package."
+        fail "CareQFlow license notice was not found in the release package."
     fi
 
     if [[ ! -f "${SOURCE_DIRECTORY}/LICENSES/BUSL-1.1.txt" ]]; then
-        fail "CareQueue BUSL 1.1 license text was not found in the release package."
+        fail "CareQFlow BUSL 1.1 license text was not found in the release package."
     fi
 
     if [[ ! -f "${SOURCE_DIRECTORY}/LICENSES/MIT.txt" ]]; then
-        fail "CareQueue historical MIT license text was not found in the release package."
+        fail "CareQFlow historical MIT license text was not found in the release package."
     fi
 
     cp -a --no-preserve=context \
@@ -336,7 +336,7 @@ create_python_environment() {
     backend_directory="${INSTALL_DIRECTORY}/backend"
     virtual_environment="${backend_directory}/.venv"
 
-    printf 'Creating CareQueue Python environment...\n'
+    printf 'Creating CareQFlow Python environment...\n'
 
     rm -rf "${virtual_environment}"
 
@@ -349,13 +349,13 @@ create_python_environment() {
         setuptools \
         wheel
 
-    printf 'Installing CareQueue backend dependencies...\n'
+    printf 'Installing CareQFlow backend dependencies...\n'
 
     "${virtual_environment}/bin/python" \
         -m pip install \
         --requirement "${backend_directory}/requirements.txt"
 
-    printf 'Validating the CareQueue backend...\n'
+    printf 'Validating the CareQFlow backend...\n'
 
     (
         cd "${backend_directory}"
@@ -414,7 +414,7 @@ create_environment_file() {
 
     if [[ -f "${environment_file}" ]]; then
         printf '%s\n' \
-            'Existing CareQueue production configuration found. Preserving it.'
+            'Existing CareQFlow production configuration found. Preserving it.'
 
         local migrated_environment_file
 
@@ -443,7 +443,7 @@ create_environment_file() {
         return
     fi
 
-    printf 'Generating independent CareQueue encryption keys...\n'
+    printf 'Generating independent CareQFlow encryption keys...\n'
 
     field_encryption_key="$(generate_fernet_key)"
     backup_encryption_key="$(generate_fernet_key)"
@@ -477,7 +477,7 @@ EOF
     chown root:"${CAREQUEUE_GROUP}" "${environment_file}"
     chmod 0640 "${environment_file}"
 
-    printf 'CareQueue production configuration created.\n'
+    printf 'CareQFlow production configuration created.\n'
 }
 
 write_installation_state() {
@@ -501,7 +501,7 @@ EOF
 }
 
 install_systemd_units() {
-    printf 'Installing CareQueue systemd units...\n'
+    printf 'Installing CareQFlow systemd units...\n'
 
     install \
         -o root \
@@ -598,7 +598,7 @@ disable_default_caddy_service() {
 }
 
 install_caddy_configuration() {
-    printf 'Installing CareQueue Caddy configuration...\n'
+    printf 'Installing CareQFlow Caddy configuration...\n'
 
     install \
         -o root \
@@ -615,23 +615,40 @@ install_caddy_configuration() {
 configure_local_hostname() {
     local hosts_file
     local hostname_pattern
+    local legacy_managed_pattern
 
     hosts_file="/etc/hosts"
-    hostname_pattern='(^|[[:space:]])carequeue\.local([[:space:]]|$)'
+
+    legacy_managed_pattern='^[[:space:]]*127\.0\.0\.1[[:space:]]+carequeue\.local[[:space:]]+#[[:space:]]*(CareQueue|CareQFlow)[[:space:]]*$'
+
+    hostname_pattern='(^|[[:space:]])careqflow\.local([[:space:]]|$)'
+
+    if grep -Eq "${legacy_managed_pattern}" "${hosts_file}"; then
+        printf '%s\n' \
+            'Removing legacy CareQueue local hostname entry...'
+
+        sed \
+            -i \
+            -E \
+            "/${legacy_managed_pattern}/d" \
+            "${hosts_file}"
+    fi
 
     if grep -Eq "${hostname_pattern}" "${hosts_file}"; then
-        printf 'carequeue.local is already present in /etc/hosts.\n'
+        printf '%s\n' \
+            'careqflow.local is already present in /etc/hosts.'
         return
     fi
 
-    printf 'Adding carequeue.local to /etc/hosts...\n'
+    printf '%s\n' \
+        'Adding careqflow.local to /etc/hosts...'
 
-    printf '\n127.0.0.1 carequeue.local # CareQueue\n' \
+    printf '\n127.0.0.1 careqflow.local # CareQFlow\n' \
         >> "${hosts_file}"
 }
 
 start_services() {
-    printf 'Starting CareQueue services...\n'
+    printf 'Starting CareQFlow services...\n'
 
     systemctl enable carequeue-api.service
     systemctl enable carequeue-caddy.service
@@ -643,7 +660,7 @@ start_services() {
 }
 
 trust_caddy_root_certificate() {
-    printf 'Trusting the CareQueue Caddy root certificate...\n'
+    printf 'Trusting the CareQFlow Caddy root certificate...\n'
 
     local maximum_attempts
     local attempt
@@ -671,11 +688,11 @@ trust_caddy_root_certificate() {
         fi
     done
 
-    fail "Unable to trust the CareQueue Caddy root certificate."
+    fail "Unable to trust the CareQFlow Caddy root certificate."
 }
 
 validate_services() {
-    printf 'Validating CareQueue systemd services...\n'
+    printf 'Validating CareQFlow systemd services...\n'
 
     systemctl is-active --quiet carequeue-api.service \
         || fail "carequeue-api.service is not running."
@@ -739,7 +756,7 @@ validate_http_endpoint() {
 }
 
 validate_post_installation_health() {
-    printf 'Running CareQueue post installation validation...\n'
+    printf 'Running CareQFlow post installation validation...\n'
 
     local application_origin
 
@@ -759,7 +776,7 @@ validate_post_installation_health() {
         "API readiness health check" \
         "${application_origin}/api/health/ready"
 
-    printf 'CareQueue post installation validation completed successfully.\n'
+    printf 'CareQFlow post installation validation completed successfully.\n'
 }
 
 validate_source() {
@@ -781,7 +798,7 @@ validate_source() {
 
     for relative_path in "${required_paths[@]}"; do
         if [[ ! -e "${SOURCE_DIRECTORY}/${relative_path}" ]]; then
-            fail "Required CareQueue source was not found: ${relative_path}"
+            fail "Required CareQFlow source was not found: ${relative_path}"
         fi
     done
 }
@@ -809,7 +826,7 @@ main() {
     validate_post_installation_health
 
     printf '\n'
-    printf 'CareQueue Linux installation completed successfully.\n'
+    printf 'CareQFlow Linux installation completed successfully.\n'
     printf 'Install directory: %s\n' "${INSTALL_DIRECTORY}"
     printf 'Data directory: %s\n' "${DATA_DIRECTORY}"
     printf 'Configuration directory: %s\n' "${CONFIG_DIRECTORY}"

@@ -1,5 +1,5 @@
 [Unit]
-Description=Create an encrypted CareQueue database backup
+Description=Create an encrypted CareQFlow database backup
 Documentation=file:/opt/carequeue/docs/workflows/backup-and-recovery.md
 RequiresMountsFor=/var/lib/carequeue/backups
 After=local-fs.target

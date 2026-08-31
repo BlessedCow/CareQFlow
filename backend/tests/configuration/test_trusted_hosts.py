@@ -49,7 +49,7 @@ def configure_production(
     )
     monkeypatch.setenv(
         "AUTHSTATUS_CORS_ORIGINS",
-        '["https://carequeue.local"]',
+        '["https://careqflow.local"]',
     )
 
 
@@ -69,7 +69,7 @@ def test_production_accepts_trusted_host(
     try:
         with TestClient(
             create_app(),
-            base_url="https://carequeue.local",
+            base_url="https://careqflow.local",
         ) as client:
             response = client.get("/api/health/live")
 

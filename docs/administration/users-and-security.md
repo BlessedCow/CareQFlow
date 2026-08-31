@@ -1,14 +1,14 @@
 # Users and Security
 
-CareQueue uses local application accounts, role-based access control, Argon2id password hashing, TOTP multi-factor authentication (MFA), browser-managed cookies, server-side sessions, CSRF protection, and versioned governance attestation.
+CareQFlow uses local application accounts, role-based access control, Argon2id password hashing, TOTP multi-factor authentication (MFA), browser-managed cookies, server-side sessions, CSRF protection, and versioned governance attestation.
 
 This guide covers the application account lifecycle and the security controls that affect users and administrators.
 
-CareQueue's backend is authoritative for authentication, authorization, session validity, and governance enforcement. Frontend controls provide the user interface for those protections but do not replace backend enforcement.
+CareQFlow's backend is authoritative for authentication, authorization, session validity, and governance enforcement. Frontend controls provide the user interface for those protections but do not replace backend enforcement.
 
 ## Roles
 
-CareQueue supports three application roles:
+CareQFlow supports three application roles:
 
 ```text
 Admin
@@ -132,7 +132,7 @@ Select:
 Create
 ```
 
-CareQueue then:
+CareQFlow then:
 
 1. Creates the account as active.
 2. Generates a temporary password.
@@ -193,7 +193,7 @@ A successful change:
 
 ## Password Policy
 
-CareQueue enforces a shared server-side password policy for account creation, first-time Admin setup, password resets, and password changes.
+CareQFlow enforces a shared server-side password policy for account creation, first-time Admin setup, password resets, and password changes.
 
 The current minimum password length is:
 
@@ -209,7 +209,7 @@ Organizations should define and communicate their own password-management policy
 
 ## First-Time Admin Setup
 
-CareQueue does not provide public registration.
+CareQFlow does not provide public registration.
 
 The first Admin account is the bootstrap account used to enter the normal Admin workflow. The bootstrap setup path is available only while no users exist.
 
@@ -219,7 +219,7 @@ The packaged Windows installer can launch the first-time Admin setup interface a
 
 The setup process:
 
-1. Confirms that the local CareQueue API is ready.
+1. Confirms that the local CareQFlow API is ready.
 2. Confirms that no users exist.
 3. Sends the Admin credentials to the loopback-only setup endpoint.
 4. Creates the first account with the `Admin` role.
@@ -237,14 +237,14 @@ The packaged Linux installer includes:
 /opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
 ```
 
-For a new installation, the installer runs the setup utility after CareQueue services and HTTPS validation succeed.
+For a new installation, the installer runs the setup utility after CareQFlow services and HTTPS validation succeed.
 
 The utility:
 
 - Confirms that initial Admin setup is still available.
 - Prompts interactively for the Admin username and password.
 - Does not place the password on the command line.
-- Sends the request only to the loopback CareQueue API.
+- Sends the request only to the loopback CareQFlow API.
 - Exits without creating another account if bootstrap setup is already complete.
 
 ### Development and Maintenance Script
@@ -267,7 +267,7 @@ Use the Admin web interface for ordinary user onboarding after the first Admin e
 
 ## Governance Attestation
 
-After the first Admin signs in, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
+After the first Admin signs in, CareQFlow requires the current organization governance attestation before normal protected application functionality becomes available.
 
 The attestation includes acknowledgments covering organizational security and privacy responsibility, applicable agreements, individual user access, safeguards for devices and exported information, and handling of PHI in testing or demonstration environments.
 
@@ -278,7 +278,7 @@ Organization
 Deployment mode
 Accepting Admin
 Acceptance time
-CareQueue application version
+CareQFlow application version
 Governance attestation version
 ```
 
@@ -293,9 +293,9 @@ If the current governance version has not been accepted:
 
 The Admin System page provides read-only access to the current attestation and append-only attestation history.
 
-The governance attestation version and governance document revision are separate from the CareQueue application version.
+The governance attestation version and governance document revision are separate from the CareQFlow application version.
 
-Installing a newer CareQueue release does not by itself require re-attestation.
+Installing a newer CareQFlow release does not by itself require re-attestation.
 
 A governance attestation is current only when both its attestation version and document revision match the values required by the installed application. Re-attestation is therefore required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
 
@@ -305,7 +305,7 @@ The governance workflow supports organizational accountability. It does not itse
 
 ## Password Storage
 
-CareQueue stores password hashes, not plaintext passwords.
+CareQFlow stores password hashes, not plaintext passwords.
 
 Passwords must not appear in:
 
@@ -321,7 +321,7 @@ If a password is forgotten, reset it rather than attempting to recover it.
 
 ## Multi-Factor Authentication
 
-CareQueue supports TOTP MFA using a compatible authenticator application.
+CareQFlow supports TOTP MFA using a compatible authenticator application.
 
 Users manage MFA from Settings.
 
@@ -329,13 +329,13 @@ Users manage MFA from Settings.
 
 To begin enrollment, the user provides the current password.
 
-CareQueue then displays:
+CareQFlow then displays:
 
 - A QR code
 - A manual secret
 - A setup URI
 
-The user adds CareQueue to an authenticator application and submits the current 6-digit authentication code to confirm enrollment.
+The user adds CareQFlow to an authenticator application and submits the current 6-digit authentication code to confirm enrollment.
 
 MFA is not considered enabled until the confirmation code succeeds.
 
@@ -365,14 +365,14 @@ A remembered device may skip the authenticator-code step on later logins after t
 Remembered devices:
 
 - Are optional.
-- Are separate from the authenticated CareQueue session.
+- Are separate from the authenticated CareQFlow session.
 - Do not bypass password verification.
 - Do not keep a user permanently signed in.
 - Expire after 30 days.
 - Can be revoked from Settings.
 - Are invalidated during supported security-sensitive account changes.
 
-The raw remembered-device token is stored only in the protected browser cookie. CareQueue stores a keyed digest of the token server-side.
+The raw remembered-device token is stored only in the protected browser cookie. CareQFlow stores a keyed digest of the token server-side.
 
 ### Revoke Remembered Devices
 
@@ -417,14 +417,14 @@ Invalid username or password.
 
 The same response is used for an unknown username and an incorrect password.
 
-Before completing an authenticated login, CareQueue verifies:
+Before completing an authenticated login, CareQFlow verifies:
 
 1. The account exists.
 2. The account is active.
 3. The password is valid.
 4. Required MFA is satisfied or an accepted remembered-device token is present.
 
-After successful authentication, CareQueue:
+After successful authentication, CareQFlow:
 
 - Creates a server-side session.
 - Stores only a hash of the raw session token.
@@ -438,13 +438,13 @@ Successful authentication clears the failed-login state.
 
 ## Single Active Session
 
-CareQueue permits one active authenticated session per account.
+CareQFlow permits one active authenticated session per account.
 
 When a new authenticated session is created, previous active sessions for the same user are revoked.
 
 This applies after both password-only login and completed MFA login.
 
-A user signing in from a second browser or device should therefore expect the previous authenticated CareQueue session to stop working.
+A user signing in from a second browser or device should therefore expect the previous authenticated CareQFlow session to stop working.
 
 A remembered device is not an authenticated session and does not change this rule.
 
@@ -468,7 +468,7 @@ The browser receives the raw session token through an HttpOnly cookie.
 
 The database stores only a hash of that token.
 
-For an authenticated request, CareQueue verifies that:
+For an authenticated request, CareQFlow verifies that:
 
 - The session exists.
 - The session is not revoked.
@@ -505,7 +505,7 @@ The frontend receives the current server expiration time and uses it to provide 
 
 ## Browser Activity and Session Extension
 
-The CareQueue frontend sends throttled activity updates during supported user interaction.
+The CareQFlow frontend sends throttled activity updates during supported user interaction.
 
 This allows normal application use to extend the server-side inactivity window without sending a request for every individual browser event.
 
@@ -540,11 +540,11 @@ If renewal fails because the session is expired, revoked, or otherwise invalid, 
 
 ## Cross-Tab Session Behavior
 
-CareQueue synchronizes important session state across open tabs from the same browser profile.
+CareQFlow synchronizes important session state across open tabs from the same browser profile.
 
 When supported by the browser:
 
-- Logout in one CareQueue tab is reflected in other open CareQueue tabs.
+- Logout in one CareQFlow tab is reflected in other open CareQFlow tabs.
 - Updated expiration information is shared across tabs.
 - An expired or invalid session causes protected frontend state to be cleared.
 
@@ -583,12 +583,12 @@ Do not disable CSRF protection to simplify a client or integration.
 
 ## Production Origin
 
-Production users should access CareQueue through the approved HTTPS origin.
+Production users should access CareQFlow through the approved HTTPS origin.
 
 The packaged private deployment uses:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 Production browser requests should use the same HTTPS origin for `/api` requests.
@@ -606,7 +606,7 @@ A successful logout:
 3. Records the logout audit event.
 4. Clears protected frontend state.
 5. Returns the browser to login.
-6. Synchronizes the logout state to other open CareQueue tabs when supported.
+6. Synchronizes the logout state to other open CareQFlow tabs when supported.
 
 Closing the browser is not a substitute for explicitly logging out on a shared workstation.
 
@@ -694,7 +694,7 @@ Before reactivation:
 
 ## User Offboarding
 
-When CareQueue access ends:
+When CareQFlow access ends:
 
 1. Confirm the correct account.
 2. Deactivate it.
@@ -702,13 +702,13 @@ When CareQueue access ends:
 4. Review the assigned role and recent audit activity.
 5. Remove workstation, operating-system, network, VPN, and file access separately.
 6. Follow the organization's access-removal documentation process.
-7. Preserve the CareQueue account record for audit references.
+7. Preserve the CareQFlow account record for audit references.
 
-CareQueue deactivates accounts rather than deleting them through the Admin interface.
+CareQFlow deactivates accounts rather than deleting them through the Admin interface.
 
 ## Periodic Access Review
 
-Review CareQueue accounts on a defined organizational schedule.
+Review CareQFlow accounts on a defined organizational schedule.
 
 For each user, confirm:
 
@@ -729,13 +729,13 @@ Avoid shared application accounts for ordinary users.
 
 Individual accounts improve accountability, access removal, role assignment, MFA enrollment, and audit review.
 
-Windows and Linux service identities are operating-system accounts, not CareQueue application users.
+Windows and Linux service identities are operating-system accounts, not CareQFlow application users.
 
-Do not create CareQueue application accounts for service processes unless a supported integration explicitly requires one.
+Do not create CareQFlow application accounts for service processes unless a supported integration explicitly requires one.
 
 ## Audit Events
 
-Security and account activity recorded by CareQueue includes events related to:
+Security and account activity recorded by CareQFlow includes events related to:
 
 ```text
 Login
@@ -784,7 +784,7 @@ Security monitoring is a review aid. It does not replace centralized infrastruct
 
 ## Current Limitations
 
-CareQueue does not currently provide:
+CareQFlow does not currently provide:
 
 - Public registration
 - Email-based password recovery
@@ -872,7 +872,7 @@ Check:
 
 ### Previous session stopped working after another login
 
-This is expected. CareQueue allows one active authenticated session per account.
+This is expected. CareQFlow allows one active authenticated session per account.
 
 Signing in again revokes the previous active session.
 

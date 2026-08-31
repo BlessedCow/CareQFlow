@@ -51,21 +51,21 @@ function Remove-CareQueueLocalHostname {
         $originalLines |
         Where-Object {
             $_ -notmatch (
-                "^\s*127\.0\.0\.1\s+carequeue\.local" +
-                "\s+#\s*CareQueue\s*$"
+                "^\s*127\.0\.0\.1\s+(carequeue|careqflow)\.local" +
+                "\s+#\s*(CareQueue|CareQFlow)\s*$"
             )
         }
     )
 
     if ($filteredLines.Count -eq $originalLines.Count) {
         Write-Output (
-            "No CareQueue-managed local hostname entry was found."
+            "No CareQFlow-managed local hostname entry was found."
         )
 
         return
     }
 
-    Write-Output "Removing the CareQueue local hostname entry..."
+    Write-Output "Removing the CareQFlow local hostname entry..."
 
     Set-Content `
         -LiteralPath $hostsPath `
@@ -100,7 +100,7 @@ function Invoke-RemovalScript {
 
 if (-not (Test-Administrator)) {
     throw (
-        "CareQueue uninstallation requires Administrator privileges."
+        "CareQFlow uninstallation requires Administrator privileges."
     )
 }
 
@@ -126,23 +126,23 @@ $serviceDirectory = Join-Path `
     $InstallDirectory `
     "Service"
 
-Write-Output "Removing the CareQueue Caddy service..."
+Write-Output "Removing the CareQFlow HTTPS service..."
 
 Invoke-RemovalScript `
     -ScriptPath $removeCaddyServiceScript `
     -Arguments @{
-        ServiceDirectory = $serviceDirectory
-    }
+    ServiceDirectory = $serviceDirectory
+}
 
-Write-Output "Removing the CareQueue API service..."
+Write-Output "Removing the CareQFlow API service..."
 
 Invoke-RemovalScript `
     -ScriptPath $removeApiServiceScript `
     -Arguments @{
-        ServiceDirectory = $serviceDirectory
-    }
+    ServiceDirectory = $serviceDirectory
+}
 
-Write-Output "Removing the CareQueue backup task..."
+Write-Output "Removing the CareQFlow backup task..."
 
 Invoke-RemovalScript `
     -ScriptPath $removeBackupTaskScript
@@ -153,7 +153,7 @@ if (
     Test-Path `
         -LiteralPath $InstallDirectory
 ) {
-    Write-Output "Removing CareQueue application files..."
+    Write-Output "Removing CareQFlow application files..."
 
     Remove-Item `
         -LiteralPath $InstallDirectory `
@@ -163,7 +163,7 @@ if (
 }
 else {
     Write-Output (
-        "The CareQueue application directory was not found: " +
+        "The CareQFlow application directory was not found: " +
         $InstallDirectory
     )
 }
@@ -173,13 +173,13 @@ if (
         -LiteralPath $InstallDirectory
 ) {
     throw (
-        "The CareQueue application directory still exists after " +
+        "The CareQFlow application directory still exists after " +
         "uninstallation: $InstallDirectory"
     )
 }
 
 Write-Output (
-    "CareQueue application files and Windows services were removed."
+    "CareQFlow application files and Windows services were removed."
 )
 
 if (
@@ -187,13 +187,13 @@ if (
         -LiteralPath $DataDirectory
 ) {
     Write-Output (
-        "CareQueue data was preserved at: $DataDirectory"
+        "CareQFlow data was preserved at: $DataDirectory"
     )
 }
 else {
     Write-Output (
-        "No CareQueue data directory was found at: $DataDirectory"
+        "No CareQFlow data directory was found at: $DataDirectory"
     )
 }
 
-Write-Output "CareQueue uninstallation completed successfully."
+Write-Output "CareQFlow uninstallation completed successfully."

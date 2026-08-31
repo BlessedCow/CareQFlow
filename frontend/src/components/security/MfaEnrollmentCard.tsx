@@ -318,7 +318,7 @@ export function MfaEnrollmentCard({
             )}
           >
             <h4 className="text-sm font-semibold">
-              Add CareQueue to your authenticator app
+              Add CareQFlow to your authenticator app
             </h4>
 
             <div
@@ -337,14 +337,14 @@ export function MfaEnrollmentCard({
                   darkMode ? "text-gray-400" : "text-gray-600"
                 )}
               >
-                Open your authenticator app and scan this code to add CareQueue.
+                Open your authenticator app and scan this code to add CareQFlow.
               </p>
 
               <div className="mt-4 flex justify-center">
                 {qrCodeDataUrl ? (
                   <img
                     src={qrCodeDataUrl}
-                    alt="CareQueue MFA setup QR code"
+                    alt="CareQFlow MFA setup QR code"
                     className="h-48 w-48 rounded-lg bg-white p-2"
                   />
                 ) : (
@@ -369,7 +369,7 @@ export function MfaEnrollmentCard({
               )}
             >
               <li>Choose the option to scan a QR code.</li>
-              <li>Scan the CareQueue QR code below.</li>
+              <li>Scan the CareQFlow QR code below.</li>
               <li>If scanning does not work, use the manual secret instead.</li>
               <li>Submit the current 6-digit code to finish setup.</li>
             </ol>

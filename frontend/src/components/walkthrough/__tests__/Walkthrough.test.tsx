@@ -44,7 +44,7 @@ describe("Walkthrough", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Welcome to CareQueue",
+        name: "Welcome to CareQFlow",
       })
     ).toBeInTheDocument();
 
@@ -72,7 +72,7 @@ describe("Walkthrough", () => {
   
     expect(
       screen.getByRole("heading", {
-        name: "Welcome to CareQueue",
+        name: "Welcome to CareQFlow",
       })
     ).toBeInTheDocument();
   
@@ -123,7 +123,7 @@ describe("Walkthrough", () => {
   
     expect(
       screen.getByRole("heading", {
-        name: "Welcome to CareQueue",
+        name: "Welcome to CareQFlow",
       })
     ).toBeInTheDocument();
   });
@@ -149,7 +149,7 @@ describe("Walkthrough", () => {
   
     expect(
       screen.getByRole("heading", {
-        name: "Welcome to CareQueue",
+        name: "Welcome to CareQFlow",
       })
     ).toBeInTheDocument();
   });
@@ -177,7 +177,7 @@ describe("Walkthrough", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Welcome to CareQueue",
+        name: "Welcome to CareQFlow",
       })
     ).toBeInTheDocument();
   });
@@ -249,7 +249,7 @@ describe("Walkthrough", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Welcome to CareQueue",
+        name: "Welcome to CareQFlow",
       })
     ).toBeInTheDocument();
   });

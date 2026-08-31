@@ -37,7 +37,7 @@ def configure_environment() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Create an encrypted CareQueue database backup, then encrypt "
+            "Create an encrypted CareQFlow database backup, then encrypt "
             "legacy plaintext authorization fields."
         )
     )

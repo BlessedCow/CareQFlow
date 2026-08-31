@@ -27,7 +27,7 @@ def test_windows_payload_builder_requires_repository_license_files():
 
     required_sources_index = content.index("$requiredSourcePaths = @(")
     payload_assembly_index = content.index(
-        'Write-Status "Assembling CareQueue application files..."'
+        'Write-Status "Assembling CareQFlow application files..."'
     )
 
     required_sources = content[required_sources_index:payload_assembly_index]

@@ -1,6 +1,6 @@
 # Windows Deployment
 
-This guide covers a private Windows installation of CareQueue using the packaged Windows installer.
+This guide covers a private Windows installation of CareQFlow using the packaged Windows installer.
 
 The packaged installer is built from:
 
@@ -18,9 +18,9 @@ A completed installation uses:
 
 - A bundled private Python runtime for the backend
 - Bundled Caddy and WinSW service binaries
-- The CareQueue API Windows service
-- The CareQueue Caddy Windows service
-- The private HTTPS hostname `carequeue.local`
+- The CareQFlow API Windows service
+- The CareQFlow Caddy Windows service
+- The private HTTPS hostname `careqflow.local`
 - SQLCipher-backed production storage
 - Runtime data under `C:\ProgramData\CareQueue`
 - Application files under `C:\Program Files\CareQueue`
@@ -29,7 +29,7 @@ A completed installation uses:
 
 The built-in Windows deployment is intended for a private workstation or restricted private network. It is not a public internet deployment template.
 
-CareQueue's security controls do not establish HIPAA compliance by themselves. Before using real protected health information, review [SECURITY.md](../../SECURITY.md), [DISCLAIMER.md](../../DISCLAIMER.md), and the organization's legal, operational, and compliance requirements.
+CareQFlow's security controls do not establish HIPAA compliance by themselves. Before using real protected health information, review [SECURITY.md](../../SECURITY.md), [DISCLAIMER.md](../../DISCLAIMER.md), and the organization's legal, operational, and compliance requirements.
 
 ## Deployment Overview
 
@@ -38,7 +38,7 @@ A completed Windows installation uses this request path:
 ```text
 Browser
   |
-  | https://carequeue.local
+  | https://careqflow.local
   v
 CareQueueCaddy Windows service
   |
@@ -154,9 +154,9 @@ Rollback
 Uninstall
 ```
 
-When CareQueue is not installed, the installer presents the normal first-time Install flow.
+When CareQFlow is not installed, the installer presents the normal first-time Install flow.
 
-When CareQueue is already installed, the installer presents operation choices for Upgrade, Repair, and Uninstall. Rollback is shown only when the installer finds an eligible failed-upgrade recovery record.
+When CareQFlow is already installed, the installer presents operation choices for Upgrade, Repair, and Uninstall. Rollback is shown only when the installer finds an eligible failed-upgrade recovery record.
 
 A recovery record eligible for rollback is stored under:
 
@@ -172,18 +172,18 @@ When rollback is available, the operation choices include:
 Upgrade existing installation
 Repair existing installation
 Roll back most recent failed upgrade
-Uninstall CareQueue
+Uninstall CareQFlow
 ```
 
 ### Install
 
-Install is used when CareQueue is not already installed.
+Install is used when CareQFlow is not already installed.
 
 Install creates application files, runtime directories, services, production configuration, and production encryption keys when no existing runtime configuration is present.
 
 ### Upgrade
 
-Upgrade is used when CareQueue is already installed.
+Upgrade is used when CareQFlow is already installed.
 
 Before upgrading:
 
@@ -201,19 +201,19 @@ Upgrade replaces application files and packaged runtime files while preserving r
 C:\ProgramData\CareQueue
 ```
 
-When the upgraded CareQueue API starts, database initialization may apply registered versioned schema migrations that have not yet been recorded in the database's `schema_migrations` ledger.
+When the upgraded CareQFlow API starts, database initialization may apply registered versioned schema migrations that have not yet been recorded in the database's `schema_migrations` ledger.
 
 Already applied migrations are skipped. Each new migration is applied through the migration framework and is recorded only after successful application.
 
 Do not manually edit the migration ledger to bypass a failed upgrade.
 
-A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older CareQueue application release. Keep the verified pre-upgrade backup available until rollback is no longer required.
+A database migrated by a newer CareQFlow release is not automatically guaranteed to be compatible with an older CareQFlow application release. Keep the verified pre-upgrade backup available until rollback is no longer required.
 
 After the installer completes, verify:
 
 1. `CareQueueApi` is running.
 2. `CareQueueCaddy` is running.
-3. HTTPS access to `https://carequeue.local` succeeds.
+3. HTTPS access to `https://careqflow.local` succeeds.
 4. API health and readiness checks pass.
 5. Login succeeds.
 6. Governance status shows the expected attestation version and document revision.
@@ -244,20 +244,20 @@ A migration failure should be investigated rather than worked around by deleting
 
 ### Repair
 
-Repair is used when CareQueue is already installed.
+Repair is used when CareQFlow is already installed.
 
 Repair restores application files, packaged runtime files, service files, and expected installation structure while preserving runtime data and production configuration.
 
 ### Rollback
 
-Rollback is used after a failed supported upgrade when CareQueue has preserved a valid failed-upgrade recovery record and the required pre-upgrade recovery assets.
+Rollback is used after a failed supported upgrade when CareQFlow has preserved a valid failed-upgrade recovery record and the required pre-upgrade recovery assets.
 
 Before an upgrade replaces the installed application, the Windows deployment workflow preserves:
 
 - A verified encrypted pre-upgrade database backup
 - A verified archive of the previously installed application payload
 - The SHA256 checksum for the preserved application archive
-- The previous and incoming CareQueue versions
+- The previous and incoming CareQFlow versions
 - The installer log associated with the upgrade attempt
 - A recovery record under `C:\ProgramData\CareQueue\Recovery\Upgrades`
 
@@ -270,7 +270,7 @@ Rollback performs a controlled recovery sequence:
 3. Verify the application archive SHA256 checksum.
 4. Stage and validate the previous application payload before activation.
 5. Preserve the failed incoming application payload for later review.
-6. Stop CareQueue services before application replacement.
+6. Stop CareQFlow services before application replacement.
 7. Activate the previous application payload.
 8. Stage the verified pre-upgrade encrypted database backup.
 9. Record the durable `rollback_staged` recovery state.
@@ -284,7 +284,7 @@ Rollback performs a controlled recovery sequence:
 
 A cleanup failure after `rollback_completed` is logged but does not invalidate an otherwise successful rollback.
 
-If rollback fails after the pre-upgrade database has already been activated, CareQueue attempts to stop both services again and preserves the last durable rollback state for investigation rather than replacing it with a less-specific generic failure state.
+If rollback fails after the pre-upgrade database has already been activated, CareQFlow attempts to stop both services again and preserves the last durable rollback state for investigation rather than replacing it with a less-specific generic failure state.
 
 Do not manually edit rollback recovery records, preserved application checksums, or staged recovery data to force a rollback to continue.
 
@@ -298,10 +298,10 @@ Select-Object Name, Status, StartType
 Then verify:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
-and confirm that the application reports the expected previous CareQueue version and that a representative workflow can access the restored data.
+and confirm that the application reports the expected previous CareQFlow version and that a representative workflow can access the restored data.
 
 For broader upgrade and rollback guidance, see:
 
@@ -313,7 +313,7 @@ docs/operations/health-checks.md
 
 ### Uninstall
 
-Uninstall removes CareQueue application files and Windows services.
+Uninstall removes CareQFlow application files and Windows services.
 
 Uninstall deliberately preserves runtime data under:
 
@@ -348,7 +348,7 @@ The deployment scripts use Windows-specific commands such as:
 
 ### 2. Repository checkout
 
-Have a clean local copy of the CareQueue repository.
+Have a clean local copy of the CareQFlow repository.
 
 Example:
 
@@ -433,7 +433,7 @@ If the assets are already cached and valid, the builder can reuse the cached fil
 
 ## Set the Release Version
 
-CareQueue keeps the application release version in several backend and deployment files.
+CareQFlow keeps the application release version in several backend and deployment files.
 
 Use the repository helper before building a new release:
 
@@ -447,7 +447,7 @@ The helper updates the controlled version declarations used by the backend, Wind
 
 It intentionally does not replace arbitrary version strings in tests, dependency versions, documentation examples, or historical governance records.
 
-The governance attestation version and governance document revision are independent of the CareQueue application release version and should not be changed merely because the application version changes.
+The governance attestation version and governance document revision are independent of the CareQFlow application release version and should not be changed merely because the application version changes.
 
 Review the working tree after changing the release version:
 
@@ -494,7 +494,7 @@ After building the payload, compile the Inno Setup script:
 The default output is:
 
 ```text
-build\windows\installer\CareQueue-Setup-0.5.0.exe
+build\windows\installer\CareQFlow-Setup-0.5.0.exe
 ```
 
 The exact filename follows the version configured in `CareQueue.iss`.
@@ -504,20 +504,20 @@ The exact filename follows the version configured in `CareQueue.iss`.
 Run the compiled installer:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.5.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.5.0.exe
 ```
 
 If PowerShell requires an explicit invocation path:
 
 ```powershell
-& "G:\CareQueue\build\windows\installer\CareQueue-Setup-0.5.0.exe"
+& "G:\CareQueue\build\windows\installer\CareQFlow-Setup-0.5.0.exe"
 ```
 
 The installer requires administrator elevation because it installs services and writes to protected directories.
 
 ## First-Time Admin and Governance Setup
 
-CareQueue does not provide public account registration.
+CareQFlow does not provide public account registration.
 
 After a packaged Windows installation completes, the installer can launch the first-time Admin setup window:
 
@@ -525,7 +525,7 @@ After a packaged Windows installation completes, the installer can launch the fi
 CareQueue-AdminSetup.ps1
 ```
 
-The setup window calls the local CareQueue API over loopback:
+The setup window calls the local CareQFlow API over loopback:
 
 ```text
 http://127.0.0.1:8000/api/security/setup-initial-admin/status
@@ -538,9 +538,9 @@ The first-time setup endpoint is available only while no users exist. After any 
 
 The first Admin password must be at least 12 characters.
 
-After the first Admin signs in through the browser, CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
+After the first Admin signs in through the browser, CareQFlow requires the current organization governance attestation before normal protected application functionality becomes available.
 
-The governance workflow records the organization, deployment mode, accepting Admin, acceptance timestamp, CareQueue application version, governance attestation version, and governance document revision.
+The governance workflow records the organization, deployment mode, accepting Admin, acceptance timestamp, CareQFlow application version, governance attestation version, and governance document revision.
 
 The governance workflow supports organizational accountability. It does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
@@ -549,13 +549,13 @@ The governance workflow supports organizational accountability. It does not itse
 The packaged installer currently uses:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 The production origin must be an HTTPS origin. For the current private single-machine installation, use:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 The origin must contain only:
@@ -574,38 +574,38 @@ It must not contain:
 Valid example:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 Invalid examples:
 
 ```text
-http://carequeue.local
-https://carequeue.local/app
-https://user@carequeue.local
-https://carequeue.local?mode=prod
+http://careqflow.local
+https://careqflow.local/app
+https://user@careqflow.local
+https://careqflow.local?mode=prod
 ```
 
 Do not use `https://localhost` for the current production configuration. Production CORS validation rejects local development hosts.
 
 ## Private Hostname Configuration
 
-The packaged Windows installer configures the local CareQueue hostname for the default private installation:
+The packaged Windows installer configures the local CareQFlow hostname for the default private installation:
 
 ```text
-carequeue.local
+careqflow.local
 ```
 
 The expected local mapping is:
 
 ```text
-127.0.0.1 carequeue.local
+127.0.0.1 careqflow.local
 ```
 
 Confirm name resolution after installation:
 
 ```powershell
-ping carequeue.local
+ping careqflow.local
 ```
 
 The hostname should resolve to:
@@ -614,7 +614,7 @@ The hostname should resolve to:
 127.0.0.1
 ```
 
-This local mapping does not publish CareQueue to the internet. It provides a stable private hostname for the local HTTPS deployment.
+This local mapping does not publish CareQFlow to the internet. It provides a stable private hostname for the local HTTPS deployment.
 
 If the hostname does not resolve after installation, review the installer log and the Windows hosts file:
 
@@ -622,9 +622,9 @@ If the hostname does not resolve after installation, review the installer log an
 C:\Windows\System32\drivers\etc\hosts
 ```
 
-Do not add duplicate or conflicting `carequeue.local` entries.
+Do not add duplicate or conflicting `careqflow.local` entries.
 
-A broader restricted-network deployment using internal DNS requires separate deployment planning. The packaged Windows Caddy configuration is designed around the private `carequeue.local` deployment and should not be treated as a general-purpose network or public-internet configuration.
+A broader restricted-network deployment using internal DNS requires separate deployment planning. The packaged Windows Caddy configuration is designed around the private `careqflow.local` deployment and should not be treated as a general-purpose network or public-internet configuration.
 
 ## Development Environment Files
 
@@ -649,7 +649,7 @@ The payload builder and production installer include safeguards for production f
 The production frontend should make same-origin requests such as:
 
 ```text
-https://carequeue.local/api/security/me
+https://careqflow.local/api/security/me
 ```
 
 It should not call:
@@ -694,7 +694,7 @@ Invoke-RestMethod `
 Open the application through the approved HTTPS origin:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 Confirm:
@@ -892,7 +892,7 @@ powershell.exe `
     -ExecutionPolicy Bypass `
     -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
     -Mode Repair `
-    -ApplicationOrigin "https://carequeue.local" `
+    -ApplicationOrigin "https://careqflow.local" `
     -PayloadDirectory ".\build\windows\payload" `
     -InstallDirectory "C:\Program Files\CareQueue" `
     -DataDirectory "C:\ProgramData\CareQueue"
@@ -912,7 +912,7 @@ Prefer the packaged installer for normal release validation because it exercises
 
 ## Backup Task
 
-CareQueue includes scripts for encrypted backup operation and scheduled backup task management:
+CareQFlow includes scripts for encrypted backup operation and scheduled backup task management:
 
 ```text
 deployment/windows/run-backup.ps1
@@ -926,13 +926,13 @@ Existing backup files should be protected and recovery-tested according to the b
 
 ## Clean-Machine Validation
 
-Before treating a Windows installer build as stable, validate it on a clean machine or clean VM that has not previously hosted CareQueue.
+Before treating a Windows installer build as stable, validate it on a clean machine or clean VM that has not previously hosted CareQFlow.
 
 At minimum, test:
 
 - Fresh install on a clean Windows 11 VM
 - First-time Admin setup with no existing users
-- Browser access to `https://carequeue.local`
+- Browser access to `https://careqflow.local`
 - Governance attestation after first Admin login
 - Login and logout
 - TOTP MFA enrollment and login
@@ -959,7 +959,7 @@ Local developer-machine success is useful, but it does not replace clean-machine
 
 ### Installer shows only Install
 
-This is expected when CareQueue is not currently installed.
+This is expected when CareQFlow is not currently installed.
 
 The Upgrade, Repair, and Uninstall options appear only when the installer detects an existing installation under:
 
@@ -976,7 +976,7 @@ runtime\python\python.exe
 vendor\caddy\caddy.exe
 ```
 
-Rollback is different: it appears only when CareQueue is installed and an eligible failed-upgrade recovery record exists under:
+Rollback is different: it appears only when CareQFlow is installed and an eligible failed-upgrade recovery record exists under:
 
 ```text
 C:\ProgramData\CareQueue\Recovery\Upgrades
@@ -984,7 +984,7 @@ C:\ProgramData\CareQueue\Recovery\Upgrades
 
 A normal healthy installation with no failed upgrade recovery should not show Rollback.
 
-### Installer says CareQueue is already installed
+### Installer says CareQFlow is already installed
 
 Use the operation page to choose the appropriate available operation:
 
@@ -992,12 +992,12 @@ Use the operation page to choose the appropriate available operation:
 Upgrade existing installation
 Repair existing installation
 Roll back most recent failed upgrade
-Uninstall CareQueue
+Uninstall CareQFlow
 ```
 
 Rollback appears only when an eligible failed-upgrade recovery record exists.
 
-Install mode is only for a machine where CareQueue is not already installed.
+Install mode is only for a machine where CareQFlow is not already installed.
 
 ### Rollback option does not appear
 
@@ -1060,7 +1060,7 @@ http://localhost:8000/api/...
 instead of:
 
 ```text
-https://carequeue.local/api/...
+https://careqflow.local/api/...
 ```
 
 Cause:
@@ -1184,18 +1184,18 @@ Cert:\LocalMachine\Root
 
 Close and reopen the browser after importing when necessary.
 
-### CareQueue hostname does not resolve
+### CareQFlow hostname does not resolve
 
 Check:
 
 ```powershell
-ping carequeue.local
+ping careqflow.local
 ```
 
 Confirm the hosts file contains:
 
 ```text
-127.0.0.1 carequeue.local
+127.0.0.1 careqflow.local
 ```
 
 For network deployments, confirm internal DNS.
@@ -1207,7 +1207,7 @@ The current production configuration rejects local development hosts such as `lo
 Use an approved private hostname and ensure the environment file contains a matching origin:
 
 ```env
-AUTHSTATUS_CORS_ORIGINS=["https://carequeue.local"]
+AUTHSTATUS_CORS_ORIGINS=["https://careqflow.local"]
 ```
 
 Do not paste other environment values while checking this line.
@@ -1231,7 +1231,7 @@ The production environment should be readable only by the approved service conte
 
 Check:
 
-- The browser is using `https://carequeue.local`.
+- The browser is using `https://careqflow.local`.
 - The production frontend uses same-origin `/api` requests.
 - The user was created against the production database.
 - The account is active.
@@ -1246,7 +1246,7 @@ Check:
 
 A user created against the development `.env` and development database will not automatically exist in the production database.
 
-### Login succeeds but CareQueue shows governance setup
+### Login succeeds but CareQFlow shows governance setup
 
 This is expected when the current organization governance attestation has not yet been completed.
 
@@ -1254,7 +1254,7 @@ An Admin must complete the current governance attestation before normal protecte
 
 Non-Admin users cannot accept the organization-level attestation.
 
-A new CareQueue application release does not automatically require re-attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
+A new CareQFlow application release does not automatically require re-attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
 
 ## Production Database Is a Separate Instance
 
@@ -1280,7 +1280,7 @@ Do not copy a development database into production without a reviewed migration 
 
 ## Security Checklist
 
-Before using CareQueue with sensitive information, confirm:
+Before using CareQFlow with sensitive information, confirm:
 
 - The application is accessed only through approved HTTPS.
 - The API remains bound to loopback.

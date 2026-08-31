@@ -106,14 +106,14 @@ function Set-CareQueueLocalHostname {
     }
     catch {
         throw (
-            "The CareQueue application origin is not a valid URI: " +
+            "The CareQFlow application origin is not a valid URI: " +
             $ApplicationOrigin
         )
     }
 
     $hostname = $applicationUri.DnsSafeHost
 
-    if ($hostname -ne "carequeue.local") {
+    if ($hostname -ne "careqflow.local") {
         return
     }
 
@@ -136,6 +136,35 @@ function Set-CareQueueLocalHostname {
             -LiteralPath $hostsPath `
             -ErrorAction Stop
     )
+
+    $legacyManagedPattern = (
+        '^\s*127\.0\.0\.1\s+carequeue\.local' +
+        '\s+#\s*CareQueue\s*$'
+    )
+
+    $updatedLines = @(
+        $existingLines |
+        Where-Object {
+            $_ -notmatch $legacyManagedPattern
+        }
+    )
+
+    if ($updatedLines.Count -ne $existingLines.Count) {
+        Write-Output (
+            "Removing the legacy CareQFlow local hostname entry..."
+        )
+
+        Set-Content `
+            -LiteralPath $hostsPath `
+            -Value $updatedLines `
+            -Encoding ASCII `
+            -ErrorAction Stop
+
+        $existingLines = $updatedLines
+
+        Clear-DnsClientCache `
+            -ErrorAction Stop
+    }
 
     foreach ($line in $existingLines) {
         $content = (
@@ -180,18 +209,18 @@ function Set-CareQueueLocalHostname {
 
         throw (
             "The Windows hosts file already maps $hostname to " +
-            "$address. CareQueue will not overwrite an existing " +
+            "$address. CareQFlow will not overwrite an existing " +
             "non-loopback hostname mapping."
         )
     }
 
     Write-Output (
-        "Registering $hostname as a local CareQueue hostname..."
+        "Registering $hostname as a local CareQFlow hostname..."
     )
 
     Add-Content `
         -LiteralPath $hostsPath `
-        -Value "127.0.0.1`t$hostname # CareQueue" `
+        -Value "127.0.0.1`t$hostname # CareQFlow" `
         -Encoding ASCII `
         -ErrorAction Stop
 
@@ -261,11 +290,11 @@ function Compare-CareQueueVersions {
     )
 
     if (-not (Test-CareQueueVersion -Version $LeftVersion)) {
-        throw "Invalid CareQueue version: $LeftVersion"
+        throw "Invalid CareQFlow version: $LeftVersion"
     }
 
     if (-not (Test-CareQueueVersion -Version $RightVersion)) {
-        throw "Invalid CareQueue version: $RightVersion"
+        throw "Invalid CareQFlow version: $RightVersion"
     }
 
     $leftParts = @(
@@ -321,7 +350,7 @@ function Get-CareQueueInstalledVersion {
     }
     catch {
         throw (
-            "The CareQueue installation state could not be read: " +
+            "The CareQFlow installation state could not be read: " +
             $_.Exception.Message
         )
     }
@@ -339,7 +368,7 @@ function Get-CareQueueInstalledVersion {
 
     if (-not (Test-CareQueueVersion -Version $version)) {
         throw (
-            "The installed CareQueue version metadata is invalid: " +
+            "The installed CareQFlow version metadata is invalid: " +
             $version
         )
     }
@@ -358,14 +387,14 @@ function Assert-CareQueueUpgradeVersion {
 
     if (-not (Test-CareQueueVersion -Version $IncomingVersion)) {
         throw (
-            "The incoming CareQueue payload has an invalid " +
+            "The incoming CareQFlow payload has an invalid " +
             "application version: $IncomingVersion"
         )
     }
 
     if ([string]::IsNullOrWhiteSpace($InstalledVersion)) {
         Write-Output (
-            "Installed CareQueue version metadata is unavailable. " +
+            "Installed CareQFlow version metadata is unavailable. " +
             "Continuing legacy upgrade validation."
         )
 
@@ -378,20 +407,20 @@ function Assert-CareQueueUpgradeVersion {
 
     if ($comparison -eq 0) {
         throw (
-            "CareQueue $IncomingVersion is already installed. " +
+            "CareQFlow $IncomingVersion is already installed. " +
             "Use Repair instead of Upgrade."
         )
     }
 
     if ($comparison -lt 0) {
         throw (
-            "CareQueue downgrade refused: installed version " +
+            "CareQFlow downgrade refused: installed version " +
             "$InstalledVersion, incoming version $IncomingVersion."
         )
     }
 
     Write-Output (
-        "Validated CareQueue upgrade path: " +
+        "Validated CareQFlow upgrade path: " +
         "$InstalledVersion -> $IncomingVersion"
     )
 }
@@ -428,7 +457,7 @@ function New-VerifiedPreUpgradeBackup {
         )
     ) {
         throw (
-            "CareQueue upgrade requires the installed backup runner: " +
+            "CareQFlow upgrade requires the installed backup runner: " +
             $backupRunner
         )
     }
@@ -441,7 +470,7 @@ function New-VerifiedPreUpgradeBackup {
         )
     ) {
         throw (
-            "CareQueue upgrade requires the production configuration: " +
+            "CareQFlow upgrade requires the production configuration: " +
             $environmentFile
         )
     }
@@ -482,7 +511,7 @@ function New-VerifiedPreUpgradeBackup {
         if ($LASTEXITCODE -ne 0) {
             throw (
                 "Pre-upgrade backup creation or verification failed. " +
-                "The CareQueue application has not been replaced."
+                "The CareQFlow application has not been replaced."
             )
         }
 
@@ -508,9 +537,9 @@ function New-VerifiedPreUpgradeBackup {
 
         if ($newBackups.Count -eq 0) {
             throw (
-                "The CareQueue backup runner completed but no new " +
+                "The CareQFlow backup runner completed but no new " +
                 "pre-upgrade backup could be identified. " +
-                "The CareQueue application has not been replaced."
+                "The CareQFlow application has not been replaced."
             )
         }
 
@@ -556,7 +585,7 @@ function New-VerifiedPreUpgradeApplicationArchive {
 
     if (-not (Test-CareQueueVersion -Version $InstalledVersion)) {
         throw (
-            "Cannot preserve the installed CareQueue application " +
+            "Cannot preserve the installed CareQFlow application " +
             "because its version metadata is invalid: $InstalledVersion"
         )
     }
@@ -583,7 +612,7 @@ function New-VerifiedPreUpgradeApplicationArchive {
             )
         ) {
             throw (
-                "Cannot preserve the installed CareQueue application " +
+                "Cannot preserve the installed CareQFlow application " +
                 "because a required directory is missing: " +
                 $applicationDirectory
             )
@@ -617,7 +646,7 @@ function New-VerifiedPreUpgradeApplicationArchive {
         -ErrorAction SilentlyContinue
 
     Write-Host (
-        "Preserving installed CareQueue $InstalledVersion " +
+        "Preserving installed CareQFlow $InstalledVersion " +
         "application payload..."
     )
 
@@ -744,14 +773,14 @@ function New-CareQueueUpgradeRecoveryRecord {
     if (-not (Test-CareQueueVersion -Version $PreviousVersion)) {
         throw (
             "Cannot create upgrade recovery state because the " +
-            "previous CareQueue version is invalid: $PreviousVersion"
+            "previous CareQFlow version is invalid: $PreviousVersion"
         )
     }
 
     if (-not (Test-CareQueueVersion -Version $IncomingVersion)) {
         throw (
             "Cannot create upgrade recovery state because the " +
-            "incoming CareQueue version is invalid: $IncomingVersion"
+            "incoming CareQFlow version is invalid: $IncomingVersion"
         )
     }
 
@@ -970,7 +999,7 @@ function Get-CareQueueFailedUpgradeRecovery {
                 -PathType Container
         )
     ) {
-        throw "No CareQueue upgrade recovery records are available."
+        throw "No CareQFlow upgrade recovery records are available."
     }
 
     $recoveryRecords = @(
@@ -1008,12 +1037,12 @@ function Get-CareQueueFailedUpgradeRecovery {
     }
 
     if ($null -eq $failedRecord -or $null -eq $failedState) {
-        throw "No failed CareQueue upgrade recovery record was found."
+        throw "No failed CareQFlow upgrade recovery record was found."
     }
 
     if ([int]$failedState.schema_version -ne 1) {
         throw (
-            "The failed CareQueue upgrade recovery record has an " +
+            "The failed CareQFlow upgrade recovery record has an " +
             "unsupported schema version."
         )
     }
@@ -1029,14 +1058,14 @@ function Get-CareQueueFailedUpgradeRecovery {
     if (-not (Test-CareQueueVersion -Version $previousVersion)) {
         throw (
             "The failed upgrade recovery record contains an invalid " +
-            "previous CareQueue version: $previousVersion"
+            "previous CareQFlow version: $previousVersion"
         )
     }
 
     if (-not (Test-CareQueueVersion -Version $incomingVersion)) {
         throw (
             "The failed upgrade recovery record contains an invalid " +
-            "incoming CareQueue version: $incomingVersion"
+            "incoming CareQFlow version: $incomingVersion"
         )
     }
 
@@ -1317,7 +1346,7 @@ function New-CareQueueFailedApplicationArchive {
 
     if (-not (Test-CareQueueVersion -Version $IncomingVersion)) {
         throw (
-            "Cannot preserve the failed CareQueue application " +
+            "Cannot preserve the failed CareQFlow application " +
             "because the incoming version is invalid: " +
             $IncomingVersion
         )
@@ -1350,7 +1379,7 @@ function New-CareQueueFailedApplicationArchive {
 
     if ($existingApplicationPaths.Count -eq 0) {
         throw (
-            "No failed CareQueue application directories are " +
+            "No failed CareQFlow application directories are " +
             "available to preserve before rollback."
         )
     }
@@ -1379,7 +1408,7 @@ function New-CareQueueFailedApplicationArchive {
     $checksumPath = "$archivePath.sha256"
 
     Write-Host (
-        "Preserving failed CareQueue application before rollback..."
+        "Preserving failed CareQFlow application before rollback..."
     )
 
     Compress-Archive `
@@ -1397,7 +1426,7 @@ function New-CareQueueFailedApplicationArchive {
         )
     ) {
         throw (
-            "The failed CareQueue application archive was not created."
+            "The failed CareQFlow application archive was not created."
         )
     }
 
@@ -1407,7 +1436,7 @@ function New-CareQueueFailedApplicationArchive {
 
     if ($archiveItem.Length -le 0) {
         throw (
-            "The failed CareQueue application archive is empty: " +
+            "The failed CareQFlow application archive is empty: " +
             $archivePath
         )
     }
@@ -1421,7 +1450,7 @@ function New-CareQueueFailedApplicationArchive {
 
     if ($archiveSha256 -notmatch '^[0-9a-f]{64}$') {
         throw (
-            "Unable to calculate the failed CareQueue application " +
+            "Unable to calculate the failed CareQFlow application " +
             "archive SHA256 checksum."
         )
     }
@@ -1444,13 +1473,13 @@ function New-CareQueueFailedApplicationArchive {
 
     if ($verificationSha256 -ne $archiveSha256) {
         throw (
-            "Failed CareQueue application archive checksum " +
+            "Failed CareQFlow application archive checksum " +
             "verification failed."
         )
     }
 
     Write-Host (
-        "Failed CareQueue application preserved: " +
+        "Failed CareQFlow application preserved: " +
         $archivePath
     )
 
@@ -1511,7 +1540,7 @@ function Stop-CareQueueServicesForRollback {
 
         if ($service.Status -ne "Stopped") {
             throw (
-                "CareQueue rollback could not stop Windows service: " +
+                "CareQFlow rollback could not stop Windows service: " +
                 $serviceName
             )
         }
@@ -1542,7 +1571,7 @@ function Restore-CareQueueFailedApplicationAfterSwapFailure {
     )
 
     Write-Host (
-        "Restoring the failed CareQueue application after " +
+        "Restoring the failed CareQFlow application after " +
         "rollback swap failure..."
     )
 
@@ -1603,7 +1632,7 @@ function Restore-CareQueueFailedApplicationAfterSwapFailure {
     }
 
     Write-Host (
-        "Failed CareQueue application restored after swap failure."
+        "Failed CareQFlow application restored after swap failure."
     )
 }
 
@@ -1726,7 +1755,7 @@ function Set-CareQueueRollbackApplication {
         }
 
         Write-Host (
-            "Previous CareQueue application payload activated."
+            "Previous CareQFlow application payload activated."
         )
 
         return [PSCustomObject]@{
@@ -1747,7 +1776,7 @@ function Set-CareQueueRollbackApplication {
             }
             catch {
                 throw (
-                    "CareQueue rollback application activation failed, " +
+                    "CareQFlow rollback application activation failed, " +
                     "and restoration of the failed application also " +
                     "failed. Activation error: " +
                     $swapFailure.Exception.Message +
@@ -1833,7 +1862,7 @@ function Invoke-CareQueueRollbackDatabaseStaging {
         )
     ) {
         throw (
-            "CareQueue rollback requires the installed restore script: " +
+            "CareQFlow rollback requires the installed restore script: " +
             $restoreScript
         )
     }
@@ -1850,7 +1879,7 @@ function Invoke-CareQueueRollbackDatabaseStaging {
         )
     ) {
         throw (
-            "CareQueue rollback requires the installed Python " +
+            "CareQFlow rollback requires the installed Python " +
             "environment: " +
             $pythonExecutable
         )
@@ -1868,7 +1897,7 @@ function Invoke-CareQueueRollbackDatabaseStaging {
         )
     ) {
         throw (
-            "CareQueue rollback requires the production " +
+            "CareQFlow rollback requires the production " +
             "configuration: " +
             $environmentFile
         )
@@ -1908,7 +1937,7 @@ function Invoke-CareQueueRollbackDatabaseStaging {
 
     if ($LASTEXITCODE -ne 0) {
         throw (
-            "CareQueue rollback database staging failed with " +
+            "CareQFlow rollback database staging failed with " +
             "exit code " +
             $LASTEXITCODE +
             "."
@@ -1945,7 +1974,7 @@ function Invoke-CareQueueRollbackDatabaseActivation {
         )
     ) {
         throw (
-            "CareQueue rollback requires the installed recovery " +
+            "CareQFlow rollback requires the installed recovery " +
             "activation script: " +
             $activationScript
         )
@@ -1963,7 +1992,7 @@ function Invoke-CareQueueRollbackDatabaseActivation {
         )
     ) {
         throw (
-            "CareQueue rollback requires the installed Python " +
+            "CareQFlow rollback requires the installed Python " +
             "environment: " +
             $pythonExecutable
         )
@@ -1981,7 +2010,7 @@ function Invoke-CareQueueRollbackDatabaseActivation {
         )
     ) {
         throw (
-            "CareQueue rollback requires the production " +
+            "CareQFlow rollback requires the production " +
             "configuration: " +
             $environmentFile
         )
@@ -2035,10 +2064,10 @@ function Invoke-CareQueueRollbackDatabaseActivation {
 
     if ($LASTEXITCODE -ne 0) {
         throw (
-            "CareQueue rollback database activation failed with " +
+            "CareQFlow rollback database activation failed with " +
             "exit code " +
             $LASTEXITCODE +
-            ". CareQueue services remain stopped."
+            ". CareQFlow services remain stopped."
         )
     }
 
@@ -2082,7 +2111,7 @@ function Start-CareQueueServicesAfterRollback {
     }
 
     Write-Host (
-        "CareQueue services started after rollback activation."
+        "CareQFlow services started after rollback activation."
     )
 }
 
@@ -2126,7 +2155,7 @@ function Stop-CareQueueServicesAfterRollbackFailure {
 
         if ($service.Status -ne "Stopped") {
             throw (
-                "CareQueue could not stop Windows service after " +
+                "CareQFlow could not stop Windows service after " +
                 "rollback failure: " +
                 $serviceName
             )
@@ -2134,7 +2163,7 @@ function Stop-CareQueueServicesAfterRollbackFailure {
     }
 
     Write-Host (
-        "CareQueue services stopped after rollback failure."
+        "CareQFlow services stopped after rollback failure."
     )
 }
 
@@ -2154,7 +2183,7 @@ function Restore-CareQueueRollbackInstallStateVersion {
     if (-not (Test-CareQueueVersion -Version $PreviousVersion)) {
         throw (
             "Cannot restore installed version metadata because the " +
-            "previous CareQueue version is invalid: " +
+            "previous CareQFlow version is invalid: " +
             $PreviousVersion
         )
     }
@@ -2199,7 +2228,7 @@ function Restore-CareQueueRollbackInstallStateVersion {
         -ErrorAction Stop
 
     Write-Host (
-        "Installed CareQueue version metadata restored to " +
+        "Installed CareQFlow version metadata restored to " +
         $PreviousVersion
     )
 }
@@ -2251,7 +2280,7 @@ function Set-CareQueueCaddyRootCertificate {
         "Caddy\Data\caddy\pki\authorities\local\root.crt"
 
     Write-Output (
-        "Waiting for the CareQueue HTTPS root certificate: " +
+        "Waiting for the CareQFlow HTTPS root certificate: " +
         $rootCertificatePath
     )
 
@@ -2279,7 +2308,7 @@ function Set-CareQueueCaddyRootCertificate {
 
     if (-not $certificateAvailable) {
         throw (
-            "CareQueue HTTPS certificate trust could not be configured " +
+            "CareQFlow HTTPS certificate trust could not be configured " +
             "because Caddy did not create its root certificate after " +
             "$MaximumAttempts attempts. Expected certificate: " +
             $rootCertificatePath
@@ -2293,7 +2322,7 @@ function Set-CareQueueCaddyRootCertificate {
     }
     catch {
         throw (
-            "CareQueue HTTPS certificate trust could not be configured " +
+            "CareQFlow HTTPS certificate trust could not be configured " +
             "because the generated Caddy root certificate could not be " +
             "read. Certificate: $rootCertificatePath. Error: " +
             $_.Exception.Message
@@ -2304,7 +2333,7 @@ function Set-CareQueueCaddyRootCertificate {
 
     if ([string]::IsNullOrWhiteSpace($certificateThumbprint)) {
         throw (
-            "CareQueue HTTPS certificate trust could not be configured " +
+            "CareQFlow HTTPS certificate trust could not be configured " +
             "because the generated root certificate has no thumbprint."
         )
     }
@@ -2319,7 +2348,7 @@ function Set-CareQueueCaddyRootCertificate {
 
     if ($existingCertificate) {
         Write-Output (
-            "CareQueue HTTPS root certificate is already trusted. " +
+            "CareQFlow HTTPS root certificate is already trusted. " +
             "Thumbprint: $certificateThumbprint"
         )
 
@@ -2327,7 +2356,7 @@ function Set-CareQueueCaddyRootCertificate {
     }
 
     Write-Output (
-        "Trusting the CareQueue HTTPS root certificate. " +
+        "Trusting the CareQFlow HTTPS root certificate. " +
         "Thumbprint: $certificateThumbprint"
     )
 
@@ -2343,7 +2372,7 @@ function Set-CareQueueCaddyRootCertificate {
     }
     catch {
         throw (
-            "CareQueue HTTPS root certificate could not be imported " +
+            "CareQFlow HTTPS root certificate could not be imported " +
             "into the Windows Local Machine trusted root store. " +
             "Error: $($_.Exception.Message)"
         )
@@ -2359,14 +2388,14 @@ function Set-CareQueueCaddyRootCertificate {
 
     if (-not $trustedCertificate) {
         throw (
-            "CareQueue imported the HTTPS root certificate, but " +
+            "CareQFlow imported the HTTPS root certificate, but " +
             "verification of the Windows trusted root store failed. " +
             "Thumbprint: $certificateThumbprint"
         )
     }
 
     Write-Output (
-        "CareQueue HTTPS root certificate trusted successfully. " +
+        "CareQFlow HTTPS root certificate trusted successfully. " +
         "Thumbprint: $certificateThumbprint"
     )
 }
@@ -2465,7 +2494,7 @@ function Assert-PostInstallationHealth {
     ) {
         throw (
             "Post-installation validation failed because the " +
-            "CareQueue data directory is missing: $DataDirectory"
+            "CareQFlow data directory is missing: $DataDirectory"
         )
     }
 
@@ -2529,7 +2558,7 @@ function Assert-PostInstallationHealth {
     catch {
         throw (
             "Post-installation validation could not parse the " +
-            "CareQueue application origin: $normalizedApplicationOrigin. " +
+            "CareQFlow application origin: $normalizedApplicationOrigin. " +
             "Error: $($_.Exception.Message)"
         )
     }
@@ -2541,16 +2570,16 @@ function Assert-PostInstallationHealth {
     }
     catch {
         throw (
-            "Post-installation validation failed because the CareQueue " +
+            "Post-installation validation failed because the CareQFlow " +
             "hostname '$applicationHostname' could not be resolved. " +
-            "Expected a local loopback mapping for CareQueue. " +
+            "Expected a local loopback mapping for CareQFlow. " +
             "Error: $($_.Exception.Message)"
         )
     }
     
     if ($resolvedAddresses.Count -eq 0) {
         throw (
-            "Post-installation validation failed because the CareQueue " +
+            "Post-installation validation failed because the CareQFlow " +
             "hostname '$applicationHostname' resolved to no addresses."
         )
     }
@@ -2573,7 +2602,7 @@ function Assert-PostInstallationHealth {
         ) -join ", "
     
         throw (
-            "Post-installation validation failed because the CareQueue " +
+            "Post-installation validation failed because the CareQFlow " +
             "hostname '$applicationHostname' did not resolve to a local " +
             "loopback address. Resolved addresses: $resolvedAddressText"
         )
@@ -2708,7 +2737,7 @@ function Assert-PayloadIntegrity {
     )
 
     if ($manifestLines.Count -eq 0) {
-        throw "The CareQueue payload hash manifest is empty."
+        throw "The CareQFlow payload hash manifest is empty."
     }
 
     $manifestEntries = @{}
@@ -2720,7 +2749,7 @@ function Assert-PayloadIntegrity {
                 "^(?<Hash>[0-9a-fA-F]{64})  (?<Path>.+)$"
         ) {
             throw (
-                "The CareQueue payload hash manifest contains an " +
+                "The CareQFlow payload hash manifest contains an " +
                 "invalid entry: $manifestLine"
             )
         }
@@ -2738,7 +2767,7 @@ function Assert-PayloadIntegrity {
             ) -contains ".."
         ) {
             throw (
-                "The CareQueue payload hash manifest contains an " +
+                "The CareQFlow payload hash manifest contains an " +
                 "unsafe path: $relativePath"
             )
         }
@@ -2763,7 +2792,7 @@ function Assert-PayloadIntegrity {
             )
         ) {
             throw (
-                "The CareQueue payload hash manifest path escapes " +
+                "The CareQFlow payload hash manifest path escapes " +
                 "the payload directory: $relativePath"
             )
         }
@@ -2779,7 +2808,7 @@ function Assert-PayloadIntegrity {
 
         if ($manifestEntries.ContainsKey($normalizedRelativePath)) {
             throw (
-                "The CareQueue payload hash manifest contains a " +
+                "The CareQFlow payload hash manifest contains a " +
                 "duplicate path: $normalizedRelativePath"
             )
         }
@@ -2803,7 +2832,7 @@ function Assert-PayloadIntegrity {
             )
         ) {
             throw (
-                "A file listed in the CareQueue payload hash " +
+                "A file listed in the CareQFlow payload hash " +
                 "manifest is missing: $($manifestEntry.Key)"
             )
         }
@@ -2816,7 +2845,7 @@ function Assert-PayloadIntegrity {
 
         if ($actualHash -ne $manifestEntry.Value) {
             throw (
-                "CareQueue payload hash validation failed for " +
+                "CareQFlow payload hash validation failed for " +
                 "$($manifestEntry.Key). " +
                 "Expected: $($manifestEntry.Value). " +
                 "Actual: $actualHash"
@@ -2850,7 +2879,7 @@ function Assert-PayloadIntegrity {
 
         if (-not $manifestEntries.ContainsKey($actualRelativePath)) {
             throw (
-                "The CareQueue payload contains a file that is not " +
+                "The CareQFlow payload contains a file that is not " +
                 "listed in the hash manifest: $actualRelativePath"
             )
         }
@@ -2858,7 +2887,7 @@ function Assert-PayloadIntegrity {
 
     if ($actualPayloadFiles.Count -ne $manifestEntries.Count) {
         throw (
-            "The CareQueue payload file count does not match the " +
+            "The CareQFlow payload file count does not match the " +
             "hash manifest. Manifest entries: " +
             "$($manifestEntries.Count). Payload files: " +
             "$($actualPayloadFiles.Count)."
@@ -2871,7 +2900,7 @@ if (-not (Test-Administrator)) {
         -Status "failed" `
         -ExitCode $exitCodeAdministratorRequired `
         -Message (
-        "CareQueue installation requires Administrator privileges."
+        "CareQFlow installation requires Administrator privileges."
     )
 
     exit $exitCodeAdministratorRequired
@@ -2901,7 +2930,7 @@ catch {
         -Status "failed" `
         -ExitCode $exitCodeInvalidInstallState `
         -Message (
-        "Unable to configure the CareQueue local hostname: " +
+        "Unable to configure the CareQFlow local hostname: " +
         $_.Exception.Message
     )
 
@@ -2917,7 +2946,7 @@ switch ($Mode) {
     "Install" {
         if ($careQueueIsInstalled) {
             $modeValidationMessage = (
-                "CareQueue is already installed. Use -Mode Upgrade " +
+                "CareQFlow is already installed. Use -Mode Upgrade " +
                 "or -Mode Repair."
             )
         }
@@ -2926,7 +2955,7 @@ switch ($Mode) {
     "Upgrade" {
         if (-not $careQueueIsInstalled) {
             $modeValidationMessage = (
-                "CareQueue is not installed. Use -Mode Install."
+                "CareQFlow is not installed. Use -Mode Install."
             )
         }
     }
@@ -2934,7 +2963,7 @@ switch ($Mode) {
     "Repair" {
         if (-not $careQueueIsInstalled) {
             $modeValidationMessage = (
-                "CareQueue is not installed. Use -Mode Install."
+                "CareQFlow is not installed. Use -Mode Install."
             )
         }
     }
@@ -2942,7 +2971,7 @@ switch ($Mode) {
     "Rollback" {
         if (-not $careQueueIsInstalled) {
             $modeValidationMessage = (
-                "CareQueue is not installed, so there is no " +
+                "CareQFlow is not installed, so there is no " +
                 "installation to roll back."
             )
         }
@@ -2951,7 +2980,7 @@ switch ($Mode) {
     "Uninstall" {
         if (-not $careQueueIsInstalled) {
             $modeValidationMessage = (
-                "CareQueue is not installed, so there is nothing " +
+                "CareQFlow is not installed, so there is nothing " +
                 "to uninstall."
             )
         }
@@ -2992,7 +3021,7 @@ if ($Mode -eq "Uninstall") {
             -Status "failed" `
             -ExitCode $exitCodeLoggingFailure `
             -Message (
-            "Unable to prepare the CareQueue uninstaller log: " +
+            "Unable to prepare the CareQFlow uninstaller log: " +
             $_.Exception.Message
         )
 
@@ -3014,7 +3043,7 @@ if ($Mode -eq "Uninstall") {
             -Status "failed" `
             -ExitCode $exitCodeInstallationFailure `
             -Message (
-            "The installed CareQueue uninstall engine was not " +
+            "The installed CareQFlow uninstall engine was not " +
             "found: $uninstallScriptPath"
         ) `
             -LogPath $logPath
@@ -3042,7 +3071,7 @@ if ($Mode -eq "Uninstall") {
     )
 
     @(
-        "CareQueue Windows Installer"
+        "CareQFlow Windows Installer"
         "Mode: Uninstall"
         "Started UTC: $([DateTime]::UtcNow.ToString('o'))"
         "Install directory: $InstallDirectory"
@@ -3063,7 +3092,7 @@ if ($Mode -eq "Uninstall") {
 
         if ($uninstallExitCode -ne 0) {
             throw (
-                "The CareQueue uninstall engine failed with exit " +
+                "The CareQFlow uninstall engine failed with exit " +
                 "code $uninstallExitCode."
             )
         }
@@ -3103,7 +3132,7 @@ if ($Mode -eq "Uninstall") {
         -Status "succeeded" `
         -ExitCode $exitCodeSuccess `
         -Message (
-        "CareQueue Uninstall operation completed successfully."
+        "CareQFlow Uninstall operation completed successfully."
     ) `
         -LogPath $logPath
 
@@ -3192,7 +3221,7 @@ try {
             )
         ) {
             throw (
-                "A required CareQueue payload path was not found: " +
+                "A required CareQFlow payload path was not found: " +
                 $requiredPayloadPath
             )
         }
@@ -3212,14 +3241,14 @@ try {
 
     if (-not (Test-CareQueueVersion -Version $incomingVersion)) {
         throw (
-            "The CareQueue payload contains an invalid application " +
+            "The CareQFlow payload contains an invalid application " +
             "version: $incomingVersion"
         )
     }
 
     if ($payloadMetadata.schema_version -ne 1) {
         throw (
-            "Unsupported CareQueue payload schema version: " +
+            "Unsupported CareQFlow payload schema version: " +
             $payloadMetadata.schema_version
         )
     }
@@ -3229,7 +3258,7 @@ try {
             -ne "CareQueue"
     ) {
         throw (
-            "The supplied payload is not a CareQueue installer payload."
+            "The supplied payload is not a CareQFlow installer payload."
         )
     }
 }
@@ -3285,7 +3314,7 @@ catch {
         -Status "failed" `
         -ExitCode $exitCodeLoggingFailure `
         -Message (
-        "Unable to prepare the CareQueue installer log: " +
+        "Unable to prepare the CareQFlow installer log: " +
         $_.Exception.Message
     )
 
@@ -3301,7 +3330,7 @@ if ($Mode -eq "Rollback") {
 
         if ($null -eq $rollbackRecovery) {
             throw (
-                "The CareQueue rollback recovery state was not returned."
+                "The CareQFlow rollback recovery state was not returned."
             )
         }
 
@@ -3331,7 +3360,7 @@ if ($Mode -eq "Rollback") {
         
         if ([string]::IsNullOrWhiteSpace($stagedRollbackApplication)) {
             throw (
-                "The staged CareQueue rollback application path " +
+                "The staged CareQFlow rollback application path " +
                 "was not returned."
             )
         }
@@ -3343,7 +3372,7 @@ if ($Mode -eq "Rollback") {
 
         if ($null -eq $failedApplication) {
             throw (
-                "The failed CareQueue application archive " +
+                "The failed CareQFlow application archive " +
                 "was not returned."
             )
         }
@@ -3361,7 +3390,7 @@ if ($Mode -eq "Rollback") {
             )
         ) {
             throw (
-                "The failed CareQueue application archive metadata " +
+                "The failed CareQFlow application archive metadata " +
                 "is incomplete."
             )
         }
@@ -3375,7 +3404,7 @@ if ($Mode -eq "Rollback") {
 
         if ($null -eq $rollbackApplicationActivation) {
             throw (
-                "The CareQueue rollback application was not activated."
+                "The CareQFlow rollback application was not activated."
             )
         }
 
@@ -3428,7 +3457,7 @@ if ($Mode -eq "Rollback") {
         }
 
         @(
-            "CareQueue Windows Rollback Recovery"
+            "CareQFlow Windows Rollback Recovery"
             "Recovery record: $rollbackRecoveryRecord"
             "Previous version: $rollbackPreviousVersion"
             "Failed incoming version: $rollbackIncomingVersion"
@@ -3443,7 +3472,7 @@ if ($Mode -eq "Rollback") {
             "Previous application payload activated successfully."
             "Pre-upgrade database staged successfully."
             "Pre-upgrade database activated successfully."
-            "CareQueue services started and validated successfully."
+            "CareQFlow services started and validated successfully."
             "Installed version metadata restored successfully."
             "Upgrade recovery status: rollback_completed"
         ) |
@@ -3455,8 +3484,8 @@ if ($Mode -eq "Rollback") {
             -Status "success" `
             -ExitCode $exitCodeSuccess `
             -Message (
-            "Previous CareQueue application payload and pre-upgrade " +
-            "database were activated successfully. CareQueue services " +
+            "Previous CareQFlow application payload and pre-upgrade " +
+            "database were activated successfully. CareQFlow services " +
             "passed post-rollback validation."
         ) `
             -LogPath $logPath
@@ -3475,7 +3504,7 @@ if ($Mode -eq "Rollback") {
                     -LiteralPath $logPath `
                     -Value (
                     "Rollback failed after database activation, and " +
-                    "CareQueue services could not be fully stopped: " +
+                    "CareQFlow services could not be fully stopped: " +
                     $_.Exception.Message
                 ) `
                     -Encoding utf8
@@ -3511,7 +3540,7 @@ if ($Mode -eq "Upgrade") {
         if ([string]::IsNullOrWhiteSpace($preUpgradeBackupPath)) {
             throw (
                 "The verified pre-upgrade backup path was not returned. " +
-                "The CareQueue application has not been replaced."
+                "The CareQFlow application has not been replaced."
             )
         }
 
@@ -3525,7 +3554,7 @@ if ($Mode -eq "Upgrade") {
 
         if ([string]::IsNullOrWhiteSpace($installedVersion)) {
             throw (
-                "The installed CareQueue version metadata is required " +
+                "The installed CareQFlow version metadata is required " +
                 "to create an application rollback payload."
             )
         }
@@ -3591,7 +3620,7 @@ if ($Mode -eq "Upgrade") {
         if ([string]::IsNullOrWhiteSpace($upgradeRecoveryRecord)) {
             throw (
                 "The Windows upgrade recovery record was not created. " +
-                "The CareQueue application has not been replaced."
+                "The CareQFlow application has not been replaced."
             )
         }
         
@@ -3666,7 +3695,7 @@ if ($SkipPermissionHardening) {
 }
 
 $logHeader = @(
-    "CareQueue Windows Installer"
+    "CareQFlow Windows Installer"
     "Mode: $Mode"
     "Started UTC: $([DateTime]::UtcNow.ToString('o'))"
     "Payload: $PayloadDirectory"
@@ -3691,7 +3720,7 @@ try {
 
     if ($productionInstallerExitCode -ne 0) {
         throw (
-            "The CareQueue production installer failed with exit code " +
+            "The CareQFlow production installer failed with exit code " +
             "$productionInstallerExitCode."
         )
     }
@@ -3713,14 +3742,14 @@ try {
             $InstallDirectory `
             "Service"
 
-        Write-Output "Installing the CareQueue API service..."
+        Write-Output "Installing the CareQFlow API service..."
 
         & $installApiServiceScript `
             -InstallDirectory $InstallDirectory `
             -ServiceDirectory $serviceDirectory `
             -StartService
 
-        Write-Output "Installing the CareQueue Caddy service..."
+        Write-Output "Installing the CareQFlow Caddy service..."
 
         & $installCaddyServiceScript `
             -InstallDirectory $InstallDirectory `
@@ -3732,7 +3761,7 @@ try {
         $Mode -eq "Upgrade" `
             -or $Mode -eq "Repair"
     ) {
-        Write-Output "Ensuring CareQueue services are running..."
+        Write-Output "Ensuring CareQFlow services are running..."
 
         Start-Service `
             -Name "CareQueueApi" `
@@ -3855,7 +3884,7 @@ Add-Content `
 Write-InstallerResult `
     -Status "succeeded" `
     -ExitCode $exitCodeSuccess `
-    -Message "CareQueue $Mode operation completed successfully." `
+    -Message "CareQFlow $Mode operation completed successfully." `
     -LogPath $logPath
 
 exit $exitCodeSuccess

@@ -25,9 +25,9 @@ interface WalkthroughStep {
 const WALKTHROUGH_STEPS: WalkthroughStep[] = [
   {
     id: "welcome",
-    title: "Welcome to CareQueue",
+    title: "Welcome to CareQFlow",
     description:
-      "This walkthrough will guide you through the basic CareQueue setup and authorization workflow. You can skip the walkthrough at any time.",
+      "This walkthrough will guide you through the basic CareQFlow setup and authorization workflow. You can skip the walkthrough at any time.",
     page: "dashboard",
   },
   {
@@ -149,7 +149,7 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
     id: "submission-method",
     title: "Submission method",
     description:
-      "Choose how the authorization was submitted. CareQueue can show additional fields for web portals, phone calls, voicemail, or fax depending on this selection.",
+      "Choose how the authorization was submitted. CareQFlow can show additional fields for web portals, phone calls, voicemail, or fax depending on this selection.",
     page: "authorizations",
     target: '[data-walkthrough="auth-submission-method"]',
   },
@@ -157,7 +157,7 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
     id: "pdf-intake",
     title: "PDF intake",
     description:
-      "For a new initial authorization, you can optionally select a supported PDF and ask CareQueue to propose values for the form. The PDF is processed in memory and you review the extracted values before applying them.",
+      "For a new initial authorization, you can optionally select a supported PDF and ask CareQFlow to propose values for the form. The PDF is processed in memory and you review the extracted values before applying them.",
     page: "authorizations",
     target: '[data-walkthrough="pdf-intake"]',
   },
@@ -181,7 +181,7 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
     id: "denials-workspace",
     title: "Denials, P2P, appeals, and retro follow-up",
     description:
-      "CareQueue includes a dedicated workspace for denial follow-up, peer-to-peer reviews, appeals, and retro authorization work.",
+      "CareQFlow includes a dedicated workspace for denial follow-up, peer-to-peer reviews, appeals, and retro authorization work.",
     page: "denials-pipeline",
     target: '[data-walkthrough="denials-workspace-header"]',
   },
@@ -211,7 +211,7 @@ const WALKTHROUGH_STEPS: WalkthroughStep[] = [
   },
   {
     id: "finish",
-    title: "You're ready to use CareQueue",
+    title: "You're ready to use CareQFlow",
     description:
       "The basic setup walkthrough is complete. You can now create and manage authorization workflows using the facilities and payers you configured.",
     page: "dashboard",

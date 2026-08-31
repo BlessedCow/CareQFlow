@@ -57,7 +57,7 @@ def test_windows_upgrade_rejects_same_version_and_downgrade():
     )
 
     assert "Use Repair instead of Upgrade." in function
-    assert "CareQueue downgrade refused:" in function
+    assert "CareQFlow downgrade refused:" in function
     assert "Compare-CareQueueVersions" in function
 
 
@@ -69,7 +69,7 @@ def test_windows_upgrade_allows_legacy_install_without_version_metadata():
         "Assert-CareQueueUpgradeVersion",
     )
 
-    assert "Installed CareQueue version metadata is unavailable." in function
+    assert "Installed CareQFlow version metadata is unavailable." in function
     assert "Continuing legacy upgrade validation." in function
 
 
@@ -111,6 +111,14 @@ WINDOWS_PRODUCTION_INSTALLER = (
     PROJECT_ROOT / "deployment" / "windows" / "install-production.ps1"
 )
 
+WINDOWS_BACKUP_TASK_INSTALLER = (
+    PROJECT_ROOT / "deployment" / "windows" / "install-backup-task.ps1"
+)
+
+WINDOWS_BACKUP_TASK_REMOVER = (
+    PROJECT_ROOT / "deployment" / "windows" / "remove-backup-task.ps1"
+)
+
 
 def test_windows_production_installer_requires_release_version():
     content = _read(WINDOWS_PRODUCTION_INSTALLER)
@@ -149,8 +157,8 @@ def test_windows_install_state_is_written_atomically():
 def test_windows_install_state_written_after_backend_validation():
     content = _read(WINDOWS_PRODUCTION_INSTALLER)
 
-    validation_index = content.index("CareQueue production backend validated.")
-    state_index = content.index("Writing CareQueue installation state...")
+    validation_index = content.index("CareQFlow production backend validated.")
+    state_index = content.index("Writing CareQFlow installation state...")
 
     assert validation_index < state_index
 
@@ -193,7 +201,7 @@ def test_windows_upgrade_backup_failure_states_application_not_replaced():
         "New-VerifiedPreUpgradeBackup",
     )
 
-    assert "The CareQueue application has not been replaced." in function
+    assert "The CareQFlow application has not been replaced." in function
 
 
 def test_windows_upgrade_backup_runs_before_production_installer():
@@ -384,6 +392,44 @@ def test_windows_upgrade_tracks_completed_and_failed_recovery_states():
     assert '-Status "failed"' in content
 
 
+def test_windows_backup_task_installer_uses_careqflow_task_name():
+    content = _read(WINDOWS_BACKUP_TASK_INSTALLER)
+
+    assert '[string]$TaskName = "CareQFlow Encrypted Backup"' in content
+
+
+def test_windows_backup_task_installer_removes_legacy_task():
+    content = _read(WINDOWS_BACKUP_TASK_INSTALLER)
+
+    assert '$legacyTaskName = "CareQueue Encrypted Backup"' in content
+    assert "Get-ScheduledTask" in content
+    assert "-TaskName $legacyTaskName" in content
+    assert "Unregister-ScheduledTask" in content
+    assert "Removing legacy CareQueue backup task before " in content
+
+
+def test_windows_backup_task_installer_preserves_custom_task_name():
+    content = _read(WINDOWS_BACKUP_TASK_INSTALLER)
+
+    assert "if ($TaskName -ne $legacyTaskName)" in content
+
+
+def test_windows_backup_task_remover_uses_careqflow_task_name():
+    content = _read(WINDOWS_BACKUP_TASK_REMOVER)
+
+    assert '[string]$TaskName = "CareQFlow Encrypted Backup"' in content
+
+
+def test_windows_backup_task_remover_cleans_up_legacy_task():
+    content = _read(WINDOWS_BACKUP_TASK_REMOVER)
+
+    assert '$legacyTaskName = "CareQueue Encrypted Backup"' in content
+    assert "$taskNames += $legacyTaskName" in content
+    assert "foreach ($candidateTaskName in $taskNames)" in content
+    assert "-TaskName $candidateTaskName" in content
+    assert "Unregister-ScheduledTask" in content
+
+
 def test_windows_installer_supports_rollback_mode():
     content = _read(WINDOWS_INSTALLER_WRAPPER)
 
@@ -410,7 +456,7 @@ def test_windows_rollback_selects_latest_failed_recovery_record():
     assert '-Filter "upgrade-*.json"' in function
     assert "LastWriteTimeUtc" in function
     assert '[string]$state.status -eq "failed"' in function
-    assert "No failed CareQueue upgrade recovery record was found." in function
+    assert "No failed CareQFlow upgrade recovery record was found." in function
 
 
 def test_windows_rollback_reads_recovery_record_as_json():
@@ -473,7 +519,7 @@ def test_windows_rollback_application_swap_precedes_database_activation():
 
     assert application_index < staging_index < activation_index
     assert "Pre-upgrade database activated successfully." in rollback_branch
-    assert "CareQueue services started and validated successfully." in rollback_branch
+    assert "CareQFlow services started and validated successfully." in rollback_branch
 
 
 def test_windows_value_returning_helpers_do_not_emit_status_to_pipeline():
@@ -942,7 +988,7 @@ def test_windows_rollback_database_activation_checks_exit_code():
     assert "& $pythonExecutable" in function
     assert "$activationScript" in function
     assert "$LASTEXITCODE -ne 0" in function
-    assert "CareQueue services remain stopped." in function
+    assert "CareQFlow services remain stopped." in function
 
 
 def test_windows_rollback_recovery_status_updates_atomically():
@@ -1084,7 +1130,7 @@ def test_windows_rollback_reports_completed_status_after_validation():
     )
     rollback_branch = content[rollback_index:upgrade_index]
 
-    assert "CareQueue services started and validated successfully." in rollback_branch
+    assert "CareQFlow services started and validated successfully." in rollback_branch
     assert "Installed version metadata restored successfully." in rollback_branch
     assert "Upgrade recovery status: rollback_completed" in rollback_branch
 
@@ -1178,3 +1224,42 @@ def test_windows_rollback_cleanup_failure_is_nonfatal_after_completion():
     )
 
     assert completed_index < cleanup_index < cleanup_warning_index < success_index
+
+
+def test_windows_hostname_registration_removes_legacy_managed_entry():
+    content = _read(WINDOWS_INSTALLER_WRAPPER)
+
+    function = _powershell_function(
+        content,
+        "Set-CareQueueLocalHostname",
+    )
+
+    assert "carequeue\\.local" in function
+    assert "CareQueue" in function
+    assert "$legacyManagedPattern" in function
+    assert "Where-Object" in function
+    assert "Set-Content" in function
+
+
+def test_windows_hostname_registration_uses_careqflow_managed_entry():
+    content = _read(WINDOWS_INSTALLER_WRAPPER)
+
+    function = _powershell_function(
+        content,
+        "Set-CareQueueLocalHostname",
+    )
+
+    assert "local CareQFlow hostname" in function
+    assert "# CareQFlow" in function
+
+
+def test_windows_hostname_migration_preserves_unmanaged_legacy_mappings():
+    content = _read(WINDOWS_INSTALLER_WRAPPER)
+
+    function = _powershell_function(
+        content,
+        "Set-CareQueueLocalHostname",
+    )
+
+    assert "'^\\s*127\\.0\\.0\\.1\\s+carequeue\\.local'" in function
+    assert "'\\s+#\\s*CareQueue\\s*$'" in function

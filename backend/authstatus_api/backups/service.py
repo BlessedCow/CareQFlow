@@ -217,7 +217,7 @@ def _validate_database_connection(conn: Any) -> None:
 
     if missing_tables:
         raise BackupError(
-            "Restored database is missing required CareQueue tables: "
+            "Restored database is missing required CareQFlow tables: "
             f"{missing_tables}"
         )
 

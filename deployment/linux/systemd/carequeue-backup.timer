@@ -1,5 +1,5 @@
 [Unit]
-Description=Run the encrypted CareQueue backup each day
+Description=Run the encrypted CareQFlow backup each day
 
 [Timer]
 OnCalendar=*-*-* 02:00:00

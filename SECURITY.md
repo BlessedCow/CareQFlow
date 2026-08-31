@@ -1,14 +1,14 @@
 # Security Policy
 
-CareQueue is a local-first healthcare workflow application intended for private development, testing, and controlled deployment.
+CareQFlow is a local-first healthcare workflow application intended for private development, testing, and controlled deployment.
 
 It includes authentication, role-based authorization, TOTP multi-factor authentication, remembered-device MFA, single-session enforcement, inactivity-based session controls, CSRF protection, versioned governance attestation, encrypted storage options, encrypted backups, audit logging, log sanitization, isolated PDF extraction, private HTTPS deployment, browser security headers, dependency checks, and backup scheduling support.
 
-Those controls do not make CareQueue HIPAA compliant by themselves. Any organization using CareQueue with protected health information remains responsible for its own administrative, physical, technical, contractual, legal, and operational safeguards.
+Those controls do not make CareQFlow HIPAA compliant by themselves. Any organization using CareQFlow with protected health information remains responsible for its own administrative, physical, technical, contractual, legal, and operational safeguards.
 
 ## Supported Versions
 
-CareQueue is under active development. Security fixes are applied to the current development line.
+CareQFlow is under active development. Security fixes are applied to the current development line.
 
 Older releases, copied deployments, and unmaintained forks should not be assumed to receive security updates.
 
@@ -134,7 +134,7 @@ Environment files must not be pasted into issues, screenshots, terminal transcri
 
 ## Current Security Controls
 
-CareQueue currently includes:
+CareQFlow currently includes:
 
 - Argon2id password hashing
 - Shared server-side password policy enforcement
@@ -188,7 +188,7 @@ These controls reduce specific risks. They do not replace secure host configurat
 
 ## Authentication
 
-CareQueue uses local application authentication.
+CareQFlow uses local application authentication.
 
 Passwords are hashed with Argon2id. Plaintext passwords must never be stored or logged.
 
@@ -216,9 +216,9 @@ Successful authentication clears the failed-login state.
 
 ### Multi-Factor Authentication
 
-CareQueue supports TOTP multi-factor authentication.
+CareQFlow supports TOTP multi-factor authentication.
 
-When MFA is enabled for a user, a successful username/password check does not immediately create an authenticated application session unless a valid remembered-device token is accepted. Otherwise, CareQueue creates a short-lived server-side MFA challenge and requires a valid TOTP code before creating the authenticated session.
+When MFA is enabled for a user, a successful username/password check does not immediately create an authenticated application session unless a valid remembered-device token is accepted. Otherwise, CareQFlow creates a short-lived server-side MFA challenge and requires a valid TOTP code before creating the authenticated session.
 
 MFA secrets are encrypted before persistence and must never be logged, returned after enrollment is complete, or included in audit metadata.
 
@@ -248,7 +248,7 @@ A remembered device suppresses the TOTP step only while its trusted-device recor
 
 ## Roles and Authorization
 
-CareQueue currently supports:
+CareQFlow currently supports:
 
 ```text
 Admin
@@ -277,7 +277,7 @@ New routes that read or modify protected data must use the appropriate backend a
 
 ## Session Security
 
-CareQueue uses server-side session records.
+CareQFlow uses server-side session records.
 
 The browser receives a raw session token through an HttpOnly cookie. The backend stores only a hash of that token.
 
@@ -292,7 +292,7 @@ revocation time
 hashed token
 ```
 
-CareQueue enforces one active authenticated session per account. Creating a new authenticated session revokes any previous non-revoked sessions for that user.
+CareQFlow enforces one active authenticated session per account. Creating a new authenticated session revokes any previous non-revoked sessions for that user.
 
 Authenticated sessions use an inactivity timeout rather than a long-lived browser login. The default inactivity window is 20 minutes and is configurable through:
 
@@ -318,7 +318,7 @@ The activity and renewal endpoints require an active authenticated session and v
 
 The backend remains authoritative for session validity and expiration. Frontend timers and cross-tab synchronization are usability and coordination controls, not the security boundary.
 
-Remembered-device MFA is intentionally separate from authenticated session lifetime. A remembered device may suppress the TOTP step at a later login, but it does not keep an authenticated CareQueue session alive.
+Remembered-device MFA is intentionally separate from authenticated session lifetime. A remembered device may suppress the TOTP step at a later login, but it does not keep an authenticated CareQFlow session alive.
 
 ## Cookie Security
 
@@ -357,7 +357,7 @@ Authentication cookies alone are not sufficient protection for state-changing re
 
 ## Governance Attestation
 
-CareQueue requires the current organization governance attestation before normal protected application functionality becomes available.
+CareQFlow requires the current organization governance attestation before normal protected application functionality becomes available.
 
 After initial Admin setup and login, an Admin must complete the current attestation version. Non-Admin users cannot accept organization-level governance terms.
 
@@ -369,7 +369,7 @@ organization name
 deployment mode
 accepting user
 acceptance time
-CareQueue application version
+CareQFlow application version
 ```
 
 Governance history is append-only through the application. Previous accepted records remain available to authorized administrators when a later governance version requires re-attestation.
@@ -382,13 +382,13 @@ governance.attestation_accepted
 
 The governance audit event identifies the governance record and safe version/deployment metadata without placing the organization name into audit metadata.
 
-The governance attestation version is independent from the CareQueue application version. Updating CareQueue does not by itself require re-attestation. Re-attestation occurs when the required governance attestation version changes.
+The governance attestation version is independent from the CareQFlow application version. Updating CareQFlow does not by itself require re-attestation. Re-attestation occurs when the required governance attestation version changes.
 
 The governance workflow is an application control intended to support organizational accountability. It does not itself execute a Business Associate Agreement, establish HIPAA compliance, replace legal review, or replace required administrative, physical, and technical safeguards.
 
 ## Encryption Model
 
-CareQueue uses separate keys for separate protection layers:
+CareQFlow uses separate keys for separate protection layers:
 
 ```env
 AUTHSTATUS_ENCRYPTION_KEY=field-level encryption key
@@ -411,7 +411,7 @@ Do not reuse one key for multiple layers.
 - Rotate keys only through a tested migration process.
 - Verify recovery before retiring an old key.
 
-For the full CareQueue key custody, rotation, compromise response, recovery, and retirement procedure, see [Encryption Key Lifecycle](docs/security/encryption-key-lifecycle.md).
+For the full CareQFlow key custody, rotation, compromise response, recovery, and retirement procedure, see [Encryption Key Lifecycle](docs/security/encryption-key-lifecycle.md).
 
 Key loss can make protected data unreadable:
 
@@ -440,7 +440,7 @@ Sensitive values should not appear in exception messages, audit metadata, or deb
 
 ## SQLCipher Database Encryption
 
-CareQueue supports either SQLite or SQLCipher-backed storage.
+CareQFlow supports either SQLite or SQLCipher-backed storage.
 
 A production environment containing sensitive data should not use plaintext SQLite mode.
 
@@ -459,7 +459,7 @@ A successful application startup is not, by itself, proof that the database file
 
 ## Database and Storage Paths
 
-CareQueue validates active database, backup, restore, and recovery paths to reduce accidental writes to unsafe locations.
+CareQFlow validates active database, backup, restore, and recovery paths to reduce accidental writes to unsafe locations.
 
 External production paths may require explicit configuration such as:
 
@@ -483,7 +483,7 @@ The active database, backup destination, restore destination, and recovery stagi
 
 ## Backup Security
 
-CareQueue creates separately encrypted backup files.
+CareQFlow creates separately encrypted backup files.
 
 Encrypted backups must still be treated as sensitive.
 
@@ -511,7 +511,7 @@ docs/workflows/backup-and-recovery.md
 
 ## Automated Backup Scheduling
 
-CareQueue includes platform-specific scheduling helpers.
+CareQFlow includes platform-specific scheduling helpers.
 
 Windows:
 
@@ -580,7 +580,7 @@ Tests and screenshots must use synthetic PDF content only.
 
 ## Audit Logging
 
-CareQueue records selected authentication, administration, authorization, and timeline actions.
+CareQFlow records selected authentication, administration, authorization, and timeline actions.
 
 Audit metadata should explain what happened without storing sensitive before-and-after values.
 
@@ -615,7 +615,7 @@ Retention and review frequency must be defined by the deploying organization.
 
 ## Operational Logging
 
-CareQueue applies centralized production log sanitization.
+CareQFlow applies centralized production log sanitization.
 
 Logging controls are intended to remove or mask:
 
@@ -672,7 +672,7 @@ Production tracebacks and internal exception details should not be returned to c
 
 ## Private HTTPS Deployment
 
-Packaged Windows and Linux production deployments place Caddy in front of a loopback-only CareQueue API.
+Packaged Windows and Linux production deployments place Caddy in front of a loopback-only CareQFlow API.
 
 The API listens on:
 
@@ -687,7 +687,7 @@ The Caddy configuration also applies browser security headers, including Content
 The packaged private deployment uses:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 with Caddy's internal certificate authority.
@@ -749,7 +749,7 @@ Supported Upgrade workflows also preserve verified recovery assets before replac
 
 The deployment workflows replace application and runtime files, rebuild or refresh the production backend environment, validate the installed backend, reapply deployment configuration and permissions, and restart the required services.
 
-CareQueue database schema changes are applied through an ordered versioned migration framework during database initialization.
+CareQFlow database schema changes are applied through an ordered versioned migration framework during database initialization.
 
 Applied migrations are recorded in the `schema_migrations` ledger. Previously completed migrations are skipped on later startups. Each new migration runs within a database savepoint and is recorded only after successful application.
 
@@ -780,7 +780,7 @@ After an upgrade:
 
 ### Failed-Upgrade Rollback
 
-CareQueue provides assisted rollback for supported packaged Windows and Linux upgrades when a valid failed-upgrade recovery record and required recovery assets exist.
+CareQFlow provides assisted rollback for supported packaged Windows and Linux upgrades when a valid failed-upgrade recovery record and required recovery assets exist.
 
 Rollback is not a general downgrade mechanism.
 
@@ -822,7 +822,7 @@ A recovery record that reached `rollback_activated` but not `rollback_completed`
 
 Treat that state as a recovery incident. Preserve logs and recovery assets, confirm service and database state, and avoid additional state-changing operations until the failure is understood.
 
-Windows rollback attempts to stop CareQueue services again when a post-database-activation failure occurs. Linux rollback also keeps or returns the API to a stopped state in safety-sensitive database activation failures.
+Windows rollback attempts to stop CareQFlow services again when a post-database-activation failure occurs. Linux rollback also keeps or returns the API to a stopped state in safety-sensitive database activation failures.
 
 Temporary rollback staging is not the authoritative recovery evidence. Durable recovery records, verified backups, application archives, checksums, and logs should be retained according to operational policy.
 
@@ -847,7 +847,7 @@ Screenshots must not expose:
 
 Review each screenshot at full resolution before committing it.
 
-A public demo should be a separate deployment with synthetic data, independent keys, separate storage, and no connection to a private CareQueue instance.
+A public demo should be a separate deployment with synthetic data, independent keys, separate storage, and no connection to a private CareQFlow instance.
 
 ## Dependency and Code Review
 
@@ -894,7 +894,7 @@ PowerShell, Caddy, WinSW, systemd, and certificate changes also require platform
 
 ## Threat Model and Risk Register
 
-CareQueue maintains a formal threat model and risk register covering application, deployment, operational, and supply-chain risks.
+CareQFlow maintains a formal threat model and risk register covering application, deployment, operational, and supply-chain risks.
 
 See:
 
@@ -918,7 +918,7 @@ The risk register should be reviewed when security boundaries, authentication be
 
 ## Production Readiness
 
-CareQueue is not independently production-ready or HIPAA compliant.
+CareQFlow is not independently production-ready or HIPAA compliant.
 
 Before organizational use, complete and document at least:
 

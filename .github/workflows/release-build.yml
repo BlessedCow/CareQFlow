@@ -69,15 +69,15 @@ jobs:
       - name: Attest Linux release package
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
-          subject-path: build/linux/installer/CareQueue-Linux-Setup-*.tar.gz
+          subject-path: build/linux/installer/CareQFlow-Linux-Setup-*.tar.gz
 
       - name: Upload Linux release package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: carequeue-linux-release
           path: |
-            build/linux/installer/CareQueue-Linux-Setup-*.tar.gz
-            build/linux/installer/CareQueue-Linux-Setup-*.tar.gz.sha256
+            build/linux/installer/CareQFlow-Linux-Setup-*.tar.gz
+            build/linux/installer/CareQFlow-Linux-Setup-*.tar.gz.sha256
           if-no-files-found: error
 
   windows:
@@ -271,13 +271,13 @@ jobs:
       - name: Attest Windows release package
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
-          subject-path: build/windows/installer/CareQueue-Setup-*.exe
+          subject-path: build/windows/installer/CareQFlow-Setup-*.exe
 
       - name: Upload Windows release package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: carequeue-windows-release
           path: |
-            build/windows/installer/CareQueue-Setup-*.exe
-            build/windows/installer/CareQueue-Setup-*.exe.sha256
+            build/windows/installer/CareQFlow-Setup-*.exe
+            build/windows/installer/CareQFlow-Setup-*.exe.sha256
           if-no-files-found: error

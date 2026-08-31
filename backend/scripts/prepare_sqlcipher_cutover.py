@@ -15,11 +15,10 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 os.environ.setdefault(
     "AUTHSTATUS_DATABASE_PATH",
-    str(PROJECT_ROOT / "backend" / "data" / "auth_tracker.db")
+    str(PROJECT_ROOT / "backend" / "data" / "auth_tracker.db"),
 )
 os.environ.setdefault(
-    "AUTHSTATUS_BACKUP_DIRECTORY",
-    str(PROJECT_ROOT / "backend" / "backups")
+    "AUTHSTATUS_BACKUP_DIRECTORY", str(PROJECT_ROOT / "backend" / "backups")
 )
 
 from authstatus_api.database_encryption.cutover import (  # noqa: E402
@@ -31,7 +30,7 @@ from authstatus_api.settings import get_settings  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Prepare a safe SQLCipher cutover for CareQueue."
+        description="Prepare a safe SQLCipher cutover for CareQFlow."
     )
     parser.add_argument(
         "--source-path",
@@ -92,7 +91,9 @@ def main() -> int:
 
     print()
     print("To switch the backend to SQLCipher mode, update the repository-root .env:")
-    print(f"AUTHSTATUS_DATABASE_PATH={result['env_values']['AUTHSTATUS_DATABASE_PATH']}")
+    print(
+        f"AUTHSTATUS_DATABASE_PATH={result['env_values']['AUTHSTATUS_DATABASE_PATH']}"
+    )
     print(
         "AUTHSTATUS_DATABASE_ENCRYPTION="
         f"{result['env_values']['AUTHSTATUS_DATABASE_ENCRYPTION']}"

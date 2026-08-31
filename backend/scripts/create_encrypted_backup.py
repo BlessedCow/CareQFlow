@@ -36,7 +36,7 @@ from authstatus_api.settings import get_settings  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Create an encrypted CareQueue database backup."
+        description="Create an encrypted CareQFlow database backup."
     )
     parser.add_argument(
         "--database-path",

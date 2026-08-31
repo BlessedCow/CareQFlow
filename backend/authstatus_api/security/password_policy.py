@@ -8,7 +8,7 @@ PASSWORD_POLICY_MESSAGE = (
 
 
 class PasswordPolicyError(ValueError):
-    """Raised when a password does not satisfy CareQueue password policy."""
+    """Raised when a password does not satisfy CareQFlow password policy."""
 
 
 def validate_password_policy(password: str) -> None:

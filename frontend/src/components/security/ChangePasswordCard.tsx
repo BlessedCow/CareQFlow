@@ -79,7 +79,7 @@ export function ChangePasswordCard({
               darkMode ? "text-gray-400" : "text-gray-600"
             )}
           >
-            Changing your password signs you out of all active CareQueue
+            Changing your password signs you out of all active CareQFlow
             sessions.
           </p>
         </div>

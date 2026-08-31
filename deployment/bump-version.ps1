@@ -22,8 +22,8 @@ $targets = @(
     },
     @{
         Path = "deployment\windows\installer\validate-release-package.ps1"
-        Pattern = 'CareQueue-Setup-\d+\.\d+\.\d+\.exe'
-        Replacement = "CareQueue-Setup-$Version.exe"
+        Pattern = 'CareQFlow-Setup-\d+\.\d+\.\d+\.exe'
+        Replacement = "CareQFlow-Setup-$Version.exe"
     },
     @{
         Path = "deployment\windows\installer\CareQueue.iss"
@@ -67,4 +67,4 @@ foreach ($target in $targets) {
 }
 
 Write-Host ""
-Write-Host "CareQueue release version updated to $Version."
+Write-Host "CareQFlow release version updated to $Version."

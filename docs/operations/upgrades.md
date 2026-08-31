@@ -1,8 +1,8 @@
 # Upgrades, Repair, and Uninstall
 
-This guide covers upgrading, repairing, and uninstalling packaged CareQueue installations on Windows and Linux.
+This guide covers upgrading, repairing, and uninstalling packaged CareQFlow installations on Windows and Linux.
 
-CareQueue separates installed application files from production configuration and runtime data so packaged upgrades and repairs can replace application components without intentionally replacing the active database, encryption keys, backups, or other persistent data.
+CareQFlow separates installed application files from production configuration and runtime data so packaged upgrades and repairs can replace application components without intentionally replacing the active database, encryption keys, backups, or other persistent data.
 
 For first-time installation, see:
 
@@ -37,13 +37,13 @@ Uninstall
 
 ### Install
 
-Use Install when CareQueue is not already installed.
+Use Install when CareQFlow is not already installed.
 
 A new installation creates the required application, configuration, data, service, and logging structure.
 
 ### Upgrade
 
-Use Upgrade when replacing an existing installation with a newer reviewed CareQueue release.
+Use Upgrade when replacing an existing installation with a newer reviewed CareQFlow release.
 
 Upgrade preserves production configuration and runtime data while replacing application and packaged runtime components.
 
@@ -55,7 +55,7 @@ Repair preserves production configuration and runtime data.
 
 ### Rollback
 
-Use Rollback after a failed supported upgrade when CareQueue has preserved the required pre-upgrade recovery assets.
+Use Rollback after a failed supported upgrade when CareQFlow has preserved the required pre-upgrade recovery assets.
 
 Rollback restores the previous packaged application, stages and activates the verified pre-upgrade encrypted database backup, restores the previous installed version metadata, restores the packaged service definitions, validates required services and application health, and retains recovery evidence for review.
 
@@ -63,21 +63,21 @@ Rollback is a recovery operation and should be performed only by an administrato
 
 ### Uninstall
 
-Use Uninstall to remove the installed CareQueue application and its operating-system services while intentionally preserving production configuration, data, and logs.
+Use Uninstall to remove the installed CareQFlow application and its operating-system services while intentionally preserving production configuration, data, and logs.
 
 A normal uninstall is not secure data destruction.
 
 ## Application Version and Governance Revision
 
-CareQueue tracks three separate version values:
+CareQFlow tracks three separate version values:
 
 ```text
-CareQueue application version: 0.3.0
+CareQFlow application version: 0.3.0
 Governance attestation version: 1
 Governance document revision: governance-attestation-v1
 ```
 
-The CareQueue application version identifies the installed software release.
+The CareQFlow application version identifies the installed software release.
 
 The governance attestation version identifies the required governance acceptance generation.
 
@@ -85,7 +85,7 @@ The governance document revision identifies the exact revision of the governance
 
 A governance attestation is current only when both its attestation version and document revision match the values required by the installed application.
 
-Installing a new CareQueue application version does not by itself require a new governance attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists for the installation.
+Installing a new CareQFlow application version does not by itself require a new governance attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists for the installation.
 
 Historical attestations created before document-revision tracking was introduced may not contain a document revision. These records are preserved as historical evidence but do not satisfy a current requirement that includes a document revision.
 
@@ -93,7 +93,7 @@ After an upgrade, verify that the expected governance status, required attestati
 
 ## General Upgrade Safety
 
-Before upgrading any CareQueue installation:
+Before upgrading any CareQFlow installation:
 
 - Identify the exact release artifact being installed.
 - Record the current application version and source release information when available.
@@ -111,7 +111,7 @@ An application upgrade is not a substitute for backup, restore, migration, or di
 
 ## Database Migration Safety
 
-CareQueue uses ordered, versioned database migrations for schema changes that must be applied to an existing installation.
+CareQFlow uses ordered, versioned database migrations for schema changes that must be applied to an existing installation.
 
 Applied migrations are recorded in the database table:
 
@@ -133,7 +133,7 @@ Current migration identifiers include:
 0007_governance_document_revision
 ```
 
-Each individual migration runs inside a database savepoint. If a migration step raises an error, CareQueue rolls that step back to its savepoint, does not record that migration as applied, and raises a migration error instead of continuing silently.
+Each individual migration runs inside a database savepoint. If a migration step raises an error, CareQFlow rolls that step back to its savepoint, does not record that migration as applied, and raises a migration error instead of continuing silently.
 
 Database initialization commits only after schema initialization and registered migrations complete successfully. If initialization raises an exception, the normal initialization path does not commit the failed startup attempt.
 
@@ -150,7 +150,7 @@ Before an upgrade that includes database migrations:
 
 After the upgrade:
 
-- Confirm CareQueue starts normally.
+- Confirm CareQFlow starts normally.
 - Confirm readiness and health checks pass.
 - Confirm expected application workflows operate correctly.
 - Confirm governance status is correct.
@@ -344,7 +344,7 @@ Check liveness:
 ```powershell
 Invoke-RestMethod `
     -Method Get `
-    -Uri "https://carequeue.local/api/health/live" `
+    -Uri "https://careqflow.local/api/health/live" `
     -TimeoutSec 5
 ```
 
@@ -353,7 +353,7 @@ Check readiness:
 ```powershell
 Invoke-RestMethod `
     -Method Get `
-    -Uri "https://carequeue.local/api/health/ready" `
+    -Uri "https://careqflow.local/api/health/ready" `
     -TimeoutSec 5
 ```
 
@@ -451,10 +451,10 @@ Repair should preserve production configuration and runtime data while restoring
 Launch the installer and select:
 
 ```text
-Uninstall CareQueue
+Uninstall CareQFlow
 ```
 
-The uninstall workflow removes the installed application and CareQueue Windows services while preserving persistent runtime data.
+The uninstall workflow removes the installed application and CareQFlow Windows services while preserving persistent runtime data.
 
 After uninstall, verify:
 
@@ -470,7 +470,7 @@ Test-Path "C:\ProgramData\CareQueue\Data\auth_tracker.sqlcipher.db"
 For a normal populated installation, the expected pattern is:
 
 ```text
-No CareQueue service output
+No CareQFlow service output
 False
 True
 True
@@ -553,7 +553,7 @@ Review logs before sharing them because deployment logs can reveal environment a
 
 ## Linux Upgrade Workflow
 
-CareQueue includes a packaged Linux release workflow for supported Debian-based systems.
+CareQFlow includes a packaged Linux release workflow for supported Debian-based systems.
 
 The release archive has a filename such as:
 
@@ -665,14 +665,14 @@ Check liveness:
 
 ```bash
 curl --fail --silent --show-error \
-  https://carequeue.local/api/health/live
+  https://careqflow.local/api/health/live
 ```
 
 Check readiness:
 
 ```bash
 curl --fail --silent --show-error \
-  https://carequeue.local/api/health/ready
+  https://careqflow.local/api/health/ready
 ```
 
 Also verify normal browser login and a basic authorization workflow.
@@ -688,7 +688,7 @@ sudo systemctl is-enabled carequeue-backup.timer
 sudo systemctl is-active carequeue-backup.timer
 ```
 
-Review the most recent encrypted backup files in the configured CareQueue backup directory.
+Review the most recent encrypted backup files in the configured CareQFlow backup directory.
 
 Use the supported backup verification workflow for higher-risk upgrades.
 
@@ -757,7 +757,7 @@ Repair also preserves production configuration and data.
 
 ### Run Linux Rollback
 
-Linux upgrade rollback is available after a failed upgrade that created a valid CareQueue upgrade recovery record and preserved the required database and application recovery assets.
+Linux upgrade rollback is available after a failed upgrade that created a valid CareQFlow upgrade recovery record and preserved the required database and application recovery assets.
 
 From the extracted release package associated with the failed upgrade:
 
@@ -771,7 +771,7 @@ The rollback workflow:
 - Verifies the preserved pre-upgrade application archive and SHA256 checksum.
 - Extracts and validates the previous application in an isolated staging directory.
 - Preserves the failed incoming application and records its archive metadata.
-- Stops CareQueue services before application replacement.
+- Stops CareQFlow services before application replacement.
 - Restores the previous backend, frontend, and deployment payload.
 - Recreates and validates the previous Python environment.
 - Restores the previous packaged systemd service definitions.
@@ -786,7 +786,7 @@ The rollback workflow:
 
 Database recovery activation requires the administrator to enter the confirmation phrase displayed by the recovery tool. Do not automate or bypass that confirmation.
 
-If application replacement fails during rollback, CareQueue attempts to restore the failed incoming application files and leaves services stopped for administrator review.
+If application replacement fails during rollback, CareQFlow attempts to restore the failed incoming application files and leaves services stopped for administrator review.
 
 A successful rollback retains the encrypted recovery backup, previous application archive, failed incoming application archive, checksums, recovery record, and installer logs.
 
@@ -800,12 +800,12 @@ sudo bash deployment/linux/installer/invoke-install.sh uninstall
 
 The uninstall workflow:
 
-- Stops and disables the CareQueue backup timer.
-- Stops and disables the CareQueue Caddy service.
-- Stops and disables the CareQueue API service.
-- Removes CareQueue systemd unit files.
+- Stops and disables the CareQFlow backup timer.
+- Stops and disables the CareQFlow Caddy service.
+- Stops and disables the CareQFlow API service.
+- Removes CareQFlow systemd unit files.
 - Removes `/opt/carequeue`.
-- Removes the CareQueue-managed local hosts-file entry.
+- Removes the CareQFlow-managed local hosts-file entry.
 - Preserves configuration, runtime data, and logs.
 
 The following paths are intentionally preserved:
@@ -827,10 +827,10 @@ The Linux production installer performs the installation or refresh in this gene
 3. Validate the Linux distribution.
 4. Validate required release-package contents.
 5. Install required system dependencies.
-6. Ensure the dedicated CareQueue service account exists.
+6. Ensure the dedicated CareQFlow service account exists.
 7. Create or validate production directories.
 8. Replace installed application files under `/opt/carequeue`.
-9. Recreate the CareQueue Python virtual environment.
+9. Recreate the CareQFlow Python virtual environment.
 10. Install backend dependencies.
 11. Validate the backend import.
 12. Preserve or create the production environment file.
@@ -838,9 +838,9 @@ The Linux production installer performs the installation or refresh in this gene
 14. Install or refresh systemd units.
 15. Install Caddy when required.
 16. Disable the distribution's default Caddy service where necessary.
-17. Install and validate the CareQueue Caddy configuration.
+17. Install and validate the CareQFlow Caddy configuration.
 18. Ensure the packaged local hostname configuration exists.
-19. Start or restart CareQueue services.
+19. Start or restart CareQFlow services.
 20. Ensure the Caddy internal root certificate is trusted.
 21. Validate the API service, Caddy service, and backup timer.
 22. Validate the HTTPS frontend, liveness endpoint, and readiness endpoint.
@@ -909,9 +909,9 @@ sudo systemctl is-enabled carequeue-backup.timer
 Confirm:
 
 ```text
-https://carequeue.local/
-https://carequeue.local/api/health/live
-https://carequeue.local/api/health/ready
+https://careqflow.local/
+https://careqflow.local/api/health/live
+https://careqflow.local/api/health/ready
 ```
 
 The packaged installer performs automated health checks, but operator validation should still include the browser workflow.
@@ -920,7 +920,7 @@ The packaged installer performs automated health checks, but operator validation
 
 At minimum:
 
-1. Open CareQueue through the approved HTTPS origin.
+1. Open CareQFlow through the approved HTTPS origin.
 2. Sign in with an approved test or administrative account.
 3. Confirm any required governance attestation state is correct.
 4. Confirm the authorization queue loads.
@@ -968,7 +968,7 @@ Do not edit encrypted database or backup files manually.
 
 ## Rollback
 
-CareQueue currently provides an assisted rollback workflow for supported packaged Linux upgrades.
+CareQFlow currently provides an assisted rollback workflow for supported packaged Linux upgrades.
 
 A Linux upgrade preserves recovery information before replacing the installed application. When version metadata is available, this includes:
 
@@ -981,7 +981,7 @@ A Linux upgrade preserves recovery information before replacing the installed ap
 
 If the upgrade fails, the recovery record is marked as failed and can be used by the Linux rollback mode.
 
-During rollback, CareQueue also preserves the failed incoming application before restoring the previous release. This allows the failed application state to remain available for troubleshooting after recovery.
+During rollback, CareQFlow also preserves the failed incoming application before restoring the previous release. This allows the failed application state to remain available for troubleshooting after recovery.
 
 The recovery lifecycle may include:
 
@@ -998,15 +998,15 @@ If application replacement fails and the failed incoming application is restored
 rollback_application_restored
 ```
 
-In that state, CareQueue services remain stopped pending administrator review.
+In that state, CareQFlow services remain stopped pending administrator review.
 
 A rollback is marked complete only after:
 
 - The previous application has been restored and validated.
 - The pre-upgrade database has been activated successfully.
 - The previous installed version metadata has been restored.
-- The CareQueue API service is active.
-- The CareQueue HTTPS service is active.
+- The CareQFlow API service is active.
+- The CareQFlow HTTPS service is active.
 - The scheduled backup timer is active.
 - Application health and readiness checks pass.
 
@@ -1057,13 +1057,13 @@ Do not broaden permissions simply to bypass an unrelated installation or service
 
 ### Upgrade is unavailable
 
-Confirm CareQueue is already installed.
+Confirm CareQFlow is already installed.
 
 Windows detects the installed backend, frontend, private Python runtime, and Caddy files under the installation directory.
 
 Linux upgrade should be run against an existing packaged installation using a newly extracted release package.
 
-### Install is rejected because CareQueue already exists
+### Install is rejected because CareQFlow already exists
 
 Use Upgrade or Repair rather than Install.
 
@@ -1103,11 +1103,11 @@ The current organization governance attestation has not been completed.
 
 An Admin must complete the current attestation before normal protected application functionality becomes available.
 
-A CareQueue application-version change does not automatically require re-attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
+A CareQFlow application-version change does not automatically require re-attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
 
 ### Certificate warning appears after upgrade
 
-Confirm that the packaged Caddy service is running and the CareQueue internal root certificate is trusted on the approved client system.
+Confirm that the packaged Caddy service is running and the CareQFlow internal root certificate is trusted on the approved client system.
 
 Do not permanently disable TLS certificate validation to work around a trust problem.
 
@@ -1139,8 +1139,8 @@ For production upgrades, retain an organizational change record containing at le
 ```text
 Date and time
 Operator
-Previous CareQueue version
-New CareQueue version
+Previous CareQFlow version
+New CareQFlow version
 Release artifact filename
 Release artifact SHA256
 Source commit or tag

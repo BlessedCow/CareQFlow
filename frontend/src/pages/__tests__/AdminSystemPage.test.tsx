@@ -110,7 +110,7 @@ describe("AdminSystemPage", () => {
     mockedFetchRestorePoints.mockResolvedValue([existingBackup]);
 
     mockedFetchSystemInfo.mockResolvedValue({
-      app: "AuthStatus API",
+      app: "CareQFlow API",
       version: "0.2.0",
     });
 
@@ -802,13 +802,13 @@ describe("AdminSystemPage", () => {
 
   it("shows an error when system information cannot load", async () => {
     mockedFetchApplicationHealth.mockRejectedValue(
-      new Error("The CareQueue API is unavailable.")
+      new Error("The CareQFlow API is unavailable.")
     );
 
     render(<AdminSystemPage darkMode={false} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The CareQueue API is unavailable."
+      "The CareQFlow API is unavailable."
     );
   });
 

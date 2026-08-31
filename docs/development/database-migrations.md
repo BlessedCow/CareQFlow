@@ -1,8 +1,8 @@
 # Database Migrations
 
-This guide explains how CareQueue database schema migrations are structured, registered, tested, and maintained.
+This guide explains how CareQFlow database schema migrations are structured, registered, tested, and maintained.
 
-Use this guide when changing an existing database schema in a way that must be applied safely to installations created by an earlier CareQueue release.
+Use this guide when changing an existing database schema in a way that must be applied safely to installations created by an earlier CareQFlow release.
 
 For operator-facing upgrade procedures, see:
 
@@ -13,7 +13,7 @@ For operator-facing upgrade procedures, see:
 
 ## Migration Architecture
 
-CareQueue initializes its normal schema and then runs registered migrations from:
+CareQFlow initializes its normal schema and then runs registered migrations from:
 
 ```text
 backend/authstatus_api/persistence/migration_runner.py

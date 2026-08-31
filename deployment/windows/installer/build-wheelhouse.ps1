@@ -76,7 +76,7 @@ $resolvedOutputDirectory = (
         -LiteralPath $OutputDirectory
 ).Path
 
-Write-Host "Building the CareQueue backend wheelhouse..."
+Write-Host "Building the CareQFlow backend wheelhouse..."
 Write-Host "Python:      $($resolvedPythonCommand.Source)"
 Write-Host "Requirements: $requirementsFile"
 Write-Host "Output:       $resolvedOutputDirectory"
@@ -158,6 +158,6 @@ Set-Content `
     -Encoding ascii
 
 Write-Host ""
-Write-Host "CareQueue backend wheelhouse created successfully."
+Write-Host "CareQFlow backend wheelhouse created successfully."
 Write-Host "Wheel count: $($wheelFiles.Count)"
 Write-Host "Manifest:    $manifestPath"

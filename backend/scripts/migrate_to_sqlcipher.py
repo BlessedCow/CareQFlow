@@ -28,7 +28,7 @@ from authstatus_api.settings import get_settings  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Create a SQLCipher encrypted copy of the CareQueue SQLite database."
+        description="Create a SQLCipher encrypted copy of the CareQFlow SQLite database."
     )
     parser.add_argument(
         "--source-path",

@@ -126,7 +126,7 @@ export async function fetchApplicationHealth(): Promise<ApplicationHealth> {
   const response = await authenticatedFetch(`${API_BASE_URL}/api/health/live`);
 
   if (!response.ok) {
-    throw new Error("The CareQueue API is unavailable.");
+    throw new Error("The CareQFlow API is unavailable.");
   }
 
   return (await response.json()) as ApplicationHealth;

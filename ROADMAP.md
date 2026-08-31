@@ -1,6 +1,6 @@
 # Roadmap
 
-CareQueue is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, controlled upgrades, and failed-upgrade rollback workflows are in place.
+CareQFlow is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, controlled upgrades, and failed-upgrade rollback workflows are in place.
 
 The current focus is release hardening, deployment validation, upgrade safety, maintainability, broader testing, and operational maturity.
 
@@ -8,7 +8,7 @@ This roadmap summarizes current direction rather than serving as a complete chan
 
 ## Current State
 
-CareQueue currently includes:
+CareQFlow currently includes:
 
 - Authorization record management
 - Authorization timeline events
@@ -52,9 +52,9 @@ CareQueue currently includes:
 - Versioned release tooling for Windows and Linux artifacts
 - Failed-upgrade recovery records and verified pre-upgrade recovery assets
 - Assisted Windows and Linux rollback workflows with post-rollback validation
-- Version-based licensing with historical MIT releases and Business Source License 1.1 beginning with CareQueue 0.5.0
+- Version-based licensing with historical MIT releases and Business Source License 1.1 beginning with CareQFlow 0.5.0
 
-Packaged production deployments keep the CareQueue API bound to the loopback interface and use Caddy to serve the frontend and proxy `/api` requests through private HTTPS.
+Packaged production deployments keep the CareQFlow API bound to the loopback interface and use Caddy to serve the frontend and proxy `/api` requests through private HTTPS.
 
 ## Recently Completed
 
@@ -80,7 +80,7 @@ Remembered devices remain separate from authenticated session lifetime and do no
 
 ### Governance attestation
 
-CareQueue now includes a versioned organization governance workflow.
+CareQFlow now includes a versioned organization governance workflow.
 
 The current implementation includes:
 
@@ -91,14 +91,14 @@ The current implementation includes:
 - Organization and deployment-mode recording
 - Accepting Admin identity
 - Acceptance timestamp
-- CareQueue application version recording
+- CareQFlow application version recording
 - Governance attestation version and document revision recording
 - Append-only attestation history
 - Re-attestation support when the required governance attestation version or document revision changes
 - Audit logging for governance acceptance
 - Admin System visibility for current and historical attestations
 
-The governance attestation version and governance document revision are independent from the CareQueue application version. A normal application-version change does not by itself require re-attestation.
+The governance attestation version and governance document revision are independent from the CareQFlow application version. A normal application-version change does not by itself require re-attestation.
 
 The workflow supports organizational accountability but does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
@@ -128,11 +128,11 @@ The installer packages application files, backend runtime files, frontend build 
 
 ### Packaged Linux deployment
 
-CareQueue now includes a versioned Linux release package for supported Debian-based systems.
+CareQFlow now includes a versioned Linux release package for supported Debian-based systems.
 
 The Linux deployment workflow includes:
 
-- Versioned `CareQueue-Linux-Setup-<version>.tar.gz` release archives
+- Versioned `CareQFlow-Linux-Setup-<version>.tar.gz` release archives
 - Install, Upgrade, Repair, Rollback, and Uninstall modes
 - Ubuntu and Debian validation
 - Dedicated `carequeue` service account
@@ -141,10 +141,10 @@ The Linux deployment workflow includes:
 - Prebuilt frontend installation
 - Production configuration and encryption-key creation
 - Existing configuration preservation during upgrade and repair
-- CareQueue API systemd service
-- CareQueue Caddy systemd service
+- CareQFlow API systemd service
+- CareQFlow Caddy systemd service
 - Encrypted backup service and timer
-- Private `carequeue.local` HTTPS deployment
+- Private `careqflow.local` HTTPS deployment
 - Caddy internal certificate trust setup
 - Post-install frontend and API health validation
 - First-time Admin setup
@@ -157,12 +157,12 @@ Linux deployment remains more administrator-oriented than the Windows installer 
 
 ### Licensing transition
 
-CareQueue `0.5.0` begins a new source-available licensing phase.
+CareQFlow `0.5.0` begins a new source-available licensing phase.
 
 The repository now distinguishes:
 
 - CareQueue `0.4.x` and earlier releases under the MIT License
-- CareQueue `0.5.0` and later versions expressly released under Business Source License 1.1
+- CareQFlow `0.5.0` and later versions expressly released under Business Source License 1.1
 - Non-production use under the applicable BSL terms
 - Separate commercial licensing for production use while a release remains under the BSL
 - Per-version Change Dates
@@ -282,7 +282,7 @@ Remaining work includes:
 
 ### 3. Production smoke-test tooling
 
-A small production validation tool should check an installed CareQueue deployment without exposing secrets.
+A small production validation tool should check an installed CareQFlow deployment without exposing secrets.
 
 It should verify:
 
@@ -331,7 +331,7 @@ Remaining work focuses on failure injection and operational resilience:
 
 ### 5. Validate cross-release migrations and recovery
 
-CareQueue now uses an ordered versioned database migration framework with explicit migration identifiers, a persistent migration ledger, per-migration savepoint rollback, and automated coverage for legacy-schema upgrades, current schemas, idempotency, and migration failure behavior.
+CareQFlow now uses an ordered versioned database migration framework with explicit migration identifiers, a persistent migration ledger, per-migration savepoint rollback, and automated coverage for legacy-schema upgrades, current schemas, idempotency, and migration failure behavior.
 
 Remaining work focuses on release-to-release compatibility rather than creating the migration framework itself.
 
@@ -484,7 +484,7 @@ The packaged Linux workflow is now implemented, but additional Linux maturity wo
 
 ## Release Philosophy
 
-CareQueue releases should be based on validated behavior rather than version number alone.
+CareQFlow releases should be based on validated behavior rather than version number alone.
 
 Before a release is considered stable:
 
@@ -500,4 +500,4 @@ Before a release is considered stable:
 - Version-specific licensing statements should match the authoritative repository license.
 - Release notes should distinguish implemented controls from remaining deployment and organizational responsibilities.
 
-A new CareQueue application version does not automatically imply a new governance attestation version or document revision. Governance requirements should be versioned independently when the attestation content or required acknowledgments change. A change to either the required attestation version or required document revision causes the existing acceptance to no longer be current.
+A new CareQFlow application version does not automatically imply a new governance attestation version or document revision. Governance requirements should be versioned independently when the attestation content or required acknowledgments change. A change to either the required attestation version or required document revision causes the existing acceptance to no longer be current.

@@ -432,7 +432,7 @@ Set-Content `
     -Encoding utf8
 
 Write-Status ""
-Write-Status "CareQueue vendor assets staged successfully."
+Write-Status "CareQFlow vendor assets staged successfully."
 Write-Status "Output:   $resolvedOutputDirectory"
 Write-Status "Caddy:    $caddyVersionOutput"
 Write-Status "WinSW:    $winswFileVersion"

@@ -43,7 +43,7 @@ def test_generate_totp_secret_creates_valid_base32_secret():
     assert pyotp.TOTP(secret).now().isdigit()
 
 
-def test_build_totp_provisioning_uri_contains_carequeue_issuer():
+def test_build_totp_provisioning_uri_contains_careqflow_issuer():
     secret = generate_totp_secret()
 
     uri = build_totp_provisioning_uri(
@@ -52,7 +52,7 @@ def test_build_totp_provisioning_uri_contains_carequeue_issuer():
     )
 
     assert uri.startswith("otpauth://totp/")
-    assert "CareQueue" in uri
+    assert "CareQFlow" in uri
     assert "user%40example.com" in uri
     assert f"issuer={MFA_ISSUER_NAME}" in uri
 

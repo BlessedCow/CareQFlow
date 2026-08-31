@@ -36,7 +36,7 @@ CAREQUEUE_REQUIRED_TABLES = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Verify a SQLCipher encrypted CareQueue database copy."
+        description="Verify a SQLCipher encrypted CareQFlow database copy."
     )
     parser.add_argument(
         "--database-path",

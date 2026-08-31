@@ -82,7 +82,7 @@ export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
         <div className="mb-8 flex items-center justify-center">
           <div className="flex items-center">
             <Activity className="mr-2 h-7 w-7 text-blue-500" />
-            <span className="text-2xl font-bold tracking-wide">CareQueue</span>
+            <span className="text-2xl font-bold tracking-wide">CareQFlow</span>
           </div>
         </div>
 
@@ -97,7 +97,7 @@ export function LoginPage({ darkMode, onLogin }: LoginPageProps) {
         >
           {mfaChallengeToken
             ? "Enter the 6-digit code from your authenticator app."
-            : "Use your CareQueue account to continue."}
+            : "Use your CareQFlow account to continue."}
         </p>
 
         <form className="space-y-4" onSubmit={handleSubmit}>

@@ -347,7 +347,7 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
               darkMode ? "text-gray-400" : "text-gray-600"
             )}
           >
-            Create local CareQueue users. A secure temporary password will be
+            Create local CareQFlow users. A secure temporary password will be
             generated automatically.
           </p>
         </div>

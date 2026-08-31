@@ -1,12 +1,12 @@
 # Threat Model and Risk Register
 
-This document describes the current CareQueue security threat model and records known residual risks that should be considered during development, deployment, review, and release planning.
+This document describes the current CareQFlow security threat model and records known residual risks that should be considered during development, deployment, review, and release planning.
 
 It is a technical risk-management document. It does not establish HIPAA compliance, replace an organizational HIPAA Security Rule risk analysis, provide legal advice, or replace deployment-specific security assessment.
 
 ## Scope
 
-This threat model covers the CareQueue application and the packaged private deployment model represented in this repository, including:
+This threat model covers the CareQFlow application and the packaged private deployment model represented in this repository, including:
 
 - React/Vite browser frontend
 - FastAPI backend
@@ -23,13 +23,13 @@ This threat model covers the CareQueue application and the packaged private depl
 - Windows services and scheduled backups
 - Linux systemd services and backup timers
 - Installer, upgrade, repair, and uninstall workflows
-- Release artifacts and dependency acquisition used to build or deploy CareQueue
+- Release artifacts and dependency acquisition used to build or deploy CareQFlow
 
 The model focuses on the repository-supported private deployment architecture. A materially different deployment, such as public internet exposure, multi-host application/database separation, shared hosting, or third-party managed hosting, requires a separate threat assessment.
 
 ## Security Objectives
 
-CareQueue security controls are intended to support the following objectives:
+CareQFlow security controls are intended to support the following objectives:
 
 1. Prevent unauthorized access to authorization and workflow data.
 2. Prevent users from performing actions outside their assigned role.
@@ -46,7 +46,7 @@ CareQueue security controls are intended to support the following objectives:
 
 ### Sensitive application data
 
-CareQueue may store information associated with utilization review and prior authorization workflows. Depending on deployment and use, this may include protected health information, personally identifiable information, payer information, authorization status, clinical or administrative notes, documents, and workflow history.
+CareQFlow may store information associated with utilization review and prior authorization workflows. Depending on deployment and use, this may include protected health information, personally identifiable information, payer information, authorization status, clinical or administrative notes, documents, and workflow history.
 
 ### Authentication material
 
@@ -77,7 +77,7 @@ Loss, disclosure, replacement, or corruption of these values can affect confiden
 
 Important persistent assets include:
 
-- Primary CareQueue database
+- Primary CareQFlow database
 - Encrypted backup archives
 - Restore staging data
 - Recovery state
@@ -101,7 +101,7 @@ Integrity-sensitive assets include:
 
 ### Operational availability
 
-CareQueue availability depends on:
+CareQFlow availability depends on:
 
 - Database readability and writability
 - Encryption keys
@@ -116,7 +116,7 @@ CareQueue availability depends on:
 
 ### Unauthenticated local or network user
 
-A person who can reach the CareQueue HTTPS origin or backend endpoint but does not possess a valid application session.
+A person who can reach the CareQFlow HTTPS origin or backend endpoint but does not possess a valid application session.
 
 Potential goals include credential guessing, endpoint discovery, session abuse, unauthorized initial setup, malformed-input attacks, and denial of service.
 
@@ -169,12 +169,12 @@ The browser communicates with the packaged application through private HTTPS. Ca
 Security assumptions:
 
 - The client trusts the intended Caddy certificate authority.
-- DNS or local hostname resolution points to the intended CareQueue deployment.
+- DNS or local hostname resolution points to the intended CareQFlow deployment.
 - The deployment is not unintentionally exposed beyond its intended private network boundary.
 
 ### Caddy to FastAPI boundary
 
-Packaged production deployments bind the CareQueue API to the loopback interface and use Caddy as the externally reached application endpoint.
+Packaged production deployments bind the CareQFlow API to the loopback interface and use Caddy as the externally reached application endpoint.
 
 Security assumptions:
 
@@ -268,7 +268,7 @@ An attacker repeatedly attempts usernames and passwords or uses response differe
 
 Existing controls include Argon2id password hashing, generic authentication failures, failed-login tracking, and temporary account lockout.
 
-Residual concerns include password reuse outside CareQueue, host compromise, phishing, and operational policies that permit weak account-management practices.
+Residual concerns include password reuse outside CareQFlow, host compromise, phishing, and operational policies that permit weak account-management practices.
 
 ### MFA bypass or remembered-device theft
 
@@ -288,7 +288,7 @@ Residual concerns include malware or host compromise while a session is active.
 
 ### CSRF against authenticated state-changing operations
 
-A malicious site attempts to cause an authenticated CareQueue browser to submit state-changing requests.
+A malicious site attempts to cause an authenticated CareQFlow browser to submit state-changing requests.
 
 Existing controls include same-origin private deployment, CSRF validation, trusted production origins, and separate CSRF state.
 
@@ -408,7 +408,7 @@ Residual risk remains because full cross-release upgrade and rollback validation
 
 ### Denial of service or resource exhaustion
 
-An attacker, malformed input, disk-full condition, database corruption, repeated PDF processing, or service failure makes CareQueue unavailable.
+An attacker, malformed input, disk-full condition, database corruption, repeated PDF processing, or service failure makes CareQFlow unavailable.
 
 Existing controls include PDF timeout handling, health/readiness endpoints, service management, and backup/recovery tooling.
 
@@ -438,7 +438,7 @@ Priority is based on the combination of likelihood, impact, and the degree to wh
 | R-005 | Compromised dependency or CI action introduces malicious code | Medium | High | Bounded Python requirements; npm lockfile; `pip-audit`; `npm audit`; Bandit; CI security workflow | Python production dependencies are not fully resolved; GitHub Actions use movable version tags; SBOM absent | Add dependency update automation, fully resolved release dependency set, SBOM, and immutable Action SHA pinning | High |
 | R-006 | New endpoint omits required authentication, governance, CSRF, or role enforcement | Medium | High | Central backend dependencies; access-control tests; role-based routing patterns | Manual review is still required when new endpoints are introduced | Expand route-level security tests and browser E2E coverage for protected workflows | High |
 | R-007 | Privileged host attacker alters application data and corresponding audit evidence | Low to Medium | High | Tamper-evident audit chain and verification; restricted deployment directories | Audit evidence is stored within the same administrative trust domain and is not externally immutable | Document limitation; evaluate off-host or externally protected audit export where required by deployment risk | High |
-| R-008 | Broken, corrupt, or malicious backup is activated and causes data loss or compromise | Medium | High | Backup verification; encrypted backups; path validation; restore staging; controlled recovery activation; verified pre-upgrade backups; failed-upgrade rollback recovery; fault-injection coverage for corrupt backups, wrong keys, permission failures, disk-write failures, activation failures, rollback failures, and missing safety backups; documented backup and recovery procedures | Recovery behavior across different CareQueue release versions has not yet been fully validated with supported release combinations | Add cross-version restore and recovery tests using older release databases and backups against newer supported releases, including supported failed-upgrade rollback paths | Medium to High |
+| R-008 | Broken, corrupt, or malicious backup is activated and causes data loss or compromise | Medium | High | Backup verification; encrypted backups; path validation; restore staging; controlled recovery activation; verified pre-upgrade backups; failed-upgrade rollback recovery; fault-injection coverage for corrupt backups, wrong keys, permission failures, disk-write failures, activation failures, rollback failures, and missing safety backups; documented backup and recovery procedures | Recovery behavior across different CareQFlow release versions has not yet been fully validated with supported release combinations | Add cross-version restore and recovery tests using older release databases and backups against newer supported releases, including supported failed-upgrade rollback paths | Medium to High |
 | R-009 | Disk-full, permission, missing-secret, corrupt-database, or service failure produces unsafe behavior | Medium | High | Production validation; health/readiness endpoints; exception handling; service management | Failure behavior has not been systematically fault-injection tested across all listed conditions | Implement fail-closed fault-injection test matrix | High |
 | R-010 | Browser session or remembered-device state is stolen from a compromised workstation | Medium | High | Secure cookies in production; server-side sessions; inactivity timeout; rotation; single-session enforcement; remembered-device expiry/revocation | Application controls cannot fully defend an already compromised browser or OS account | Document workstation requirements; maintain short session lifetime and revocation controls; consider additional device/session review features if required | Medium to High |
 | R-011 | First Admin account is claimed by an unauthorized local user during initial provisioning | Low | High | Initial Admin setup is restricted to loopback access | Physical/local host compromise during unattended provisioning remains possible | Require controlled installation procedure and immediate first-admin completion on trusted host | Medium |
@@ -448,7 +448,7 @@ Priority is based on the combination of likelihood, impact, and the degree to wh
 | R-015 | Production logging or diagnostics disclose sensitive data | Medium | High | Central log sanitization; production debug disabled; production docs/OpenAPI disabled; sensitive-data rules | New code or operator diagnostics can bypass intended patterns | Maintain review tests for sanitization and add regression coverage when new logging fields are introduced | Medium to High |
 | R-016 | Unsafe filesystem path or symlink redirects sensitive operations | Low to Medium | High | Production data-root validation; non-overlapping backup/restore paths; sensitive path checks; symlink rejection in supported workflows | Future file features may fail to reuse the same protections | Centralize/reuse storage validation and add path-abuse tests with each filesystem feature | Medium |
 | R-017 | Misconfigured reverse proxy, origin, DNS, or certificate trust exposes or redirects application traffic | Low to Medium | High | Packaged private HTTPS; trusted-host middleware; HTTPS-only production origins; loopback API binding | Custom deployment changes can invalidate packaged assumptions | Require deployment architecture review for any network/topology change and validate certificate/host behavior during release tests | Medium to High |
-| R-018 | Service or host outage prevents timely authorization workflow access | Medium | Medium to High | Windows services; Linux systemd services; health/readiness endpoints; backups | No high-availability design; CareQueue is local-first and can have a single-host failure domain | Document recovery objectives appropriate to deployment; test restart/reboot and recovery procedures | Medium |
+| R-018 | Service or host outage prevents timely authorization workflow access | Medium | Medium to High | Windows services; Linux systemd services; health/readiness endpoints; backups | No high-availability design; CareQFlow is local-first and can have a single-host failure domain | Document recovery objectives appropriate to deployment; test restart/reboot and recovery procedures | Medium |
 | R-019 | Backup and primary data are lost together because they share the same host/failure domain | Medium | High | Encrypted scheduled backups and retention controls | Local backups do not inherently protect against host loss, ransomware, fire, theft, or catastrophic storage failure | Define off-host backup/custody requirements where organizational risk analysis requires them | High |
 | R-020 | Unsupported manual changes to database schema or runtime configuration bypass expected controls | Medium | Medium to High | Packaged installer/configuration workflows; production settings validation | Administrators retain host-level ability to alter files directly | Document supported maintenance procedures and verify configuration during health/release checks | Medium |
 | R-021 | Accessibility or UI-state defects cause users to misunderstand disabled/read-only/security-sensitive actions | Medium | Medium | Role-aware UI and frontend component tests | Formal accessibility and browser-level workflow coverage remain incomplete | Complete keyboard, screen-reader, focus, disabled/read-only, error-state, and responsive testing | Medium |
@@ -462,7 +462,7 @@ The current architecture has strong application-level controls for a local-first
 
 ### Host trust remains fundamental
 
-A sufficiently privileged operating-system administrator or malware running with equivalent access can potentially read active secrets, replace application binaries, alter configuration, manipulate data, or interfere with logs. CareQueue therefore depends on host hardening, endpoint security, account management, physical security, patching, and administrative controls.
+A sufficiently privileged operating-system administrator or malware running with equivalent access can potentially read active secrets, replace application binaries, alter configuration, manipulate data, or interfere with logs. CareQFlow therefore depends on host hardening, endpoint security, account management, physical security, patching, and administrative controls.
 
 ### Encryption depends on key custody
 
@@ -478,7 +478,7 @@ The audit chain can reveal tampering under the assumptions of the current applic
 
 ### Organizational safeguards remain outside the application
 
-CareQueue can support access control, authentication, auditing, governance acknowledgment, encryption, backup, and recovery. It does not implement an organization's complete risk-management program, workforce policies, incident-response program, BAA process, contingency plan, physical safeguards, device security, or legal/compliance review.
+CareQFlow can support access control, authentication, auditing, governance acknowledgment, encryption, backup, and recovery. It does not implement an organization's complete risk-management program, workforce policies, incident-response program, BAA process, contingency plan, physical safeguards, device security, or legal/compliance review.
 
 ## Security Review Triggers
 

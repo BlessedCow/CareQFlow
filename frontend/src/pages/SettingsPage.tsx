@@ -661,7 +661,7 @@ export function SettingsPage({
                 darkMode ? "text-gray-400" : "text-gray-600"
               )}
             >
-              Manage MFA, change your CareQueue password, and sign out of active
+              Manage MFA, change your CareQFlow password, and sign out of active
               sessions.
             </p>
           </div>

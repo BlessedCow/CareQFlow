@@ -407,7 +407,7 @@ export function PdfIntakeReviewPanel({
             darkMode ? "text-gray-400" : "text-gray-600"
           )}
         >
-          Select which identifier pair should be applied to CareQueue.
+          Select which identifier pair should be applied to CareQFlow.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2">

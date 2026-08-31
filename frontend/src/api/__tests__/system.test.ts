@@ -55,7 +55,7 @@ describe("system API", () => {
     mockedAuthenticatedFetch.mockResolvedValue(
       new Response(
         JSON.stringify({
-          app: "AuthStatus API",
+          app: "CareQFlow API",
           version: "0.2.0",
         }),
         {
@@ -68,7 +68,7 @@ describe("system API", () => {
     );
 
     await expect(fetchSystemInfo()).resolves.toEqual({
-      app: "AuthStatus API",
+      app: "CareQFlow API",
       version: "0.2.0",
     });
 

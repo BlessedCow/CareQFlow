@@ -1,6 +1,6 @@
 # Architecture
 
-CareQueue is a local-first utilization review and authorization tracking application. It uses a React and TypeScript frontend, a FastAPI backend, and SQLite or SQLCipher-backed persistence.
+CareQFlow is a local-first utilization review and authorization tracking application. It uses a React and TypeScript frontend, a FastAPI backend, and SQLite or SQLCipher-backed persistence.
 
 The application is organized around several separate concerns:
 
@@ -14,7 +14,7 @@ The application is organized around several separate concerns:
 - Tamper-evident audit records and operational logging
 - Packaged private Windows and Linux deployment through Caddy and operating-system services
 
-CareQueue is intended for private or controlled deployment. Its technical controls are only one part of operating a system that may handle sensitive healthcare information.
+CareQFlow is intended for private or controlled deployment. Its technical controls are only one part of operating a system that may handle sensitive healthcare information.
 
 ## System Overview
 
@@ -62,7 +62,7 @@ The frontend uses a configured API base URL during development. Production build
 The main areas of the repository are:
 
 ```text
-CareQueue/
+CareQFlow/
 ├── backend/
 │   ├── authstatus_api/     # API, domains, persistence, security, and operations
 │   ├── scripts/            # Administrative and recovery utilities
@@ -331,7 +331,7 @@ Domain packages define their own tables where practical. This keeps authorizatio
 
 ## Database and Encryption Boundaries
 
-CareQueue uses more than one encryption layer.
+CareQFlow uses more than one encryption layer.
 
 ### Database encryption
 
@@ -457,7 +457,7 @@ A remembered device does not bypass password verification and does not create a 
 
 ### Single active session
 
-CareQueue allows one active authenticated session per account.
+CareQFlow allows one active authenticated session per account.
 
 When a new authenticated session is created, previous active sessions for that user are revoked.
 
@@ -500,7 +500,7 @@ The backend communicates the current expiration time to the frontend. The fronte
 
 - Display the required expiration warning
 - Offer explicit session renewal
-- Keep expiration state aligned across open CareQueue tabs
+- Keep expiration state aligned across open CareQFlow tabs
 - Clear protected state after logout or expiration
 
 Session and CSRF tokens are rotated during explicit renewal.
@@ -511,15 +511,15 @@ The backend remains authoritative for session validity.
 
 ### Initial Admin setup
 
-CareQueue does not provide public registration.
+CareQFlow does not provide public registration.
 
-Packaged Windows and Linux installations include local first-time Admin setup workflows. These workflows submit the initial Admin credentials only to the loopback CareQueue API.
+Packaged Windows and Linux installations include local first-time Admin setup workflows. These workflows submit the initial Admin credentials only to the loopback CareQFlow API.
 
 The bootstrap endpoint is available only while no users exist. After the first account is created, user management proceeds through authenticated Admin workflows or approved maintenance tooling.
 
 ### Governance prerequisite
 
-After authentication and any required password change, CareQueue evaluates the current organization governance attestation.
+After authentication and any required password change, CareQFlow evaluates the current organization governance attestation.
 
 The application flow is:
 
@@ -559,22 +559,22 @@ Organization name
 Deployment mode
 Accepting user
 Acceptance time
-CareQueue application version
+CareQFlow application version
 ```
 
 Attestation history is append-only and is also protected against direct update or deletion by database triggers. A future governance version or required document revision can require re-attestation without deleting prior records.
 
-The governance attestation version, governance document revision, and CareQueue application version are separate values.
+The governance attestation version, governance document revision, and CareQFlow application version are separate values.
 
-The attestation version identifies the required governance acceptance generation. The document revision identifies the exact governance text revision that was accepted. The CareQueue application version records which application release was running when the attestation was accepted.
+The attestation version identifies the required governance acceptance generation. The document revision identifies the exact governance text revision that was accepted. The CareQFlow application version records which application release was running when the attestation was accepted.
 
-A normal CareQueue application-version change does not by itself require re-attestation. A change to the required governance attestation version or required governance document revision does require a new acceptance.
+A normal CareQFlow application-version change does not by itself require re-attestation. A change to the required governance attestation version or required governance document revision does require a new acceptance.
 
 Older governance records created before document-revision tracking was introduced may have no stored document revision. Those records are preserved as historical records rather than having a revision reconstructed or invented.
 
 ### Roles
 
-CareQueue currently uses three roles:
+CareQFlow currently uses three roles:
 
 - `Admin`
 - `UR`
@@ -592,7 +592,7 @@ backend/authstatus_api/audit/
 
 Audit records capture security, governance, authorization, document, backup, recovery, and administrative activity where supported by the workflow.
 
-Current audit events are linked through a cryptographic hash chain. CareQueue stores the current chain head separately and provides an Admin integrity-verification workflow. Older pre-chain events may remain as legacy records and are reported separately during verification.
+Current audit events are linked through a cryptographic hash chain. CareQFlow stores the current chain head separately and provides an Admin integrity-verification workflow. Older pre-chain events may remain as legacy records and are reported separately during verification.
 
 Operational logging is under:
 
@@ -718,7 +718,7 @@ Activate through controlled recovery workflow
 
 This separation reduces the chance of replacing the active database with an invalid or incomplete restore.
 
-CareQueue also supports:
+CareQFlow also supports:
 
 - Backup verification
 - Retention periods
@@ -825,7 +825,7 @@ WinSW is used as the Windows service wrapper.
 
 ### Installer operation modes
 
-When CareQueue is not installed, the packaged installer presents the normal install flow. When an existing installation is detected, it offers Upgrade, Repair, and Uninstall.
+When CareQFlow is not installed, the packaged installer presents the normal install flow. When an existing installation is detected, it offers Upgrade, Repair, and Uninstall.
 
 Rollback is offered only when the installer finds an eligible failed-upgrade recovery record with the required preserved recovery assets.
 
@@ -841,7 +841,7 @@ Install, Upgrade, and Repair validate service state and local application health
 
 Upgrade also preserves a verified pre-upgrade encrypted database backup, archives and checksums the previously installed application, and writes a durable recovery record before application replacement.
 
-When a supported Upgrade fails after the recovery state has been created, Rollback can restore the previous application and pre-upgrade database together, restart the CareQueue services, validate application health, restore the previous installed-version metadata, and record durable rollback completion.
+When a supported Upgrade fails after the recovery state has been created, Rollback can restore the previous application and pre-upgrade database together, restart the CareQFlow services, validate application health, restore the previous installed-version metadata, and record durable rollback completion.
 
 Uninstall removes Windows services and installed application files while preserving runtime data under ProgramData.
 
@@ -850,7 +850,7 @@ Uninstall removes Windows services and installed application files while preserv
 A private Windows installation can use a local hostname such as:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 The hostname resolves locally, and Caddy issues a certificate through its local certificate authority.
@@ -885,7 +885,7 @@ systemd/carequeue-caddy.service
 The Linux release is distributed as a versioned tar archive:
 
 ```text
-CareQueue-Linux-Setup-<version>.tar.gz
+CareQFlow-Linux-Setup-<version>.tar.gz
 ```
 
 The installer supports:
@@ -898,7 +898,7 @@ The installer supports:
 
 The production layout separates application files from configuration, data, logs, and recovery assets.
 
-The installer creates a dedicated `carequeue` service identity, installs the backend runtime and prebuilt frontend, preserves existing production configuration during Upgrade or Repair, installs systemd units, configures Caddy, enables encrypted backup scheduling, establishes private HTTPS trust, starts the services, and performs post-install health checks.
+The CareQFlow installer creates a dedicated `carequeue` service identity, installs the backend runtime and prebuilt frontend, preserves existing production configuration during Upgrade or Repair, installs systemd units, configures Caddy, enables encrypted backup scheduling, establishes private HTTPS trust, starts the services, and performs post-install health checks.
 
 Upgrade preserves a verified pre-upgrade encrypted database backup, a checksummed archive of the previous application, version metadata, and a durable recovery record before application replacement.
 
@@ -915,7 +915,7 @@ and place Caddy in front of the application.
 The default packaged private origin is:
 
 ```text
-https://carequeue.local
+https://careqflow.local
 ```
 
 The Linux deployment is intended for administrators comfortable with Linux, systemd, package installation, certificate trust, and operating-system permissions.
@@ -951,11 +951,11 @@ Security-focused development checks also include Bandit, dependency auditing, np
 
 ## Design Principles
 
-CareQueue follows several practical design rules.
+CareQFlow follows several practical design rules.
 
 ### Local-first operation
 
-The application is designed to operate without sending authorization data to a hosted CareQueue service.
+The application is designed to operate without sending authorization data to a hosted CareQFlow service.
 
 ### Explicit security boundaries
 
