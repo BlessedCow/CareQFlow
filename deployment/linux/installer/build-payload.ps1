@@ -34,6 +34,9 @@ $frontendDist = Join-Path `
     "frontend\dist"
 
 $requiredPaths = @(
+    "LICENSE"
+    "LICENSES\BUSL-1.1.txt"
+    "LICENSES\MIT.txt"
     "backend\authstatus_api"
     "backend\scripts"
     "backend\requirements.txt"
@@ -100,6 +103,14 @@ $frontendDestination = Join-Path `
     $stagingDirectory `
     "frontend\dist"
 
+$licenseNoticeDestination = Join-Path `
+    $stagingDirectory `
+    "LICENSE"
+
+$licenseTextsDestination = Join-Path `
+    $stagingDirectory `
+    "LICENSES"
+
 <#
 $deploymentDestination = Join-Path `
     $stagingDirectory `
@@ -116,31 +127,31 @@ Out-Null
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $repositoryRoot "backend\authstatus_api"
-    ) `
+    Join-Path $repositoryRoot "backend\authstatus_api"
+) `
     -Destination $backendDestination `
     -Recurse `
     -Force
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $repositoryRoot "backend\scripts"
-    ) `
+    Join-Path $repositoryRoot "backend\scripts"
+) `
     -Destination $backendDestination `
     -Recurse `
     -Force
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $repositoryRoot "backend\requirements.txt"
-    ) `
+    Join-Path $repositoryRoot "backend\requirements.txt"
+) `
     -Destination $backendDestination `
     -Force
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $repositoryRoot "backend\pyproject.toml"
-    ) `
+    Join-Path $repositoryRoot "backend\pyproject.toml"
+) `
     -Destination $backendDestination `
     -Force
 
@@ -154,8 +165,8 @@ Out-Null
 
 Copy-Item `
     -Path (
-        Join-Path $frontendDist "*"
-    ) `
+    Join-Path $frontendDist "*"
+) `
     -Destination $frontendDestination `
     -Recurse `
     -Force
@@ -164,8 +175,25 @@ Write-Host "Copying Linux deployment files..."
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $repositoryRoot "deployment"
-    ) `
+    Join-Path $repositoryRoot "deployment"
+) `
+    -Destination $stagingDirectory `
+    -Recurse `
+    -Force
+
+Write-Host "Copying CareQueue licensing files..."
+
+Copy-Item `
+    -LiteralPath (
+    Join-Path $repositoryRoot "LICENSE"
+) `
+    -Destination $licenseNoticeDestination `
+    -Force
+    
+Copy-Item `
+    -LiteralPath (
+    Join-Path $repositoryRoot "LICENSES"
+) `
     -Destination $stagingDirectory `
     -Recurse `
     -Force
@@ -180,6 +208,8 @@ $releaseMetadata = @(
     "CAREQUEUE_RELEASE_METADATA_SCHEMA=1"
     "CAREQUEUE_APP_VERSION=$Version"
     "CAREQUEUE_PACKAGE_PLATFORM=linux"
+    "CAREQUEUE_LICENSE_NOTICE=LICENSE"
+    "CAREQUEUE_LICENSE_TEXTS=LICENSES"
 ) -join "`n"
 
 [System.IO.File]::WriteAllText(
@@ -192,8 +222,8 @@ Write-Host "Normalizing Linux text files to LF..."
 
 $textFiles = Get-ChildItem `
     -LiteralPath (
-        Join-Path $stagingDirectory "deployment\linux"
-    ) `
+    Join-Path $stagingDirectory "deployment\linux"
+) `
     -File `
     -Recurse |
 Where-Object {

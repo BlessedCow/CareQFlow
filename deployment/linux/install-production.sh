@@ -271,14 +271,37 @@ copy_application_files() {
     printf 'Installing CareQueue application files...\n'
 
     rm -rf \
+        "${INSTALL_DIRECTORY}/LICENSE" \
+        "${INSTALL_DIRECTORY}/LICENSES" \
         "${INSTALL_DIRECTORY}/backend" \
         "${INSTALL_DIRECTORY}/frontend" \
         "${INSTALL_DIRECTORY}/deployment"
 
     mkdir -p \
+        "${INSTALL_DIRECTORY}/LICENSES" \
         "${INSTALL_DIRECTORY}/backend" \
         "${INSTALL_DIRECTORY}/frontend" \
         "${INSTALL_DIRECTORY}/deployment"
+
+    if [[ ! -f "${SOURCE_DIRECTORY}/LICENSE" ]]; then
+        fail "CareQueue license notice was not found in the release package."
+    fi
+
+    if [[ ! -f "${SOURCE_DIRECTORY}/LICENSES/BUSL-1.1.txt" ]]; then
+        fail "CareQueue BUSL 1.1 license text was not found in the release package."
+    fi
+
+    if [[ ! -f "${SOURCE_DIRECTORY}/LICENSES/MIT.txt" ]]; then
+        fail "CareQueue historical MIT license text was not found in the release package."
+    fi
+
+    cp -a --no-preserve=context \
+        "${SOURCE_DIRECTORY}/LICENSE" \
+        "${INSTALL_DIRECTORY}/LICENSE"
+
+    cp -a --no-preserve=context \
+        "${SOURCE_DIRECTORY}/LICENSES/." \
+        "${INSTALL_DIRECTORY}/LICENSES/"
 
     cp -a --no-preserve=context \
         "${SOURCE_DIRECTORY}/backend/." \

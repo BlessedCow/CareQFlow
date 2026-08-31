@@ -26,6 +26,7 @@ PACKAGE_ROOT_DIRECTORY="$(
 )"
 
 RELEASE_METADATA_FILE="${PACKAGE_ROOT_DIRECTORY}/carequeue-release.env"
+LICENSE_NOTICE_FILE="${PACKAGE_ROOT_DIRECTORY}/LICENSE"
 INSTALL_STATE_FILE="${CONFIG_DIRECTORY}/install-state.env"
 
 INCOMING_VERSION=""
@@ -178,6 +179,54 @@ validate_mode() {
             fi
             ;;
     esac
+}
+
+require_license_acceptance() {
+    local response
+
+    if [[ "${MODE}" != "install" && "${MODE}" != "upgrade" ]]; then
+        return
+    fi
+
+    if [[ ! -f "${LICENSE_NOTICE_FILE}" ]]; then
+        fail \
+            "CareQueue license notice was not found: " \
+            "${LICENSE_NOTICE_FILE}"
+    fi
+
+    printf '\n'
+    printf '%s\n' 'CareQueue License Agreement'
+    printf '%s\n' '==========================='
+    printf '\n'
+
+    cat "${LICENSE_NOTICE_FILE}"
+
+    printf '\n'
+    printf '%s\n' \
+        'You must accept the CareQueue license terms to continue.'
+
+    while true; do
+        printf '%s' 'Type ACCEPT to agree and continue: '
+
+        if ! IFS= read -r response; then
+            fail "License acceptance was not provided."
+        fi
+
+        case "${response}" in
+            ACCEPT)
+                printf '%s\n' \
+                    'CareQueue license terms accepted.'
+                printf '\n'
+                return
+                ;;
+
+            *)
+                printf '%s\n' \
+                    'License terms were not accepted. Installation cancelled.'
+                exit 1
+                ;;
+        esac
+    done
 }
 
 validate_upgrade_version() {
@@ -347,6 +396,7 @@ create_verified_pre_upgrade_application_archive() {
     local archive_name
     local checksum_path
     local calculated_checksum
+    local -a application_archive_paths
 
     if [[ "${MODE}" != "upgrade" ]]; then
         return
@@ -391,15 +441,27 @@ create_verified_pre_upgrade_application_archive() {
         "${PRE_UPGRADE_APPLICATION_ARCHIVE}" \
         "${checksum_path}"
 
+    application_archive_paths=(
+        backend
+        frontend
+        deployment
+    )
+
+    if [[ -f "${INSTALL_DIRECTORY}/LICENSE" ]]; then
+        application_archive_paths+=(LICENSE)
+    fi
+
+    if [[ -d "${INSTALL_DIRECTORY}/LICENSES" ]]; then
+        application_archive_paths+=(LICENSES)
+    fi
+
     tar \
         --create \
         --gzip \
         --file "${PRE_UPGRADE_APPLICATION_ARCHIVE}" \
         --directory "${INSTALL_DIRECTORY}" \
         --exclude='backend/.venv' \
-        backend \
-        frontend \
-        deployment
+        "${application_archive_paths[@]}"
 
     if [[ ! -s "${PRE_UPGRADE_APPLICATION_ARCHIVE}" ]]; then
         fail \
@@ -739,8 +801,6 @@ resolve_failed_upgrade_recovery_record() {
             "The failed upgrade recovery record contains an invalid application archive checksum."
     fi
 
-    local calculated_application_sha256
-
     calculated_application_sha256="$(
         sha256sum "${ROLLBACK_APPLICATION_ARCHIVE}" |
             awk '{print $1}'
@@ -844,6 +904,7 @@ preserve_failed_application_before_rollback() {
     local archive_name
     local calculated_checksum
     local checksum_path
+    local -a application_archive_paths
 
     if [[ "${MODE}" != "rollback" ]]; then
         return
@@ -876,15 +937,27 @@ preserve_failed_application_before_rollback() {
         "${FAILED_APPLICATION_ARCHIVE}" \
         "${checksum_path}"
 
+    application_archive_paths=(
+        backend
+        frontend
+        deployment
+    )
+
+    if [[ -f "${INSTALL_DIRECTORY}/LICENSE" ]]; then
+        application_archive_paths+=(LICENSE)
+    fi
+
+    if [[ -d "${INSTALL_DIRECTORY}/LICENSES" ]]; then
+        application_archive_paths+=(LICENSES)
+    fi
+
     tar \
         --create \
         --gzip \
         --file "${FAILED_APPLICATION_ARCHIVE}" \
         --directory "${INSTALL_DIRECTORY}" \
         --exclude='backend/.venv' \
-        backend \
-        frontend \
-        deployment
+        "${application_archive_paths[@]}"
 
     if [[ ! -s "${FAILED_APPLICATION_ARCHIVE}" ]]; then
         fail \
@@ -1006,9 +1079,27 @@ restore_failed_application_after_swap_failure() {
         "Restoring the failed application after rollback replacement failure..."
 
     rm -rf \
+        "${INSTALL_DIRECTORY}/LICENSE" \
+        "${INSTALL_DIRECTORY}/LICENSES" \
         "${INSTALL_DIRECTORY}/backend" \
         "${INSTALL_DIRECTORY}/frontend" \
         "${INSTALL_DIRECTORY}/deployment"
+
+    if [[ -f "${FAILED_APPLICATION_STAGING_DIRECTORY}/LICENSE" ]]; then
+        if ! mv \
+            "${FAILED_APPLICATION_STAGING_DIRECTORY}/LICENSE" \
+            "${INSTALL_DIRECTORY}/LICENSE"; then
+            restore_failed=true
+        fi
+    fi
+
+    if [[ -d "${FAILED_APPLICATION_STAGING_DIRECTORY}/LICENSES" ]]; then
+        if ! mv \
+            "${FAILED_APPLICATION_STAGING_DIRECTORY}/LICENSES" \
+            "${INSTALL_DIRECTORY}/LICENSES"; then
+            restore_failed=true
+        fi
+    fi
 
     if ! mv \
         "${FAILED_APPLICATION_STAGING_DIRECTORY}/backend" \
@@ -1093,6 +1184,18 @@ replace_failed_application_with_rollback_payload() {
     printf '%s\n' \
         "Moving the failed application aside before restoring the previous release..."
 
+    if [[ -f "${INSTALL_DIRECTORY}/LICENSE" ]]; then
+        mv \
+            "${INSTALL_DIRECTORY}/LICENSE" \
+            "${FAILED_APPLICATION_STAGING_DIRECTORY}/LICENSE"
+    fi
+
+    if [[ -d "${INSTALL_DIRECTORY}/LICENSES" ]]; then
+        mv \
+            "${INSTALL_DIRECTORY}/LICENSES" \
+            "${FAILED_APPLICATION_STAGING_DIRECTORY}/LICENSES"
+    fi
+
     mv \
         "${INSTALL_DIRECTORY}/backend" \
         "${FAILED_APPLICATION_STAGING_DIRECTORY}/backend"
@@ -1104,6 +1207,22 @@ replace_failed_application_with_rollback_payload() {
     mv \
         "${INSTALL_DIRECTORY}/deployment" \
         "${FAILED_APPLICATION_STAGING_DIRECTORY}/deployment"
+
+    rm -rf \
+        "${INSTALL_DIRECTORY}/LICENSE" \
+        "${INSTALL_DIRECTORY}/LICENSES"
+
+    if [[ -f "${ROLLBACK_APPLICATION_STAGING_ROOT}/LICENSE" ]]; then
+        cp -a --no-preserve=context \
+            "${ROLLBACK_APPLICATION_STAGING_ROOT}/LICENSE" \
+            "${INSTALL_DIRECTORY}/LICENSE"
+    fi
+
+    if [[ -d "${ROLLBACK_APPLICATION_STAGING_ROOT}/LICENSES" ]]; then
+        cp -a --no-preserve=context \
+            "${ROLLBACK_APPLICATION_STAGING_ROOT}/LICENSES" \
+            "${INSTALL_DIRECTORY}/LICENSES"
+    fi
 
     printf '%s\n' \
         "Restoring the previous CareQueue application payload..."
@@ -1538,6 +1657,7 @@ main() {
     normalize_mode
     validate_mode
     validate_upgrade_version
+    require_license_acceptance
     resolve_failed_upgrade_recovery_record
     prepare_logging
     print_header

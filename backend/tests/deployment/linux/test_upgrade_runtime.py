@@ -2523,3 +2523,128 @@ exit 0
 
     assert result.returncode != 0
     assert "carequeue-caddy.service is not active." in result.stderr
+
+
+def test_license_acceptance_accepts_explicit_accept(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    license_notice = tmp_path / "LICENSE"
+    license_notice.write_text(
+        "CareQueue test license\n",
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+
+        MODE="install"
+        LICENSE_NOTICE_FILE="{license_notice}"
+
+        printf 'ACCEPT\\n' | require_license_acceptance
+        """)
+
+    assert result.returncode == 0
+    assert "CareQueue License Agreement" in result.stdout
+    assert "CareQueue test license" in result.stdout
+    assert "CareQueue license terms accepted." in result.stdout
+
+
+def test_license_acceptance_rejects_non_accept_response(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    license_notice = tmp_path / "LICENSE"
+    license_notice.write_text(
+        "CareQueue test license\n",
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+
+        MODE="upgrade"
+        LICENSE_NOTICE_FILE="{license_notice}"
+
+        printf 'NO\\n' | require_license_acceptance
+        """)
+
+    assert result.returncode != 0
+    assert "CareQueue License Agreement" in result.stdout
+    assert "License terms were not accepted." in result.stdout
+
+
+def test_license_acceptance_rejects_missing_input(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    license_notice = tmp_path / "LICENSE"
+    license_notice.write_text(
+        "CareQueue test license\n",
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+
+        MODE="install"
+        LICENSE_NOTICE_FILE="{license_notice}"
+
+        require_license_acceptance < /dev/null
+        """)
+
+    assert result.returncode != 0
+    assert "License acceptance was not provided." in result.stderr
+
+
+def test_license_acceptance_rejects_missing_license_notice(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+
+    missing_license = tmp_path / "missing-LICENSE"
+
+    result = _run_bash(f"""
+        source "{installer}"
+
+        MODE="install"
+        LICENSE_NOTICE_FILE="{missing_license}"
+
+        printf 'ACCEPT\\n' | require_license_acceptance
+        """)
+
+    assert result.returncode != 0
+    assert "CareQueue license notice was not found:" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "repair",
+        "rollback",
+        "uninstall",
+    ],
+)
+def test_license_acceptance_is_skipped_for_existing_install_operations(
+    tmp_path: Path,
+    mode: str,
+):
+    installer = _installer_without_main(tmp_path)
+
+    missing_license = tmp_path / "missing-LICENSE"
+
+    result = _run_bash(f"""
+        source "{installer}"
+
+        MODE="{mode}"
+        LICENSE_NOTICE_FILE="{missing_license}"
+
+        require_license_acceptance < /dev/null
+        """)
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert result.stderr == ""
