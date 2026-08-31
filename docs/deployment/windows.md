@@ -144,22 +144,34 @@ The HTTPS service:
 
 ## Installer Modes
 
-The packaged installer supports four operation modes:
+The packaged installer supports five operation modes:
 
 ```text
 Install
 Upgrade
 Repair
+Rollback
 Uninstall
 ```
 
 When CareQueue is not installed, the installer presents the normal first-time Install flow.
 
-When CareQueue is already installed, the installer presents operation choices:
+When CareQueue is already installed, the installer presents operation choices for Upgrade, Repair, and Uninstall. Rollback is shown only when the installer finds an eligible failed-upgrade recovery record.
+
+A recovery record eligible for rollback is stored under:
+
+```text
+C:\ProgramData\CareQueue\Recovery\Upgrades
+```
+
+and represents a failed supported upgrade for which the required recovery assets were preserved.
+
+When rollback is available, the operation choices include:
 
 ```text
 Upgrade existing installation
 Repair existing installation
+Roll back most recent failed upgrade
 Uninstall CareQueue
 ```
 
@@ -235,6 +247,69 @@ A migration failure should be investigated rather than worked around by deleting
 Repair is used when CareQueue is already installed.
 
 Repair restores application files, packaged runtime files, service files, and expected installation structure while preserving runtime data and production configuration.
+
+### Rollback
+
+Rollback is used after a failed supported upgrade when CareQueue has preserved a valid failed-upgrade recovery record and the required pre-upgrade recovery assets.
+
+Before an upgrade replaces the installed application, the Windows deployment workflow preserves:
+
+- A verified encrypted pre-upgrade database backup
+- A verified archive of the previously installed application payload
+- The SHA256 checksum for the preserved application archive
+- The previous and incoming CareQueue versions
+- The installer log associated with the upgrade attempt
+- A recovery record under `C:\ProgramData\CareQueue\Recovery\Upgrades`
+
+If the upgrade later fails, the recovery record is marked `failed`. The Inno Setup installer offers Rollback only when an eligible failed recovery record is available.
+
+Rollback performs a controlled recovery sequence:
+
+1. Locate the most recent eligible failed-upgrade recovery record.
+2. Validate the preserved database backup and previous application archive.
+3. Verify the application archive SHA256 checksum.
+4. Stage and validate the previous application payload before activation.
+5. Preserve the failed incoming application payload for later review.
+6. Stop CareQueue services before application replacement.
+7. Activate the previous application payload.
+8. Stage the verified pre-upgrade encrypted database backup.
+9. Record the durable `rollback_staged` recovery state.
+10. Activate the staged pre-upgrade database.
+11. Record the durable `rollback_activated` recovery state.
+12. Start `CareQueueApi` and `CareQueueCaddy`.
+13. Validate service state and post-rollback application health.
+14. Restore the previous installed-version metadata.
+15. Mark the recovery record `rollback_completed`.
+16. Remove temporary rollback staging when cleanup succeeds.
+
+A cleanup failure after `rollback_completed` is logged but does not invalidate an otherwise successful rollback.
+
+If rollback fails after the pre-upgrade database has already been activated, CareQueue attempts to stop both services again and preserves the last durable rollback state for investigation rather than replacing it with a less-specific generic failure state.
+
+Do not manually edit rollback recovery records, preserved application checksums, or staged recovery data to force a rollback to continue.
+
+After rollback completes, verify:
+
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy |
+Select-Object Name, Status, StartType
+```
+
+Then verify:
+
+```text
+https://carequeue.local
+```
+
+and confirm that the application reports the expected previous CareQueue version and that a representative workflow can access the restored data.
+
+For broader upgrade and rollback guidance, see:
+
+```text
+docs/operations/upgrades.md
+docs/workflows/backup-and-recovery.md
+docs/operations/health-checks.md
+```
 
 ### Uninstall
 
@@ -363,10 +438,10 @@ CareQueue keeps the application release version in several backend and deploymen
 Use the repository helper before building a new release:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.3.0
+.\deployment\bump-version.ps1 -Version 0.5.0
 ```
 
-Replace `0.3.0` with the intended release version.
+Replace `0.5.0` with the intended release version when preparing a later release.
 
 The helper updates the controlled version declarations used by the backend, Windows installer, Windows package validation, Windows payload metadata, and Linux release-package defaults.
 
@@ -419,7 +494,7 @@ After building the payload, compile the Inno Setup script:
 The default output is:
 
 ```text
-build\windows\installer\CareQueue-Setup-0.3.0.exe
+build\windows\installer\CareQueue-Setup-0.5.0.exe
 ```
 
 The exact filename follows the version configured in `CareQueue.iss`.
@@ -429,13 +504,13 @@ The exact filename follows the version configured in `CareQueue.iss`.
 Run the compiled installer:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.3.0.exe
+.\build\windows\installer\CareQueue-Setup-0.5.0.exe
 ```
 
 If PowerShell requires an explicit invocation path:
 
 ```powershell
-& "G:\CareQueue\build\windows\installer\CareQueue-Setup-0.3.0.exe"
+& "G:\CareQueue\build\windows\installer\CareQueue-Setup-0.5.0.exe"
 ```
 
 The installer requires administrator elevation because it installs services and writes to protected directories.
@@ -825,6 +900,8 @@ powershell.exe `
 
 For direct Uninstall, `-ApplicationOrigin` is not required.
 
+Direct Rollback uses the same installer engine with `-Mode Rollback`. Use it only when a supported failed-upgrade recovery record exists. The packaged Inno installer is preferred because it exposes Rollback only when an eligible recovery state is detected.
+
 The older production script remains available:
 
 ```text
@@ -867,6 +944,10 @@ At minimum, test:
 - Scheduled backup behavior
 - Repair
 - Upgrade over an existing install
+- Failed-upgrade recovery asset creation
+- Rollback availability only after an eligible failed upgrade
+- End-to-end rollback of application, database, services, and installed-version metadata
+- Post-rollback health validation
 - Uninstall with ProgramData preserved
 - Fresh install after uninstall using preserved data
 
@@ -895,17 +976,68 @@ runtime\python\python.exe
 vendor\caddy\caddy.exe
 ```
 
+Rollback is different: it appears only when CareQueue is installed and an eligible failed-upgrade recovery record exists under:
+
+```text
+C:\ProgramData\CareQueue\Recovery\Upgrades
+```
+
+A normal healthy installation with no failed upgrade recovery should not show Rollback.
+
 ### Installer says CareQueue is already installed
 
-Use the operation page to choose:
+Use the operation page to choose the appropriate available operation:
 
 ```text
 Upgrade existing installation
 Repair existing installation
+Roll back most recent failed upgrade
 Uninstall CareQueue
 ```
 
+Rollback appears only when an eligible failed-upgrade recovery record exists.
+
 Install mode is only for a machine where CareQueue is not already installed.
+
+### Rollback option does not appear
+
+A missing Rollback option is expected when there is no eligible failed-upgrade recovery record.
+
+Check the upgrade recovery directory:
+
+```powershell
+Get-ChildItem `
+    "C:\ProgramData\CareQueue\Recovery\Upgrades" `
+    -Filter "upgrade-*.json" `
+    -ErrorAction SilentlyContinue |
+Sort-Object LastWriteTime -Descending |
+Select-Object Name, Length, LastWriteTime
+```
+
+Do not create or edit a recovery record manually just to make the Rollback option appear.
+
+If an upgrade failed but no eligible recovery record exists, review the installer log and preserve the current application, database, backups, and recovery directories before taking additional state-changing action.
+
+### Rollback fails
+
+Review the newest installer log first:
+
+```text
+C:\ProgramData\CareQueue\Logs\Installer
+```
+
+Also preserve:
+
+```text
+C:\ProgramData\CareQueue\Recovery\Upgrades
+C:\ProgramData\CareQueue\Recovery\Applications
+C:\ProgramData\CareQueue\Recovery\FailedApplications
+C:\ProgramData\CareQueue\Backups
+```
+
+Do not delete failed-application archives, recovery records, or verified pre-upgrade backups while the rollback state is under investigation.
+
+If the recovery record reached `rollback_activated` but not `rollback_completed`, treat the installation as a recovery incident: confirm service state, preserve logs and recovery assets, and review the database and health-check results before attempting another operation.
 
 ### First-time Admin setup says setup is already complete
 
@@ -1203,4 +1335,4 @@ deployment/windows/
     └── vendor-assets.json
 ```
 
-The exact source files in the current repository remain authoritative. Review them before modifying paths, service accounts, ports, certificate behavior, installer modes, or release packaging.
+The exact source files in the current repository remain authoritative. Review them before modifying paths, service accounts, ports, certificate behavior, installer modes, rollback behavior, recovery paths, or release packaging.

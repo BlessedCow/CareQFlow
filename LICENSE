@@ -1,21 +1,58 @@
-MIT License
+CareQueue Licensing
 
-Copyright (c) 2026 BlessedCow
+Copyright (c) 2026 BlessedCow. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+CareQueue versions 0.4.x and earlier
+====================================
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+CareQueue versions 0.4.x and earlier were released under the MIT License.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The MIT License applicable to those versions is preserved at:
+
+LICENSES/MIT.txt
+
+
+CareQueue versions 0.5.0 and later
+==================================
+
+CareQueue version 0.5.0 and later versions expressly released under these
+terms are licensed under the Business Source License 1.1.
+
+Business Source License 1.1 parameters:
+
+Licensor: BlessedCow
+
+Licensed Work: CareQueue version 0.5.0 and later versions expressly released
+under the Business Source License 1.1.
+
+Additional Use Grant: None.
+
+Change Date: Four years after the first publicly available distribution of
+each specific version of the Licensed Work.
+
+Change License: GNU General Public License, version 3 or later.
+
+The Business Source License 1.1 terms are available at:
+
+LICENSES/BUSL-1.1.txt
+
+Under the Business Source License 1.1, non-production use is permitted.
+Production use of a version that remains under the Business Source License
+requires a separate commercial license from the Licensor.
+
+The Business Source License 1.1 is a source-available license and is not an
+Open Source license before the applicable Change Date.
+
+
+Commercial Licensing
+====================
+
+Commercial production licenses for CareQueue may be offered separately by
+the Licensor.
+
+A commercial license grants only the rights expressly stated in that license.
+Except where expressly agreed otherwise, commercial licensing does not
+transfer ownership of CareQueue or its copyright.
+
+For licensing inquiries, use the contact methods published by the CareQueue
+project.

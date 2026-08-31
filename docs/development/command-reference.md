@@ -283,10 +283,10 @@ CareQueue keeps the application release version in several backend and deploymen
 Use the repository release-version helper rather than editing those locations individually:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.3.0
+.\deployment\bump-version.ps1 -Version 0.5.0
 ```
 
-Replace `0.3.0` with the intended release version.
+Replace `0.5.0` with the intended release version when preparing a later release.
 
 The script updates the controlled release-version declarations used by:
 
@@ -351,10 +351,10 @@ After the Windows payload has been built:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQueue `0.3.0`, the resulting installer is:
+For CareQueue `0.5.0`, the resulting installer is:
 
 ```text
-build\windows\installer\CareQueue-Setup-0.3.0.exe
+build\windows\installer\CareQueue-Setup-0.5.0.exe
 ```
 
 Future releases use the version configured by the release-version tooling.
@@ -375,29 +375,37 @@ Use this validation before publishing the Windows release artifact.
 
 ## Run the Windows Installer
 
-For CareQueue `0.3.0`:
+For CareQueue `0.5.0`:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.3.0.exe
+.\build\windows\installer\CareQueue-Setup-0.5.0.exe
 ```
 
 An explicit invocation path can also be used:
 
 ```powershell
-& ".\build\windows\installer\CareQueue-Setup-0.3.0.exe"
+& ".\build\windows\installer\CareQueue-Setup-0.5.0.exe"
 ```
 
 The installer requires administrator elevation because it installs Windows services and writes to protected locations.
 
 When CareQueue is not installed, the installer uses the fresh-install flow.
 
-When an existing installation is detected, the installer offers:
+When an existing installation is detected, the installer normally offers:
 
 ```text
 Upgrade existing installation
 Repair existing installation
 Uninstall CareQueue
 ```
+
+If an eligible failed-upgrade recovery record exists, the installer also offers:
+
+```text
+Roll back most recent failed upgrade
+```
+
+Rollback is intentionally absent from a healthy installation with no eligible failed-upgrade recovery state.
 
 ## Installed Windows Services
 
@@ -528,31 +536,31 @@ Permissions-Policy
 
 ## Generate a Windows Installer Checksum
 
-For CareQueue `0.3.0`:
+For CareQueue `0.5.0`:
 
 ```powershell
 Get-FileHash `
     -Algorithm SHA256 `
-    ".\build\windows\installer\CareQueue-Setup-0.3.0.exe" |
+    ".\build\windows\installer\CareQueue-Setup-0.5.0.exe" |
 ForEach-Object {
-    "$($_.Hash)  CareQueue-Setup-0.3.0.exe"
+    "$($_.Hash)  CareQueue-Setup-0.5.0.exe"
 } |
 Set-Content `
     -Encoding ASCII `
-    ".\build\windows\installer\CareQueue-Setup-0.3.0.exe.sha256"
+    ".\build\windows\installer\CareQueue-Setup-0.5.0.exe.sha256"
 ```
 
 Verify it:
 
 ```powershell
 $expectedHash = (
-    Get-Content ".\build\windows\installer\CareQueue-Setup-0.3.0.exe.sha256"
+    Get-Content ".\build\windows\installer\CareQueue-Setup-0.5.0.exe.sha256"
 ).Split(" ")[0]
 
 $actualHash = (
     Get-FileHash `
         -Algorithm SHA256 `
-        ".\build\windows\installer\CareQueue-Setup-0.3.0.exe"
+        ".\build\windows\installer\CareQueue-Setup-0.5.0.exe"
 ).Hash
 
 $actualHash -eq $expectedHash
@@ -589,10 +597,47 @@ Supported modes:
 Install
 Upgrade
 Repair
+Rollback
 Uninstall
 ```
 
+`ApplicationOrigin` is required for Install, Upgrade, Repair, and Rollback.
+
 Use the compiled installer for ordinary release validation. Direct engine invocation is primarily a troubleshooting tool.
+
+For direct Rollback troubleshooting against an installed CareQueue deployment:
+
+```powershell
+powershell.exe `
+    -NoProfile `
+    -NonInteractive `
+    -ExecutionPolicy Bypass `
+    -File ".\build\windows\payload\deployment\windows\installer\invoke-install.ps1" `
+    -Mode Rollback `
+    -ApplicationOrigin "https://carequeue.local" `
+    -PayloadDirectory ".\build\windows\payload" `
+    -InstallDirectory "C:\Program Files\CareQueue" `
+    -DataDirectory "C:\ProgramData\CareQueue"
+```
+
+Use direct Rollback only when a supported failed-upgrade recovery record exists. Do not create or edit recovery records manually to force rollback.
+
+## Windows Upgrade Recovery Records
+
+List upgrade recovery records:
+
+```powershell
+Get-ChildItem `
+    -Path "$env:ProgramData\CareQueue\Recovery\Upgrades" `
+    -Filter "upgrade-*.json" `
+    -ErrorAction SilentlyContinue |
+Sort-Object LastWriteTime -Descending |
+Select-Object Name, Length, LastWriteTime
+```
+
+Do not edit these records manually.
+
+A failed supported Upgrade may make Rollback available when the referenced pre-upgrade database backup and preserved application archive also validate successfully.
 
 ## Windows Backup Commands
 
@@ -623,7 +668,7 @@ npm --prefix frontend run build
 Then build the Linux archive:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.3.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
 ```
 
 Because the release script also has a version default, after the repository has been bumped to the intended version this can be shortened to:
@@ -632,10 +677,10 @@ Because the release script also has a version default, after the repository has 
 .\deployment\linux\installer\build-payload.ps1
 ```
 
-For CareQueue `0.3.0`, the artifact is:
+For CareQueue `0.5.0`, the artifact is:
 
 ```text
-build\linux\installer\CareQueue-Linux-Setup-0.3.0.tar.gz
+build\linux\installer\CareQueue-Linux-Setup-0.5.0.tar.gz
 ```
 
 The build script reports the resulting package path, size, and SHA256 value.
@@ -646,7 +691,7 @@ On the Linux target:
 
 ```bash
 mkdir carequeue-installer
-tar -xzf CareQueue-Linux-Setup-0.3.0.tar.gz \
+tar -xzf CareQueue-Linux-Setup-0.5.0.tar.gz \
   -C carequeue-installer
 cd carequeue-installer
 ```
@@ -686,6 +731,26 @@ sudo bash deployment/linux/installer/invoke-install.sh repair
 ```
 
 Repair preserves the existing production configuration and data.
+
+## Roll Back a Failed CareQueue Upgrade on Linux
+
+Rollback requires an eligible failed-upgrade recovery record and the referenced recovery assets.
+
+From an extracted release package:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh rollback
+```
+
+Linux upgrade recovery records are stored under:
+
+```text
+/var/lib/carequeue/recovery/upgrades
+```
+
+Do not create or edit recovery records manually to force rollback.
+
+After rollback succeeds, verify the API service, Caddy service, backup timer, liveness endpoint, readiness endpoint, and expected previous CareQueue version.
 
 ## Uninstall CareQueue on Linux
 
@@ -847,6 +912,23 @@ Logs:
 Admin setup utility:
 /opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
 ```
+
+## Review Release Licensing
+
+Before publishing a release, confirm that the version-specific licensing statements match:
+
+```text
+LICENSE
+LICENSES/BUSL-1.1.txt
+LICENSES/MIT.txt
+docs/licensing.md
+```
+
+CareQueue `0.4.x` and earlier releases remain under their historical MIT terms.
+
+CareQueue `0.5.0` and later versions expressly released under the current terms use Business Source License 1.1 until the applicable Change Date.
+
+Do not describe a current BSL release as Open Source before its applicable Change Date.
 
 ## Git Review Commands
 

@@ -12,6 +12,8 @@ CareQueue is under active development. Security fixes are applied to the current
 
 Older releases, copied deployments, and unmaintained forks should not be assumed to receive security updates.
 
+Licensing status and security-support status are separate concerns. Historical or source-available code should not be assumed to receive security fixes merely because its source remains available. See `LICENSE` and `docs/licensing.md` for licensing terms.
+
 Production operators should:
 
 - Track the current repository state
@@ -178,6 +180,9 @@ CareQueue currently includes:
 - Loopback-only API binding in packaged production deployments
 - Restricted production runtime directories
 - Service-aware production upgrades
+- Verified pre-upgrade database and application recovery assets
+- Failed-upgrade recovery records and assisted rollback on packaged Windows and Linux deployments
+- Post-rollback service and application-health validation
 
 These controls reduce specific risks. They do not replace secure host configuration, network controls, secret management, access policies, endpoint protection, monitoring, incident response, legal review, or compliance review.
 
@@ -729,9 +734,18 @@ Interactive user accounts should not receive production data access unless they 
 
 Permission changes should be tested after upgrades. Windows ACL inheritance and Linux ownership/mode changes can both produce permissions that differ from the intended service-account grants.
 
-## Upgrade Security
+## Upgrade and Rollback Security
 
 Packaged Windows and Linux upgrade workflows preserve the existing production environment configuration and encryption keys rather than generating replacement keys during an ordinary upgrade.
+
+Supported Upgrade workflows also preserve verified recovery assets before replacing the installed application. Depending on platform, these include:
+
+- A verified encrypted pre-upgrade database backup
+- A preserved archive of the previously installed application
+- A SHA256 checksum for the preserved application archive
+- Previous and incoming application versions
+- Installer log information
+- A durable upgrade recovery record
 
 The deployment workflows replace application and runtime files, rebuild or refresh the production backend environment, validate the installed backend, reapply deployment configuration and permissions, and restart the required services.
 
@@ -744,13 +758,13 @@ A failed required migration prevents that migration from being recorded as compl
 Before an upgrade:
 
 - Confirm a recent verified encrypted backup exists.
-- Preserve a verified pre-upgrade backup until validation is complete.
 - Confirm the backup key and required database encryption keys are available.
-- Review dependency, schema, migration, and deployment changes.
+- Review dependency, schema, migration, deployment, and recovery changes.
 - Test the upgrade in a non-production copy when possible.
 - Keep recovery instructions and the previously trusted release artifact available.
 - Confirm the current installation is healthy before beginning the upgrade.
-- Confirm sufficient disk space is available for application files, databases, logs, backups, and recovery data.
+- Confirm sufficient disk space is available for application files, databases, logs, backups, application archives, and recovery data.
+- Preserve upgrade recovery assets until the operation and post-upgrade validation are complete.
 
 After an upgrade:
 
@@ -762,14 +776,57 @@ After an upgrade:
 - Confirm audit integrity remains valid.
 - Confirm backup scheduling and recovery functionality remain available.
 - Confirm the application is reachable only through the intended HTTPS origin.
+- Confirm the expected application version is active.
 
-Automated application rollback to a previous release is not currently provided for every supported deployment path.
+### Failed-Upgrade Rollback
 
-A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older application release. Replacing newer application files with an older release is therefore not, by itself, a complete rollback procedure.
+CareQueue provides assisted rollback for supported packaged Windows and Linux upgrades when a valid failed-upgrade recovery record and required recovery assets exist.
 
-Keep the previously trusted release artifact, a verified pre-upgrade backup, required encryption keys, and documented recovery procedures available until the upgraded installation has been fully validated.
+Rollback is not a general downgrade mechanism.
 
-Database migrations, application rollback, database recovery, and disaster recovery are related but separate operational concerns. See `docs/operations/upgrades.md` and `docs/workflows/backup-and-recovery.md` for the corresponding procedures.
+The supported workflow restores the preserved previous application together with the verified pre-upgrade database backup. This avoids treating application-file replacement alone as sufficient after a migration-bearing upgrade.
+
+Rollback recovery records may use durable states such as:
+
+```text
+failed
+rollback_staged
+rollback_activated
+rollback_completed
+```
+
+Linux may also record an application-restoration state when an application swap fails and the failed incoming application is restored.
+
+Do not manually alter recovery records, application archive checksums, migration records, or encrypted database files to force rollback to continue.
+
+Before rollback:
+
+- Preserve the failed-upgrade recovery record and referenced assets.
+- Confirm the preserved pre-upgrade database backup exists and is nonempty.
+- Confirm the preserved previous-application archive exists and passes its recorded SHA256 check.
+- Confirm required encryption keys remain available.
+- Review the installer log and determine the current service state.
+
+After rollback:
+
+- Confirm required services are running.
+- Confirm liveness and readiness checks pass.
+- Confirm the expected previous application version is active.
+- Confirm representative application data is available.
+- Confirm governance state remains available.
+- Confirm audit integrity remains valid.
+- Confirm backup scheduling remains available.
+- Confirm the recovery record reached `rollback_completed`.
+
+A recovery record that reached `rollback_activated` but not `rollback_completed` indicates an incomplete recovery state. The pre-upgrade database may already be active even though service startup or health validation failed.
+
+Treat that state as a recovery incident. Preserve logs and recovery assets, confirm service and database state, and avoid additional state-changing operations until the failure is understood.
+
+Windows rollback attempts to stop CareQueue services again when a post-database-activation failure occurs. Linux rollback also keeps or returns the API to a stopped state in safety-sensitive database activation failures.
+
+Temporary rollback staging is not the authoritative recovery evidence. Durable recovery records, verified backups, application archives, checksums, and logs should be retained according to operational policy.
+
+Database migrations, application rollback, database recovery, and disaster recovery remain related but distinct operational concerns. See `docs/operations/upgrades.md` and `docs/workflows/backup-and-recovery.md` for the corresponding procedures.
 
 ## Screenshots and Demonstrations
 

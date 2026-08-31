@@ -213,8 +213,11 @@ The current Windows deployment can:
 - Run the FastAPI backend as a Windows service
 - Serve the frontend and proxy `/api` through Caddy
 - Provide private HTTPS through a local hostname such as `carequeue.local`
-- Offer installer modes for Install, Upgrade, Repair, and Uninstall
+- Offer installer modes for Install, Upgrade, Repair, Rollback, and Uninstall
 - Preserve runtime data during uninstall
+- Preserve verified pre-upgrade application and database recovery assets during upgrades
+- Offer rollback after a failed upgrade when valid recovery records are available
+- Restore the previous application, database state, services, and installed-version metadata during rollback
 - Launch the first-time Admin setup GUI after installation
 - Require organization governance attestation after first Admin login
 - Run post-installation validation for services and application health
@@ -242,7 +245,7 @@ CareQueue-Linux-Setup-<version>.tar.gz
 
 The packaged Linux workflow supports:
 
-- Install, Upgrade, Repair, and Uninstall modes
+- Install, Upgrade, Repair, Rollback, and Uninstall modes
 - Supported Ubuntu and Debian validation
 - A dedicated `carequeue` service account
 - Production Python environment and frontend installation
@@ -254,6 +257,7 @@ The packaged Linux workflow supports:
 - First-time Admin setup
 - Post-install frontend, liveness, and readiness validation
 - Preservation of production configuration and runtime data during upgrade and repair
+- Pre-upgrade recovery records and rollback support for failed upgrades
 
 The Linux deployment is more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
 
@@ -361,6 +365,8 @@ Use synthetic data in tests, screenshots, examples, and public documentation.
 - [ROADMAP.md](ROADMAP.md) tracks completed work and planned priorities.
 - [DISCLAIMER.md](DISCLAIMER.md) explains privacy, compliance, and use limitations.
 - [CONTRIBUTING.md](CONTRIBUTING.md) covers contribution and testing expectations.
+- [docs/licensing.md](docs/licensing.md) explains the licensing model, production-use requirements, historical MIT releases, and commercial licensing.
+- [LICENSE](LICENSE) contains the authoritative version-based licensing notice.
 - [docs/deployment/windows.md](docs/deployment/windows.md) covers packaged Windows deployment.
 - [docs/deployment/linux.md](docs/deployment/linux.md) covers packaged Linux deployment.
 - [docs/administration/users-and-security.md](docs/administration/users-and-security.md) covers accounts, MFA, sessions, and governance.
@@ -369,10 +375,20 @@ Use synthetic data in tests, screenshots, examples, and public documentation.
 
 ## Status
 
-CareQueue is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage options, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, private Windows deployment, and packaged Linux deployment are implemented.
+CareQueue is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage options, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, packaged Windows and Linux deployment, controlled upgrades, and failed-upgrade rollback workflows are implemented.
 
-Current roadmap priorities include clean-machine release validation, release signing and artifact trust, production smoke-test tooling, stronger cross-release upgrade and recovery validation, broader end-to-end browser testing, accessibility work, and continued operational hardening.
+Current roadmap priorities include production smoke-test tooling, stronger cross-release migration and recovery validation, broader end-to-end browser testing, accessibility work, release-signing and artifact-trust improvements, and continued operational hardening.
 
 ## License
 
-See [LICENSE](LICENSE).
+CareQueue uses version-based licensing.
+
+- CareQueue versions `0.4.x` and earlier were released under the MIT License.
+- CareQueue version `0.5.0` and later versions expressly released under the new terms use the Business Source License 1.1.
+- Non-production use of current BSL releases is permitted under the applicable license terms.
+- Production use of a version that remains under the Business Source License requires a separate commercial license from the Licensor.
+- Each BSL-licensed version changes to its specified Change License on its applicable Change Date.
+
+See [LICENSE](LICENSE) for the authoritative licensing notice and [LICENSES/](LICENSES/) for the license texts.
+
+CareQueue releases that remain under the Business Source License are source-available and should not be described as Open Source during that period.

@@ -243,6 +243,9 @@ $resolvedSourceDirectory = (
 ).Path
 
 $requiredSourcePaths = @(
+    "LICENSE",
+    "LICENSES\BUSL-1.1.txt",
+    "LICENSES\MIT.txt",
     "backend\authstatus_api",
     "backend\scripts",
     "backend\requirements.txt",
@@ -553,6 +556,14 @@ $stagingInstallDirectory = Join-Path `
     $stagingRoot `
     "CareQueue"
 
+$stagingLicenseNoticePath = Join-Path `
+    $stagingInstallDirectory `
+    "LICENSE"
+
+$stagingLicenseTextsDirectory = Join-Path `
+    $stagingInstallDirectory `
+    "LICENSES"
+
 $stagingBackendDirectory = Join-Path `
     $stagingInstallDirectory `
     "backend"
@@ -614,6 +625,12 @@ $caddyServiceWasStoppedForUpgrade = $false
 $serviceStatesRestored = $false
 
 try {
+
+    New-Item `
+        -ItemType Directory `
+        -Path $stagingLicenseTextsDirectory `
+        -Force | Out-Null
+
     New-Item `
         -ItemType Directory `
         -Path $stagingBackendDirectory `
@@ -771,6 +788,27 @@ try {
         Join-Path $resolvedSourceDirectory "deployment\windows"
     ) `
         -Destination $stagingDeploymentDirectory `
+        -Recurse `
+        -Force
+
+    Write-Host "Copying CareQueue licensing files..."
+
+    Copy-Item `
+        -LiteralPath (
+        Join-Path `
+            $resolvedSourceDirectory `
+            "LICENSE"
+    ) `
+        -Destination $stagingLicenseNoticePath `
+        -Force
+        
+    Copy-Item `
+        -Path (
+        Join-Path `
+            $resolvedSourceDirectory `
+            "LICENSES\*"
+    ) `
+        -Destination $stagingLicenseTextsDirectory `
         -Recurse `
         -Force
 
@@ -1012,13 +1050,13 @@ try {
     
         $migratedEnvironmentLines = @(
             $existingEnvironmentLines |
-                Where-Object {
-                    $_ -notmatch (
-                        '^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=' +
-                        '|^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=' +
-                        '|^AUTHSTATUS_PRODUCTION_DATA_ROOT='
-                    )
-                }
+            Where-Object {
+                $_ -notmatch (
+                    '^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=' +
+                    '|^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=' +
+                    '|^AUTHSTATUS_PRODUCTION_DATA_ROOT='
+                )
+            }
         )
     
         $migratedEnvironmentLines += (
@@ -1091,6 +1129,14 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         -Path $InstallDirectory `
         -Force | Out-Null
 
+    $installedLicenseNoticePath = Join-Path `
+        $InstallDirectory `
+        "LICENSE"
+    
+    $installedLicenseTextsDirectory = Join-Path `
+        $InstallDirectory `
+        "LICENSES"
+
     $installedBackendDirectory = Join-Path `
         $InstallDirectory `
         "backend"
@@ -1124,6 +1170,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         "Service"
 
     $replaceableDirectories = @(
+        $installedLicenseTextsDirectory,
         $installedBackendDirectory,
         $installedFrontendDirectory,
         $installedDeploymentDirectory
@@ -1152,6 +1199,33 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
                 -Force
         }
     }
+
+    if (
+        Test-Path `
+            -LiteralPath $installedLicenseNoticePath
+    ) {
+        if (-not $Force) {
+            throw (
+                "Existing application license notice cannot be replaced " +
+                "without -Force: $installedLicenseNoticePath"
+            )
+        }
+    
+        Remove-Item `
+            -LiteralPath $installedLicenseNoticePath `
+            -Force
+    }
+
+    Copy-Item `
+        -LiteralPath $stagingLicenseNoticePath `
+        -Destination $InstallDirectory `
+        -Force
+
+    Copy-Item `
+        -LiteralPath $stagingLicenseTextsDirectory `
+        -Destination $InstallDirectory `
+        -Recurse `
+        -Force
 
     Copy-Item `
         -LiteralPath $stagingBackendDirectory `
@@ -1193,28 +1267,28 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
         Copy-Item `
             -LiteralPath (
-                Join-Path `
-                    $stagingServiceDirectory `
-                    "CareQueueApi.exe"
-            ) `
+            Join-Path `
+                $stagingServiceDirectory `
+                "CareQueueApi.exe"
+        ) `
             -Destination (
-                Join-Path `
-                    $installedServiceDirectory `
-                    "CareQueueApi.exe"
-            ) `
+            Join-Path `
+                $installedServiceDirectory `
+                "CareQueueApi.exe"
+        ) `
             -Force
 
         Copy-Item `
             -LiteralPath (
-                Join-Path `
-                    $stagingServiceDirectory `
-                    "CareQueueCaddy.exe"
-            ) `
+            Join-Path `
+                $stagingServiceDirectory `
+                "CareQueueCaddy.exe"
+        ) `
             -Destination (
-                Join-Path `
-                    $installedServiceDirectory `
-                    "CareQueueCaddy.exe"
-            ) `
+            Join-Path `
+                $installedServiceDirectory `
+                "CareQueueCaddy.exe"
+        ) `
             -Force
     }
 
@@ -1484,7 +1558,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
     Write-Host "Writing CareQueue installation state..."
 
     $installationState = [ordered]@{
-        schema_version      = 1
+        schema_version     = 1
         installed_version  = $ReleaseVersion
         package_platform   = "windows"
         application_origin = $normalizedApplicationOrigin

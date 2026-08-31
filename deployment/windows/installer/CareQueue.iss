@@ -1,5 +1,5 @@
 #define MyAppName "CareQueue"
-#define MyAppVersion "0.4.0"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "CareQueue"
 #define MyAppURL "https://github.com/BlessedCow/CareQueue"
 #define MyAppExeName "CareQueue-Setup.exe"
@@ -30,6 +30,7 @@ SetupIconFile=
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+LicenseFile=..\..\..\build\windows\payload\LICENSE
 
 VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
@@ -423,13 +424,23 @@ begin
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
+var
+  OperationMode: String;
 begin
   Result := False;
+  OperationMode := GetOperationMode();
 
   if PageID = wpSelectDir then
     Result := True
   else if PageID = wpSelectProgramGroup then
-    Result := True;
+    Result := True
+  else if PageID = wpLicense then
+  begin
+    Result :=
+      (OperationMode = 'Repair') or
+      (OperationMode = 'Rollback') or
+      (OperationMode = 'Uninstall');
+  end;
 end;
 
 procedure InitializeWizard();

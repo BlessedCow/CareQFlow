@@ -791,6 +791,8 @@ The runtime area contains locations for:
 - Backups
 - Restore staging
 - Recovery staging
+- Upgrade recovery records
+- Preserved application recovery assets
 - API logs
 - Caddy data and logs
 
@@ -823,13 +825,25 @@ WinSW is used as the Windows service wrapper.
 
 ### Installer operation modes
 
-When CareQueue is not installed, the packaged installer presents the normal install flow. When an existing installation is detected, it offers these operation modes:
+When CareQueue is not installed, the packaged installer presents the normal install flow. When an existing installation is detected, it offers Upgrade, Repair, and Uninstall.
 
-- Upgrade existing installation
-- Repair existing installation
-- Uninstall CareQueue
+Rollback is offered only when the installer finds an eligible failed-upgrade recovery record with the required preserved recovery assets.
 
-Install, upgrade, and repair validate the service state and local API health after installation work completes. Uninstall removes Windows services and installed application files while preserving runtime data under ProgramData.
+The supported Windows modes are:
+
+- Install
+- Upgrade
+- Repair
+- Rollback
+- Uninstall
+
+Install, Upgrade, and Repair validate service state and local application health after installation work completes.
+
+Upgrade also preserves a verified pre-upgrade encrypted database backup, archives and checksums the previously installed application, and writes a durable recovery record before application replacement.
+
+When a supported Upgrade fails after the recovery state has been created, Rollback can restore the previous application and pre-upgrade database together, restart the CareQueue services, validate application health, restore the previous installed-version metadata, and record durable rollback completion.
+
+Uninstall removes Windows services and installed application files while preserving runtime data under ProgramData.
 
 ### Private HTTPS
 
@@ -879,11 +893,16 @@ The installer supports:
 - Install
 - Upgrade
 - Repair
+- Rollback
 - Uninstall
 
-The production layout separates application files from configuration, data, and logs.
+The production layout separates application files from configuration, data, logs, and recovery assets.
 
-The installer creates a dedicated `carequeue` service identity, installs the backend runtime and prebuilt frontend, preserves existing production configuration during upgrade or repair, installs systemd units, configures Caddy, enables encrypted backup scheduling, establishes private HTTPS trust, starts the services, and performs post-install health checks.
+The installer creates a dedicated `carequeue` service identity, installs the backend runtime and prebuilt frontend, preserves existing production configuration during Upgrade or Repair, installs systemd units, configures Caddy, enables encrypted backup scheduling, establishes private HTTPS trust, starts the services, and performs post-install health checks.
+
+Upgrade preserves a verified pre-upgrade encrypted database backup, a checksummed archive of the previous application, version metadata, and a durable recovery record before application replacement.
+
+After an eligible failed Upgrade, Rollback restores the preserved previous application and systemd service definitions, stages and activates the pre-upgrade database through the installed recovery tooling, restores required services and the backup timer, validates health and readiness, restores the previous installed-version metadata, and records durable rollback completion.
 
 The packaged services keep FastAPI bound to:
 
@@ -901,7 +920,6 @@ https://carequeue.local
 
 The Linux deployment is intended for administrators comfortable with Linux, systemd, package installation, certificate trust, and operating-system permissions.
 
-Automated rollback to a previous application release is not currently implemented.
 
 ## Testing Structure
 
@@ -918,7 +936,7 @@ Frontend tests are colocated under `__tests__` directories and use Vitest and Te
 The primary checks are:
 
 ```powershell
-pytest tests -n auto -q
+pytest backend\tests -n auto -q
 ruff check . --fix
 ```
 
@@ -961,7 +979,11 @@ Development may use separate frontend and backend origins. Production uses same-
 
 ### Controlled installation lifecycle
 
-Packaged Windows and Linux install, upgrade, repair, and uninstall flows preserve runtime data and keys where appropriate, validate service health after installation work, and keep service orchestration inside the deployment layer.
+Packaged Windows and Linux Install, Upgrade, Repair, Rollback, and Uninstall flows keep service orchestration inside the deployment layer.
+
+Upgrade preserves verified pre-upgrade recovery assets before application replacement. Rollback uses those assets to recover the previous application and database together rather than treating application-file replacement as a complete downgrade strategy.
+
+Runtime data and keys are preserved where appropriate, and supported state-changing operations perform platform-specific validation before being treated as complete.
 
 ## Current Limitations
 
@@ -971,8 +993,9 @@ The current architecture has several known boundaries:
 - PDF intake depends on embedded PDF text and does not provide a general OCR pipeline.
 - Technical controls and governance attestation do not establish HIPAA compliance by themselves.
 - Operational monitoring, endpoint protection, periodic access review, incident response, secure key custody, and organizational policy remain deployment responsibilities.
-- Automated rollback to a previous application release is not implemented across all packaged deployment paths.
 - Linux deployment currently targets supported Debian-based systems and should be validated on the exact target operating-system version.
+- Interrupted-upgrade and interrupted-rollback behavior still require broader cross-release and operating-system validation.
+- Rollback depends on intact failed-upgrade recovery records, verified pre-upgrade backups, preserved application archives, and the encryption keys required to read protected data.
 - Public DNS and publicly trusted certificate deployment require separate design and security review.
 - A public demonstration environment must use synthetic data and independent credentials, keys, storage, and backups.
 

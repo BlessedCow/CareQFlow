@@ -29,7 +29,7 @@ deployment/linux/
 Implemented Linux deployment capabilities include:
 
 - Versioned `CareQueue-Linux-Setup-<version>.tar.gz` release packages
-- Install, upgrade, repair, and uninstall modes
+- Install, upgrade, repair, rollback, and uninstall modes
 - Ubuntu and Debian distribution validation
 - Dedicated `carequeue` system account and group
 - Production application, configuration, runtime, and log directories
@@ -39,6 +39,9 @@ Implemented Linux deployment capabilities include:
 - Production environment-file creation
 - Independent field-encryption, SQLCipher, and backup-encryption keys
 - Preservation of existing production configuration during upgrade and repair
+- Verified pre-upgrade encrypted database backups and application archives
+- Failed-upgrade recovery records with durable rollback states
+- Rollback of the previous application, database, systemd service definitions, and installed-version metadata
 - Trusted production data-root migration for existing configuration
 - SQLCipher production database configuration
 - Hardened CareQueue API systemd service
@@ -57,7 +60,6 @@ The Linux installer is intended for an administrator comfortable with Linux, sys
 
 Current limitations include:
 
-- Automated rollback to a previous application release is not implemented.
 - Linux support is currently limited to Ubuntu and Debian.
 - The packaged Caddy configuration is designed around the private `carequeue.local` deployment model.
 - Trusting the Caddy internal CA on the server does not automatically distribute trust to other client devices.
@@ -173,7 +175,7 @@ Then build the Linux release archive:
 A specific version may also be supplied:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.3.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
 ```
 
 The package is written under:
@@ -182,10 +184,10 @@ The package is written under:
 build/linux/installer/
 ```
 
-For CareQueue v0.3.0, the expected release filename is:
+For CareQueue v0.5.0, the expected release filename is:
 
 ```text
-CareQueue-Linux-Setup-0.3.0.tar.gz
+CareQueue-Linux-Setup-0.5.0.tar.gz
 ```
 
 The build script validates required payload sources, requires an existing production frontend build, stages the production files, normalizes Linux deployment text files to LF line endings, and creates the compressed tar archive.
@@ -199,7 +201,7 @@ For example:
 ```bash
 mkdir carequeue-installer
 
-tar -xzf CareQueue-Linux-Setup-0.3.0.tar.gz \
+tar -xzf CareQueue-Linux-Setup-0.5.0.tar.gz \
   -C carequeue-installer
 
 cd carequeue-installer
@@ -841,7 +843,11 @@ sudo journalctl \
 
 A migration failure should be investigated rather than worked around by deleting migration records or manually altering the production schema.
 
-The current workflow does not provide automatic rollback to the previous application release.
+Before application replacement, a supported upgrade preserves recovery material for a possible failed-upgrade rollback. This includes a verified encrypted pre-upgrade database backup, a verified archive of the previously installed application payload, its SHA256 checksum, version information, and an upgrade recovery record.
+
+If the upgrade fails after those recovery assets are created, the recovery record is marked `failed` and may be used by rollback mode.
+
+Do not delete the preserved recovery record, pre-upgrade database backup, or application archive until the failed upgrade has been investigated and rollback is no longer required.
 
 ## Repair
 
@@ -888,24 +894,141 @@ Do not manually remove preserved production data unless retention, recovery, and
 
 ## Rollback
 
-The current repository does not include an automated Linux rollback command.
+Rollback is available for a supported failed upgrade when CareQueue preserved a valid failed-upgrade recovery record and the required pre-upgrade recovery assets.
 
-A safe rollback requires review of:
+Run rollback from an extracted CareQueue release package:
 
-- The previous trusted application release
-- Existing production configuration and encryption keys
-- Database schema compatibility
-- A recent verified encrypted backup
-- Recovery procedures
-- A maintenance window
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh rollback
+```
 
-Do not run older application code against a newer database schema without confirming compatibility.
+Rollback mode requires an existing CareQueue installation and resolves the newest eligible failed-upgrade recovery record under:
 
-Do not manually overwrite the active production database as an application rollback mechanism.
+```text
+/var/lib/carequeue/recovery/upgrades
+```
 
-Database recovery should use the project's staged recovery workflow.
+Linux upgrade recovery records use versioned environment-style files named:
 
-See [Upgrades](../operations/upgrades.md) and [Backup and Recovery](../workflows/backup-and-recovery.md).
+```text
+upgrade-*.env
+```
+
+An eligible record must have:
+
+```text
+CAREQUEUE_UPGRADE_STATUS=failed
+```
+
+and must reference the required recovery assets.
+
+The rollback resolver validates:
+
+- The failed recovery record
+- The pre-upgrade encrypted database backup
+- The preserved previous application archive
+- The recorded SHA256 checksum for that application archive
+
+If the required assets are missing, empty, malformed, or fail checksum verification, rollback stops rather than continuing with an unverified recovery state.
+
+### Rollback Sequence
+
+The packaged rollback workflow performs the following high-level sequence:
+
+1. Select the newest eligible failed-upgrade recovery record.
+2. Verify the preserved application archive and its SHA256 checksum.
+3. Stage and validate the previous application payload.
+4. Preserve the failed incoming application before replacing it.
+5. Record the failed application recovery asset.
+6. Stop CareQueue services before application replacement.
+7. Replace the failed application with the staged previous application.
+8. Restore the previous systemd service definitions and reload systemd.
+9. Stage the verified pre-upgrade encrypted database backup.
+10. Record the durable `rollback_staged` recovery state.
+11. Stop `carequeue-api.service` before database activation.
+12. Activate the staged pre-upgrade database using the installed recovery tooling.
+13. Record the durable `rollback_activated` recovery state.
+14. Start `carequeue-api.service`.
+15. Start `carequeue-caddy.service`.
+16. Restore and enable `carequeue-backup.timer`.
+17. Validate that the API, Caddy, and backup timer are active.
+18. Validate application health and readiness.
+19. Restore the previous installed-version metadata.
+20. Mark the recovery record `rollback_completed`.
+21. Remove temporary rollback application staging directories.
+
+A successful rollback does not simply replace application files. It restores the previous application and pre-upgrade database together, restores service definitions, brings the expected services back online, and validates the recovered deployment before recording completion.
+
+### Durable Rollback States
+
+The recovery record may move through rollback-specific states including:
+
+```text
+rollback_staged
+rollback_activated
+rollback_completed
+```
+
+The installer may also record a more specific application-restoration state when it must restore the failed incoming application after an application replacement failure.
+
+These states are intended to preserve where recovery stopped. Do not manually rewrite them to force a later recovery step.
+
+### If Rollback Fails
+
+A rollback failure after database activation is materially different from a failure before activation.
+
+If database activation does not complete successfully, the API remains stopped for safety and the installer reports the recovery failure.
+
+If the database has already been activated but later service or health validation fails, do not assume rollback completed merely because the previous database is active. Preserve the recovery record and installer log and investigate the current service and database state before attempting another recovery operation.
+
+Review:
+
+```text
+/var/log/carequeue/installer/
+/var/lib/carequeue/recovery/upgrades
+/var/lib/carequeue/backups
+/var/lib/carequeue/restores
+```
+
+Do not delete recovery records, failed-application preservation data, pre-upgrade backups, or application archives while the rollback state is under investigation.
+
+### Validate a Completed Rollback
+
+After rollback reports success, confirm:
+
+```bash
+sudo systemctl status carequeue-api.service
+```
+
+```bash
+sudo systemctl status carequeue-caddy.service
+```
+
+```bash
+sudo systemctl status carequeue-backup.timer
+```
+
+Then confirm application health:
+
+```bash
+curl   --fail   --silent   --show-error   https://carequeue.local/api/health/live
+```
+
+```bash
+curl   --fail   --silent   --show-error   https://carequeue.local/api/health/ready
+```
+
+Also verify:
+
+- The expected previous CareQueue version is reported.
+- Login succeeds.
+- Governance state remains available.
+- A representative authorization workflow can access the restored data.
+- Encrypted backup functionality remains available.
+
+Use synthetic data for rollback validation whenever possible.
+
+See [Upgrades](../operations/upgrades.md), [Backup and Recovery](../workflows/backup-and-recovery.md), and [Health Checks](../operations/health-checks.md).
 
 ## Troubleshooting
 
@@ -923,9 +1046,15 @@ or:
 sudo bash deployment/linux/installer/invoke-install.sh repair
 ```
 
+If a supported upgrade failed and a valid failed-upgrade recovery record exists, rollback may also be appropriate:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh rollback
+```
+
 `install` mode intentionally refuses to overwrite an existing detected installation.
 
-### Upgrade or repair says CareQueue is not installed
+### Upgrade, repair, or rollback says CareQueue is not installed
 
 The installer considers CareQueue installed when both of these exist:
 
@@ -935,6 +1064,42 @@ The installer considers CareQueue installed when both of these exist:
 ```
 
 Review whether the installation is incomplete or whether nondefault paths were used.
+
+### Rollback says no failed upgrade recovery record was found
+
+Rollback only operates on an eligible failed-upgrade recovery record.
+
+Review:
+
+```bash
+sudo find   /var/lib/carequeue/recovery/upgrades   -maxdepth 1   -type f   -name 'upgrade-*.env'   -printf '%TY-%Tm-%Td %TH:%TM:%TS %s %p\n'
+```
+
+Do not create or edit a recovery record manually just to make rollback proceed.
+
+If an upgrade failed but no eligible recovery record exists, preserve the current installation, logs, backups, and recovery directories before taking additional state-changing action.
+
+### Rollback archive checksum verification fails
+
+Do not bypass checksum validation.
+
+Preserve the failed recovery record and referenced application archive. A checksum mismatch means the preserved application archive does not match the recovery metadata and should not be activated without investigation.
+
+### Rollback reaches `rollback_activated` but not `rollback_completed`
+
+Treat this as an incomplete recovery state.
+
+Review:
+
+```bash
+sudo systemctl status carequeue-api.service
+sudo systemctl status carequeue-caddy.service
+sudo systemctl status carequeue-backup.timer
+```
+
+Then review the newest installer log and relevant service journals.
+
+Do not mark the recovery record complete manually.
 
 ### CareQueue API service is not running
 
@@ -1090,6 +1255,8 @@ Before using real sensitive data, confirm:
 - Automatic encrypted backups are enabled.
 - Recent backup files exist and are nonempty.
 - Backup restore testing has been performed.
+- Failed-upgrade recovery assets are retained until upgrade validation or rollback is complete.
+- Rollback procedures have been tested on the target operating-system family before relying on them for production recovery.
 - Off-host backup policy is documented when required.
 - Firewall and network exposure have been reviewed.
 - The `carequeue` service account has only the access it requires.
@@ -1106,11 +1273,10 @@ Before using real sensitive data, confirm:
 
 The primary remaining Linux deployment work includes:
 
-- Automated rollback to a previous trusted application release
 - Broader tested distribution and operating-system coverage
 - Additional automated release-package smoke testing
 - Expanded disaster-recovery activation testing and documentation
-- Validation of reboot, interrupted-upgrade, and service-failure scenarios across supported systems
+- Validation of reboot, interrupted-upgrade, rollback-interruption, and service-failure scenarios across supported systems
 - Continued hardening and documentation of private certificate distribution and lifecycle management
 - Better support for deployments that use an application hostname other than the packaged `carequeue.local` model
 
@@ -1127,6 +1293,7 @@ Useful Linux deployment screenshots may include:
 - `systemctl status carequeue-backup.timer`
 - Successful HTTPS health response
 - Successful backup result
+- Successful rollback completion using synthetic recovery data
 - CareQueue login page over trusted HTTPS
 - Governance attestation screen using synthetic organization information
 

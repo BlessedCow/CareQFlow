@@ -545,9 +545,9 @@ Deployment contributions must:
 - Preserve production configuration and encryption keys during ordinary upgrade or repair
 - Preserve safe defaults
 
-Windows installer changes should be tested through the packaged installer when the change affects user-facing installation, upgrade, repair, uninstall, service startup, post-install health checks, first-time Admin setup, governance flow, or ProgramData preservation.
+Windows installer changes should be tested through the packaged installer when the change affects user-facing installation, upgrade, repair, rollback, uninstall, service startup, post-install health checks, first-time Admin setup, governance flow, recovery behavior, or ProgramData preservation.
 
-Linux deployment changes should be tested from a newly built release archive when the change affects installation, upgrade, repair, uninstall, systemd services, Caddy, certificate trust, first-time Admin setup, governance flow, or persistent data preservation.
+Linux deployment changes should be tested from a newly built release archive when the change affects installation, upgrade, repair, rollback, uninstall, systemd services, Caddy, certificate trust, first-time Admin setup, governance flow, recovery behavior, or persistent data preservation.
 
 ### Windows PowerShell
 
@@ -644,6 +644,7 @@ At minimum, confirm the relevant modes for the affected platform:
 - Install
 - Upgrade
 - Repair
+- Rollback
 - Uninstall
 
 Also confirm:
@@ -654,6 +655,8 @@ Also confirm:
 - First-time Admin setup when applicable
 - Governance setup when applicable
 - Data and configuration preservation
+- Pre-upgrade recovery asset creation when upgrade behavior changes
+- Rollback recovery and post-rollback health validation when rollback behavior changes
 - Backup scheduling
 - Reboot persistence when service startup behavior changes
 
@@ -740,6 +743,7 @@ Update documentation whenever a change affects:
 - Restore procedures
 - Testing commands
 - Project limitations
+- Licensing or distribution terms
 - Repository layout
 
 Documentation commands must match the actual repository structure.
@@ -871,6 +875,28 @@ SECURITY.md
 
 for additional reporting guidance.
 
-## License
+## Licensing and Contributions
 
-By contributing to CareQueue, you agree that your contributions will be licensed under the license included in this repository.
+CareQueue uses version-based licensing.
+
+CareQueue versions `0.4.x` and earlier were released under the MIT License. CareQueue version `0.5.0` and later versions expressly released under the current terms use the Business Source License 1.1.
+
+See [LICENSE](LICENSE) for the authoritative licensing notice and [LICENSES/](LICENSES/) for the applicable license texts.
+
+### Contribution Licensing
+
+Unless separate written contributor terms apply, contributions accepted into a Business Source License release are distributed as part of CareQueue under the license applicable to that release.
+
+Submitting a contribution does not by itself transfer ownership of the contributor's copyright.
+
+CareQueue may require a separate Contributor License Agreement or other contributor terms before accepting substantive source-code contributions. Such terms may be required to preserve the project's ability to distribute, commercially license, relicense, and transfer CareQueue while respecting contributor ownership.
+
+Until a contributor agreement process is published, maintainers may decline substantive external source-code contributions that would create unclear copyright or relicensing rights.
+
+Documentation corrections, issue reports, security reports, feature suggestions, and other contributions that do not introduce independently copyrightable source code may be handled separately as appropriate.
+
+Do not submit code or other material that you do not have the legal right to contribute.
+
+By submitting material, you represent that you have the right to provide it and that doing so does not knowingly violate another party's copyright, license terms, confidentiality obligations, or other rights.
+
+Commercial production licensing is separate from contribution licensing. See [LICENSE](LICENSE) for the current CareQueue licensing model.

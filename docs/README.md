@@ -1,6 +1,6 @@
 # CareQueue Documentation
 
-This directory contains CareQueue’s detailed deployment, operations, administration, workflow, development, and troubleshooting documentation.
+This directory contains CareQueue’s detailed deployment, operations, administration, workflow, development, security, licensing, and troubleshooting documentation.
 
 The root-level documents provide the project overview:
 
@@ -9,6 +9,7 @@ README.md
 ARCHITECTURE.md
 SECURITY.md
 ROADMAP.md
+LICENSE
 ```
 
 The files under `docs/` provide task-specific guidance.
@@ -32,6 +33,7 @@ Use it for:
 - Production overview
 - Testing summary
 - Security summary
+- Licensing summary
 
 ### Architecture
 
@@ -110,6 +112,37 @@ Use it for:
 - Longer-term plans
 - Known limitations
 
+### Licensing
+
+See:
+
+```text
+licensing.md
+```
+
+Use it for:
+
+- Historical MIT releases
+- Business Source License 1.1 releases
+- Non-production use
+- Production-use requirements
+- Commercial licensing
+- Source availability and auditing
+- Change Dates
+- Contribution licensing
+
+The authoritative licensing notice is:
+
+```text
+../LICENSE
+```
+
+The applicable license texts are stored under:
+
+```text
+../LICENSES/
+```
+
 ## Deployment
 
 ### Windows
@@ -123,7 +156,7 @@ deployment/windows.md
 Use it for:
 
 - Packaged Windows installer flow
-- Install, Upgrade, Repair, and Uninstall modes
+- Install, Upgrade, Repair, Rollback, and Uninstall modes
 - First-time Admin setup GUI
 - Runtime and application paths
 - Private hostname setup
@@ -132,11 +165,16 @@ Use it for:
 - Scheduled backups
 - Service management
 - Runtime data preservation
+- Failed-upgrade recovery records
+- Pre-upgrade application and database recovery assets
+- Rollback validation and recovery completion
 - Removal and reinstallation
 
 This is the primary production deployment guide.
 
 The packaged Windows installer is intended to be the normal private Windows installation path. The lower-level PowerShell scripts remain useful for development, troubleshooting, and direct validation of installer modes.
+
+Rollback is offered by the Windows installer only when an eligible failed-upgrade recovery record is available. The rollback workflow validates required recovery assets before restoring the previous application and database state.
 
 ### Linux
 
@@ -149,7 +187,7 @@ deployment/linux.md
 Use it for:
 
 - Versioned Linux release packages
-- Install, Upgrade, Repair, and Uninstall modes
+- Install, Upgrade, Repair, Rollback, and Uninstall modes
 - Dedicated service account
 - Application, configuration, data, and log paths
 - Production environment and encryption-key setup
@@ -158,6 +196,7 @@ Use it for:
 - Encrypted backup service and timer
 - First-time Admin setup
 - Governance setup after first login
+- Failed-upgrade recovery and rollback workflow
 - Current Linux limitations
 
 CareQueue includes a packaged Linux installation workflow for supported Debian-based systems. Linux deployment remains more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
@@ -185,7 +224,10 @@ Use it for:
 - Backend validation
 - Permission hardening
 - Failure handling
-- Rollback planning
+- Pre-upgrade recovery asset creation
+- Failed-upgrade recovery records
+- Rollback activation
+- Post-rollback health validation
 
 ### Health Checks
 
@@ -339,6 +381,9 @@ Use it for:
 - Recovery activation
 - Rollback databases
 - Safety backups
+- Pre-upgrade backups
+- Upgrade recovery assets
+- Failed-upgrade rollback
 - Recovery drills
 - Key-loss risks
 
@@ -405,6 +450,7 @@ Use it to locate the authoritative guide for:
 - Backup and recovery problems
 - Installer failures
 - Upgrade failures
+- Rollback failures
 - Repair failures
 - Uninstall or reinstall issues
 - PDF intake issues
@@ -419,6 +465,7 @@ The troubleshooting page is a symptom-based index. It intentionally links to the
 ```text
 docs/
 ├── README.md
+├── licensing.md
 ├── administration/
 │   ├── audit-log.md
 │   ├── registered-options.md
@@ -496,6 +543,7 @@ Documentation must not contain:
 - Production environment contents
 - Real database contents
 - Real intake documents
+- Commercial-license credentials or private contract information
 
 Use clearly synthetic examples.
 
@@ -508,6 +556,26 @@ Screenshots are stored under:
 ```text
 docs/images/
 ```
+
+## Licensing Documentation
+
+Licensing statements in public documentation must remain consistent with:
+
+```text
+LICENSE
+LICENSES/
+docs/licensing.md
+```
+
+CareQueue versions `0.4.x` and earlier were released under the MIT License.
+
+CareQueue version `0.5.0` and later versions expressly released under the current terms use the Business Source License 1.1 until the applicable Change Date.
+
+Current BSL releases are source-available and should not be described as Open Source before the applicable Change Date.
+
+Do not imply that public source availability grants unrestricted production use.
+
+Commercial licensing terms should not be invented or inferred in documentation. Only rights actually granted by the applicable public license or a separate commercial agreement should be described as granted.
 
 ## Updating Documentation
 
@@ -523,14 +591,16 @@ Update documentation when a change affects:
 - Authorization workflows
 - Backup behavior
 - Recovery behavior
+- Upgrade or rollback behavior
 - PDF intake behavior
 - Installer behavior
 - Release packaging
+- Licensing or distribution terms
 - Testing commands
 - Known limitations
 - Operator responsibilities
 
-Do not leave obsolete commands, filenames, paths, or screenshots in the repository.
+Do not leave obsolete commands, filenames, paths, screenshots, licensing statements, or deployment procedures in the repository.
 
 ## Review Checklist
 
@@ -541,6 +611,9 @@ Before merging documentation changes:
 - Commands use current script names
 - Environment-variable names are correct
 - Internal links resolve
+- Licensing statements match the authoritative repository license
+- Version-specific license boundaries are stated accurately
+- Current BSL releases are not incorrectly described as Open Source
 - Security claims are limited and accurate
 - No HIPAA compliance claim is made
 - No real PHI or PII is present
@@ -574,7 +647,16 @@ npm run build
 
 Deployment documentation should also be validated against the relevant manual workflow.
 
-## Reference point
+Licensing documentation changes should be reviewed against:
+
+```text
+LICENSE
+LICENSES/BUSL-1.1.txt
+LICENSES/MIT.txt
+docs/licensing.md
+```
+
+## Reference Point
 
 The current repository files remain authoritative.
 
@@ -585,4 +667,6 @@ When documentation and code disagree:
 3. Update the documentation or implementation.
 4. Add tests when the mismatch reflects missing coverage.
 
-Do not rely on old screenshots, copied commands, or previous release notes without checking the current repository.
+When licensing documentation and the applicable license terms disagree, the applicable license terms control.
+
+Do not rely on old screenshots, copied commands, previous release notes, or historical licensing summaries without checking the current repository.

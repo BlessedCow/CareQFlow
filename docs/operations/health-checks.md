@@ -853,7 +853,7 @@ After a fresh packaged installation:
 17. Create or run a manual encrypted backup.
 18. Verify the backup through the supported verification workflow.
 
-For release validation, also test MFA, remembered-device behavior, session inactivity, and reboot persistence when those controls are part of the release scope.
+For release validation, also test MFA, remembered-device behavior, session inactivity, rollback behavior, and reboot persistence when those controls are part of the release scope.
 
 ## Post-Upgrade Smoke Test
 
@@ -891,6 +891,43 @@ After repair:
 10. Sign out.
 
 Repair should restore packaged application and service components without replacing production data or encryption keys.
+
+## Post-Rollback Smoke Test
+
+After a supported failed-upgrade rollback:
+
+1. Confirm the required CareQueue services are running.
+2. Confirm the backup schedule remains enabled.
+3. Check HTTPS liveness.
+4. Check HTTPS readiness.
+5. Open the frontend.
+6. Sign in with an approved account.
+7. Confirm the Admin System page reports the expected previous CareQueue version.
+8. Confirm existing authorization data is available.
+9. Confirm governance status and governance history remain available.
+10. Confirm representative protected pages load.
+11. Confirm encrypted backup functionality remains available.
+12. Review the installer recovery record and confirm it reached `rollback_completed`.
+13. Review installer and service logs for unexpected recovery errors.
+
+On Windows, confirm:
+
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy |
+    Select-Object Name, Status, StartType
+```
+
+On Linux, confirm:
+
+```bash
+sudo systemctl is-active carequeue-api.service
+sudo systemctl is-active carequeue-caddy.service
+sudo systemctl is-active carequeue-backup.timer
+```
+
+A rollback that reaches `rollback_activated` but not `rollback_completed` should be treated as an incomplete recovery state even if the previous database is already active.
+
+Do not manually change the recovery status to make validation appear complete.
 
 ## Post-Reboot Smoke Test
 

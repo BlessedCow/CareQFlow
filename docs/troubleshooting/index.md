@@ -25,7 +25,7 @@ Governance attestation
 Login, MFA, or session
 Database
 Backup or recovery
-Upgrade, repair, or uninstall
+Upgrade, repair, rollback, or uninstall
 PDF intake
 Registered options
 Audit log
@@ -36,13 +36,13 @@ Development and production environments use separate databases, environment file
 
 Do not replace a production database with a development database to resolve a login or workflow issue.
 
-## Windows Installer Does Not Show Upgrade, Repair, or Uninstall
+## Windows Installer Does Not Show Upgrade, Repair, Rollback, or Uninstall
 
 Symptoms:
 
 - The Windows installer shows only the normal Install flow
 - The operation selection page is missing
-- Upgrade, Repair, and Uninstall choices do not appear
+- Upgrade, Repair, Rollback, and Uninstall choices do not appear as expected
 
 Use:
 
@@ -53,11 +53,11 @@ docs/operations/upgrades.md
 
 The operation selection page appears only when CareQueue is already installed and the installer can detect the installed application files.
 
-A clean machine or a machine after uninstall should show only the normal Install flow. After a successful install, running the installer again should show Upgrade, Repair, and Uninstall options.
+A clean machine or a machine after uninstall should show only the normal Install flow. After a successful install, running the installer again should show Upgrade, Repair, and Uninstall. Rollback appears only when an eligible failed-upgrade recovery record exists.
 
 Do not treat the missing operation page as a failure until the installed application state has been confirmed.
 
-## Windows Installer Fails During Install, Upgrade, Repair, or Uninstall
+## Windows Installer Fails During Install, Upgrade, Repair, Rollback, or Uninstall
 
 Symptoms:
 
@@ -87,6 +87,7 @@ The installer mode matters. Confirm whether the log says:
 Mode: Install
 Mode: Upgrade
 Mode: Repair
+Mode: Rollback
 Mode: Uninstall
 ```
 
@@ -529,7 +530,7 @@ Stop normal troubleshooting and preserve the current state when:
 - A safety backup cannot be verified.
 - Required encryption keys may be unavailable.
 
-## Upgrade, Repair, or Uninstall Problems
+## Upgrade, Repair, Rollback, or Uninstall Problems
 
 Symptoms:
 
@@ -559,7 +560,45 @@ Do not delete migration records or manually alter the production schema to force
 
 If an upgrade cannot be completed safely, preserve the current database, verified pre-upgrade backup, encryption keys, installer logs, and application release artifacts before beginning recovery.
 
-A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older application release. Application rollback and database recovery must therefore be planned separately.
+A database migrated by a newer CareQueue release is not automatically guaranteed to be compatible with an older application release. Use the supported failed-upgrade rollback workflow when eligible because it restores the preserved previous application together with the verified pre-upgrade database backup.
+
+### Rollback option is unavailable
+
+Rollback is intentionally unavailable when there is no eligible failed-upgrade recovery record.
+
+Windows recovery records are stored under:
+
+```text
+C:\ProgramData\CareQueue\Recovery\Upgrades
+```
+
+Linux recovery records are stored under:
+
+```text
+/var/lib/carequeue/recovery/upgrades
+```
+
+Do not create or edit recovery records manually to force rollback to appear.
+
+If a supported upgrade failed but no eligible recovery record exists, preserve the current installation, logs, backups, encryption keys, and recovery directories before taking additional state-changing action.
+
+### Rollback fails recovery-asset or checksum validation
+
+Do not bypass recovery validation.
+
+A missing, empty, malformed, or checksum-mismatched recovery asset means the recorded rollback state cannot be trusted as-is.
+
+Preserve the recovery record and referenced assets and review the applicable deployment and upgrade documentation.
+
+### Recovery record reaches `rollback_activated` but not `rollback_completed`
+
+Treat this as an incomplete recovery incident.
+
+The pre-upgrade database may already be active even though service startup, health validation, installed-version restoration, or final completion did not succeed.
+
+Confirm current service state and review the newest installer log before attempting another state-changing operation.
+
+Do not manually mark the recovery record complete.
 
 ### Windows
 
@@ -602,10 +641,10 @@ docs/operations/upgrades.md
 Use the controlled release-version helper:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.3.0
+.\deployment\bump-version.ps1 -Version 0.5.0
 ```
 
-Replace `0.3.0` with the intended version.
+Replace `0.5.0` with the intended version when preparing a later release.
 
 Review the resulting changes:
 

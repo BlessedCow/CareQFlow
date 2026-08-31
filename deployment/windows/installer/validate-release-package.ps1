@@ -99,10 +99,10 @@ function Convert-ToRelativePath {
 $repositoryRoot = (
     Resolve-Path `
         -LiteralPath (
-            Join-Path `
-                $PSScriptRoot `
-                "..\..\.."
-        )
+        Join-Path `
+            $PSScriptRoot `
+            "..\..\.."
+    )
 ).Path
 
 if (-not $PayloadDirectory) {
@@ -114,7 +114,7 @@ if (-not $PayloadDirectory) {
 if (-not $InstallerPath) {
     $InstallerPath = Join-Path `
         $repositoryRoot `
-        "build\windows\installer\CareQueue-Setup-0.4.0.exe"
+        "build\windows\installer\CareQueue-Setup-0.5.0.exe"
 }
 
 $resolvedPayloadDirectory = (
@@ -149,20 +149,24 @@ $requiredPayloadDirectories = @(
     "vendor/caddy",
     "vendor/winsw",
     "dependencies/wheelhouse",
-    "deployment/windows"
+    "deployment/windows",
+    "LICENSES"
 )
 
 foreach ($requiredPayloadDirectory in $requiredPayloadDirectories) {
     Assert-DirectoryExists `
         -Path (
-            Join-Path `
-                $resolvedPayloadDirectory `
-                $requiredPayloadDirectory
-        ) `
+        Join-Path `
+            $resolvedPayloadDirectory `
+            $requiredPayloadDirectory
+    ) `
         -Description "payload directory"
 }
 
 $requiredPayloadFiles = @(
+    "LICENSE",
+    "LICENSES/BUSL-1.1.txt",
+    "LICENSES/MIT.txt",
     "backend/requirements.txt",
     "frontend/package.json",
     "frontend/package-lock.json",
@@ -183,10 +187,10 @@ $requiredPayloadFiles = @(
 foreach ($requiredPayloadFile in $requiredPayloadFiles) {
     Assert-FileExists `
         -Path (
-            Join-Path `
-                $resolvedPayloadDirectory `
-                $requiredPayloadFile
-        ) `
+        Join-Path `
+            $resolvedPayloadDirectory `
+            $requiredPayloadFile
+    ) `
         -Description "payload file"
 }
 
@@ -201,11 +205,14 @@ $manifestContent = Get-Content `
     -Raw
 
 foreach ($requiredManifestEntry in @(
-    "backend/requirements.txt",
-    "frontend/dist/index.html",
-    "payload.json",
-    "vendor/versions.json"
-)) {
+        "LICENSE",
+        "LICENSES/BUSL-1.1.txt",
+        "LICENSES/MIT.txt",
+        "backend/requirements.txt",
+        "frontend/dist/index.html",
+        "payload.json",
+        "vendor/versions.json"
+    )) {
     if ($manifestContent -notmatch [regex]::Escape($requiredManifestEntry)) {
         throw ("Manifest does not include {0}." -f $requiredManifestEntry)
     }
@@ -272,6 +279,24 @@ Write-Status "Checking installed Windows services..."
 Assert-ServiceRunning -Name "CareQueueApi"
 Assert-ServiceRunning -Name "CareQueueCaddy"
 
+Write-Status "Checking installed licensing material..."
+
+$installedApplicationDirectory = "C:\Program Files\CareQueue"
+
+foreach ($requiredInstalledLicenseFile in @(
+        "LICENSE",
+        "LICENSES\BUSL-1.1.txt",
+        "LICENSES\MIT.txt"
+    )) {
+    Assert-FileExists `
+        -Path (
+        Join-Path `
+            $installedApplicationDirectory `
+            $requiredInstalledLicenseFile
+    ) `
+        -Description "installed licensing file"
+}
+
 Write-Status "Checking API health endpoint..."
 
 $applicationUri = [Uri]$ApplicationUrl
@@ -281,8 +306,8 @@ $healthResponse = Invoke-RestMethod `
     -Method Get `
     -Uri $ApiHealthUrl `
     -Headers @{
-        Host = $trustedHostHeader
-    } `
+    Host = $trustedHostHeader
+} `
     -TimeoutSec 10
 
 if ($healthResponse.status -ne "ok") {
@@ -324,10 +349,10 @@ if ($contentSecurityPolicy -notmatch "script-src 'self' 'unsafe-inline'") {
 }
 
 foreach ($requiredHeader in @(
-    "X-Content-Type-Options",
-    "X-Frame-Options",
-    "Referrer-Policy"
-)) {
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Referrer-Policy"
+    )) {
     if (-not $frontendResponse.Headers[$requiredHeader]) {
         throw ("Frontend response is missing {0}." -f $requiredHeader)
     }
@@ -339,10 +364,10 @@ $installedCaddyfile = "C:\Program Files\CareQueue\deployment\windows\Caddyfile"
 if (
     (Test-Path -LiteralPath $installedCaddyExecutable -PathType Leaf) `
         -and (
-            Test-Path `
-                -LiteralPath $installedCaddyfile `
-                -PathType Leaf
-        )
+        Test-Path `
+            -LiteralPath $installedCaddyfile `
+            -PathType Leaf
+    )
 ) {
     Write-Status "Validating installed Caddy configuration..."
 

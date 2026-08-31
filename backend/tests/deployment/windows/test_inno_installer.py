@@ -102,3 +102,33 @@ def test_inno_installer_does_not_offer_admin_setup_after_rollback():
 
     assert "(OperationMode <> 'Uninstall')" in function
     assert "(OperationMode <> 'Rollback')" in function
+
+
+def test_inno_installer_uses_packaged_license_notice():
+    content = _read_installer()
+
+    assert "LicenseFile=..\\..\\..\\build\\windows\\payload\\LICENSE" in content
+
+
+def test_inno_installer_requires_license_for_install_and_upgrade_only():
+    content = _read_installer()
+
+    function_start = content.index("function ShouldSkipPage(PageID: Integer): Boolean;")
+
+    next_function_index = content.find(
+        "\nfunction ",
+        function_start + 1,
+    )
+
+    if next_function_index == -1:
+        function = content[function_start:]
+    else:
+        function = content[function_start:next_function_index]
+
+    assert "PageID = wpLicense" in function
+    assert "(OperationMode = 'Repair')" in function
+    assert "(OperationMode = 'Rollback')" in function
+    assert "(OperationMode = 'Uninstall')" in function
+
+    assert "(OperationMode = 'Install')" not in function
+    assert "(OperationMode = 'Upgrade')" not in function

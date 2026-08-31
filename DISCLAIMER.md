@@ -192,7 +192,7 @@ Encryption at rest also does not protect data after it has been legitimately dec
 
 ## Backup and Recovery Limitations
 
-CareQueue supports encrypted backup creation, verification, retention controls, staged recovery, and controlled recovery activation.
+CareQueue supports encrypted backup creation, verification, retention controls, staged recovery, controlled recovery activation, and assisted failed-upgrade rollback for supported packaged deployment paths.
 
 A successful backup operation does not prove that:
 
@@ -205,7 +205,11 @@ A successful backup operation does not prove that:
 
 Organizations should perform periodic backup verification and recovery exercises.
 
-Backup files, rollback databases, restored databases, and recovery staging data remain sensitive and must be protected accordingly.
+Backup files, rollback databases, restored databases, recovery staging data, failed-upgrade recovery records, preserved application archives, and failed-application recovery assets remain sensitive or operationally significant and must be protected accordingly.
+
+A successful rollback operation does not prove that every application workflow, external dependency, or operational process has been restored correctly. Post-rollback service, health, data, governance, audit, and backup validation remains required.
+
+Do not manually alter recovery records, application archive checksums, migration records, or encrypted database files to force a failed recovery operation to continue.
 
 ## Audit Log Limitations
 
@@ -288,9 +292,46 @@ Validation should include appropriate checks for:
 - Backup verification
 - Upgrade
 - Repair
+- Failed-upgrade rollback
 - Uninstall behavior
 - Reboot persistence
 - Recovery procedures
+
+## Licensing and Distribution
+
+CareQueue uses version-based licensing.
+
+CareQueue versions `0.4.x` and earlier were released under the MIT License.
+
+CareQueue version `0.5.0` and later versions expressly released under the current licensing terms use the Business Source License 1.1 until the applicable Change Date.
+
+Current BSL-licensed releases are source-available. Public availability of the source code does not by itself grant unrestricted production-use, hosting, redistribution, or commercial rights.
+
+Production use of a CareQueue version that remains under the Business Source License requires rights granted by the applicable license or a separate commercial license from the Licensor.
+
+Each BSL-licensed version has its own Change Date. Under the current CareQueue licensing parameters, the Change Date is four years after the first publicly available distribution of that specific version, and the Change License is GNU General Public License version 3 or later.
+
+Historical MIT releases retain the rights granted under the MIT License for those versions.
+
+The authoritative licensing notice is:
+
+```text
+LICENSE
+```
+
+The applicable license texts are stored under:
+
+```text
+LICENSES/
+```
+
+A plain-language overview is available at:
+
+```text
+docs/licensing.md
+```
+
+This disclaimer does not modify, expand, or replace the rights and obligations in the applicable license or a separate commercial agreement.
 
 ## Release Status
 
@@ -305,10 +346,12 @@ Release notes should be reviewed for:
 - Security-sensitive changes
 - Configuration changes
 - Upgrade requirements
+- Rollback and recovery requirements
 - Known limitations
 - Required manual validation
 - Changes to deployment behavior
 - Changes to governance requirements
+- Changes to licensing or distribution terms
 
 The CareQueue application version, governance attestation version, and governance document revision are separate values.
 

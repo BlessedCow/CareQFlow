@@ -52,10 +52,10 @@ function Invoke-CheckedCommand {
 $repositoryRoot = (
     Resolve-Path `
         -LiteralPath (
-            Join-Path `
-                $PSScriptRoot `
-                "..\..\.."
-        )
+        Join-Path `
+            $PSScriptRoot `
+            "..\..\.."
+    )
 ).Path
 
 $resolvedEmbeddedPythonArchive = (
@@ -141,6 +141,14 @@ $deploymentSourceDirectory = Join-Path `
     $repositoryRoot `
     "deployment\windows"
 
+$licenseNoticePath = Join-Path `
+    $repositoryRoot `
+    "LICENSE"
+
+$licenseTextsDirectory = Join-Path `
+    $repositoryRoot `
+    "LICENSES"
+
 $requiredSourcePaths = @(
     (Join-Path $frontendSourceDirectory "package.json"),
     (Join-Path $frontendSourceDirectory "package-lock.json"),
@@ -151,7 +159,10 @@ $requiredSourcePaths = @(
     (Join-Path $deploymentSourceDirectory "run-api.ps1"),
     (Join-Path $deploymentSourceDirectory "CareQueueApi.xml"),
     (Join-Path $deploymentSourceDirectory "CareQueueCaddy.xml"),
-    (Join-Path $deploymentSourceDirectory "Caddyfile")
+    (Join-Path $deploymentSourceDirectory "Caddyfile"),
+    $licenseNoticePath,
+    (Join-Path $licenseTextsDirectory "BUSL-1.1.txt"),
+    (Join-Path $licenseTextsDirectory "MIT.txt")
 )
 
 foreach ($requiredSourcePath in $requiredSourcePaths) {
@@ -239,6 +250,10 @@ $payloadPythonRuntimeDirectory = Join-Path `
 $payloadVendorDirectory = Join-Path `
     $resolvedOutputDirectory `
     "vendor"
+
+$payloadLicenseTextsDirectory = Join-Path `
+    $resolvedOutputDirectory `
+    "LICENSES"
 
 $payloadDependenciesDirectory = Join-Path `
     $resolvedOutputDirectory `
@@ -333,7 +348,7 @@ try {
 
             $temporarilyMovedEnvironmentFiles += (
                 [PSCustomObject]@{
-                    OriginalPath = $environmentFilePath
+                    OriginalPath  = $environmentFilePath
                     TemporaryPath = $temporaryEnvironmentFilePath
                 }
             )
@@ -352,8 +367,8 @@ try {
         -Executable $npmCommand.Source `
         -Arguments @("ci") `
         -FailureMessage (
-            "Frontend dependency installation failed."
-        )
+        "Frontend dependency installation failed."
+    )
 
     Invoke-CheckedCommand `
         -Executable $npmCommand.Source `
@@ -427,7 +442,8 @@ $payloadDirectories = @(
     $payloadWindowsDeploymentDirectory,
     $payloadPythonRuntimeDirectory,
     $payloadVendorDirectory,
-    $payloadWheelhouseDirectory
+    $payloadWheelhouseDirectory,
+    $payloadLicenseTextsDirectory
 )
 
 foreach ($payloadDirectory in $payloadDirectories) {
@@ -440,77 +456,94 @@ foreach ($payloadDirectory in $payloadDirectories) {
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $backendSourceDirectory "authstatus_api"
-    ) `
+    Join-Path $backendSourceDirectory "authstatus_api"
+) `
     -Destination $payloadBackendDirectory `
     -Recurse `
     -Force
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $backendSourceDirectory "scripts"
-    ) `
+    Join-Path $backendSourceDirectory "scripts"
+) `
     -Destination $payloadBackendDirectory `
     -Recurse `
     -Force
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $backendSourceDirectory "requirements.txt"
-    ) `
+    Join-Path $backendSourceDirectory "requirements.txt"
+) `
     -Destination $payloadBackendDirectory `
     -Force
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $frontendSourceDirectory "package.json"
-    ) `
+    Join-Path $frontendSourceDirectory "package.json"
+) `
     -Destination $payloadFrontendDirectory `
     -Force
 
 Copy-Item `
     -LiteralPath (
-        Join-Path $frontendSourceDirectory "package-lock.json"
-    ) `
+    Join-Path $frontendSourceDirectory "package-lock.json"
+) `
     -Destination $payloadFrontendDirectory `
     -Force
 
 Copy-Item `
     -Path (
-        Join-Path $frontendBuildDirectory "*"
-    ) `
+    Join-Path $frontendBuildDirectory "*"
+) `
     -Destination $payloadFrontendBuildDirectory `
     -Recurse `
     -Force
 
 Copy-Item `
     -Path (
-        Join-Path $deploymentSourceDirectory "*"
-    ) `
+    Join-Path $deploymentSourceDirectory "*"
+) `
     -Destination $payloadWindowsDeploymentDirectory `
     -Recurse `
     -Force
 
 Copy-Item `
+    -LiteralPath $licenseNoticePath `
+    -Destination (
+    Join-Path `
+        $resolvedOutputDirectory `
+        "LICENSE"
+) `
+    -Force
+
+Copy-Item `
     -Path (
-        Join-Path $pythonRuntimeBuildDirectory "*"
-    ) `
+    Join-Path $licenseTextsDirectory "*"
+) `
+    -Destination $payloadLicenseTextsDirectory `
+    -Recurse `
+    -Force
+
+Copy-Item `
+    -Path (
+    Join-Path $pythonRuntimeBuildDirectory "*"
+) `
     -Destination $payloadPythonRuntimeDirectory `
     -Recurse `
     -Force
 
 Copy-Item `
     -Path (
-        Join-Path $vendorBuildDirectory "*"
-    ) `
+    Join-Path $vendorBuildDirectory "*"
+) `
     -Destination $payloadVendorDirectory `
     -Recurse `
     -Force
 
 Copy-Item `
     -Path (
-        Join-Path $wheelhouseBuildDirectory "*"
-    ) `
+    Join-Path $wheelhouseBuildDirectory "*"
+) `
     -Destination $payloadWheelhouseDirectory `
     -Recurse `
     -Force
@@ -518,6 +551,17 @@ Copy-Item `
 Write-Status "Validating the assembled payload..."
 
 $payloadRequiredPaths = @(
+    (Join-Path $resolvedOutputDirectory "LICENSE"),
+    (
+        Join-Path `
+            $payloadLicenseTextsDirectory `
+            "BUSL-1.1.txt"
+    ),
+    (
+        Join-Path `
+            $payloadLicenseTextsDirectory `
+            "MIT.txt"
+    ),
     (Join-Path $payloadBackendDirectory "authstatus_api"),
     (Join-Path $payloadBackendDirectory "scripts"),
     (Join-Path $payloadBackendDirectory "requirements.txt"),
@@ -575,18 +619,18 @@ $payloadPythonExecutable = Join-Path `
 Invoke-CheckedCommand `
     -Executable $payloadPythonExecutable `
     -Arguments @(
-        "-c",
-        (
-            "import authstatus_api; " +
-            "import cryptography; " +
-            "import fastapi; " +
-            "import uvicorn; " +
-            "print('CareQueue payload runtime validated.')"
-        )
-    ) `
-    -FailureMessage (
-        "The assembled private runtime could not load CareQueue."
+    "-c",
+    (
+        "import authstatus_api; " +
+        "import cryptography; " +
+        "import fastapi; " +
+        "import uvicorn; " +
+        "print('CareQueue payload runtime validated.')"
     )
+) `
+    -FailureMessage (
+    "The assembled private runtime could not load CareQueue."
+)
 
 $payloadCaddyExecutable = Join-Path `
     $payloadVendorDirectory `
@@ -596,8 +640,8 @@ Invoke-CheckedCommand `
     -Executable $payloadCaddyExecutable `
     -Arguments @("version") `
     -FailureMessage (
-        "The assembled Caddy executable failed validation."
-    )
+    "The assembled Caddy executable failed validation."
+)
 
 $payloadMetadataPath = Join-Path `
     $resolvedOutputDirectory `
@@ -605,19 +649,19 @@ $payloadMetadataPath = Join-Path `
 
 $vendorMetadata = Get-Content `
     -LiteralPath (
-        Join-Path $payloadVendorDirectory "versions.json"
-    ) `
+    Join-Path $payloadVendorDirectory "versions.json"
+) `
     -Raw |
 ConvertFrom-Json
 
 $pythonVersion = (
     & $payloadPythonExecutable `
         -c (
-            "import platform, sys; " +
-            "print(f'{sys.version_info.major}." +
-            "{sys.version_info.minor}." +
-            "{sys.version_info.micro}|{platform.architecture()[0]}')"
-        )
+        "import platform, sys; " +
+        "print(f'{sys.version_info.major}." +
+        "{sys.version_info.minor}." +
+        "{sys.version_info.micro}|{platform.architecture()[0]}')"
+    )
 ).Trim()
 
 if ($LASTEXITCODE -ne 0) {
@@ -626,25 +670,27 @@ if ($LASTEXITCODE -ne 0) {
 
 $payloadMetadata = [ordered]@{
     schema_version = 1
-    created_utc = [DateTime]::UtcNow.ToString("o")
-    application = [ordered]@{
-        name = "CareQueue"
-        backend_version = "0.4.0"
+    created_utc    = [DateTime]::UtcNow.ToString("o")
+    application    = [ordered]@{
+        name            = "CareQueue"
+        backend_version = "0.5.0"
     }
-    runtime = [ordered]@{
+    runtime        = [ordered]@{
         python = $pythonVersion
     }
-    vendor = [ordered]@{
+    vendor         = [ordered]@{
         caddy = [string]$vendorMetadata.caddy.version
         winsw = [string]$vendorMetadata.winsw.version
     }
-    paths = [ordered]@{
-        frontend = "frontend/dist"
-        backend = "backend"
-        deployment = "deployment/windows"
+    paths          = [ordered]@{
+        frontend       = "frontend/dist"
+        backend        = "backend"
+        deployment     = "deployment/windows"
         python_runtime = "runtime/python"
-        vendor = "vendor"
-        wheelhouse = "dependencies/wheelhouse"
+        vendor         = "vendor"
+        wheelhouse     = "dependencies/wheelhouse"
+        license_notice = "LICENSE"
+        license_texts  = "LICENSES"
     }
 }
 

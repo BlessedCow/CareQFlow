@@ -512,10 +512,10 @@ Compile the installer:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQueue `0.3.0`, run:
+For CareQueue `0.5.0`, run:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.3.0.exe
+.\build\windows\installer\CareQueue-Setup-0.5.0.exe
 ```
 
 Validate the package:
@@ -535,16 +535,29 @@ npm --prefix frontend run build
 Build the Linux release archive:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.3.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
 ```
 
-For CareQueue `0.3.0`, the resulting archive is:
+For CareQueue `0.5.0`, the resulting archive is:
 
 ```text
-build\linux\installer\CareQueue-Linux-Setup-0.3.0.tar.gz
+build\linux\installer\CareQueue-Linux-Setup-0.5.0.tar.gz
 ```
 
 Local package creation is not sufficient release validation. Test the exact release artifact on clean supported virtual machines before publishing it.
+
+When deployment changes affect Upgrade or Rollback behavior, release validation should also cover:
+
+- Pre-upgrade recovery asset creation
+- Failed-upgrade recovery record creation
+- Rollback availability only after an eligible failed upgrade
+- Previous-application archive checksum validation
+- Restoration of the previous application and pre-upgrade database together
+- Required service restart after rollback
+- Post-rollback liveness and readiness
+- Restoration of the expected previous installed-version metadata
+
+Use synthetic data for failed-upgrade and rollback testing.
 
 ## Optional Security Checks
 
@@ -568,14 +581,26 @@ Review findings before changing dependencies.
 When preparing a new release, use the repository version helper:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.3.0
+.\deployment\bump-version.ps1 -Version 0.5.0
 ```
 
-Replace `0.3.0` with the intended application release version.
+Replace `0.5.0` with the intended application release version when preparing a later release.
 
 The helper updates controlled backend and deployment version declarations without blindly replacing matching strings in tests, dependency versions, documentation examples, or historical governance fixtures.
 
 The governance attestation version and governance document revision are independent of the CareQueue application version. Do not change either value only because the application release number changes.
+
+Application release licensing is also version-sensitive. CareQueue `0.4.x` and earlier releases retain their historical MIT terms, while CareQueue `0.5.0` and later versions expressly released under the current licensing model use Business Source License 1.1 until the applicable Change Date.
+
+Before publishing a release, review:
+
+```text
+LICENSE
+LICENSES/
+docs/licensing.md
+```
+
+Do not describe a current BSL release as Open Source before its applicable Change Date.
 
 When governance text or required acknowledgments change, update the governance metadata intentionally. A local acceptance is considered current only when both its attestation version and document revision match the values required by the running application.
 

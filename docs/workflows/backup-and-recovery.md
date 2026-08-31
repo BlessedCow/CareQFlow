@@ -1,939 +1,1369 @@
-# Backup and Recovery
+# Upgrades, Repair, Rollback, and Uninstall
 
-CareQueue creates encrypted database backups and uses staged recovery so the active database is not replaced until the selected backup has been decrypted, validated, staged, and reviewed.
+This guide covers upgrading, repairing, rolling back failed supported upgrades, and uninstalling packaged CareQueue installations on Windows and Linux.
 
-The central rule is:
+CareQueue separates installed application files from production configuration and runtime data so packaged upgrades and repairs can replace application components without intentionally replacing the active database, encryption keys, backups, or other persistent data.
 
-> Never replace the active database until the selected backup has been decrypted, validated, staged, and reviewed.
-
-Backup creation, restore staging, recovery staging, and recovery activation are separate operations.
-
-## Scope
-
-This guide covers encrypted database backups, restore validation, staged recovery, recovery activation, and post-recovery checks for packaged Windows and Linux deployments.
-
-It does not replace the deployment guides. For installation, upgrade, repair, and uninstall behavior, see:
+For first-time installation, see:
 
 ```text
 docs/deployment/windows.md
 docs/deployment/linux.md
 ```
 
-## Protection Layers
-
-CareQueue uses separate keys:
-
-```env
-AUTHSTATUS_ENCRYPTION_KEY=
-AUTHSTATUS_SQLCIPHER_KEY=
-AUTHSTATUS_BACKUP_ENCRYPTION_KEY=
-```
-
-Purpose:
-
-- `AUTHSTATUS_ENCRYPTION_KEY` protects selected sensitive field values.
-- `AUTHSTATUS_SQLCIPHER_KEY` opens the encrypted database file.
-- `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` encrypts and decrypts `.db.enc` backup files.
-
-Generate and store these keys independently.
-
-A backup may decrypt successfully and still be unusable if the SQLCipher key or field-level encryption key is wrong.
-
-## Key Custody
-
-Keep recoverable copies of all required keys in an approved secret-management process.
-
-Do not store keys:
-
-- In source control
-- Beside backups
-- In screenshots
-- In scheduled-task arguments
-- In service XML
-- In ordinary email or chat
-- Only on the database host
-
-Document ownership, approved retrieval, rotation, and recovery testing.
-
-For the full lifecycle procedure for field-level, SQLCipher, and backup encryption keys, see [Encryption Key Lifecycle](../security/encryption-key-lifecycle.md).
-
-## Standard Paths
-
-### Windows production
+For backup and recovery procedures, see:
 
 ```text
-Application files:
+docs/workflows/backup-and-recovery.md
+```
+
+For service validation and smoke tests, see:
+
+```text
+docs/operations/health-checks.md
+```
+
+## Supported Operations
+
+The packaged deployment workflows support:
+
+```text
+Install
+Upgrade
+Repair
+Rollback
+Uninstall
+```
+
+### Install
+
+Use Install when CareQueue is not already installed.
+
+A new installation creates the required application, configuration, data, service, and logging structure.
+
+### Upgrade
+
+Use Upgrade when replacing an existing installation with a newer reviewed CareQueue release.
+
+Upgrade preserves production configuration and runtime data while replacing application and packaged runtime components.
+
+### Repair
+
+Use Repair when the installed release is damaged, incomplete, or needs its packaged application files and service definitions restored.
+
+Repair preserves production configuration and runtime data.
+
+### Rollback
+
+Use Rollback after a failed supported upgrade when CareQueue has preserved the required pre-upgrade recovery assets.
+
+Rollback restores the previous packaged application, stages and activates the verified pre-upgrade encrypted database backup, restores the previous installed version metadata, restores the packaged service definitions, validates required services and application health, and retains recovery evidence for review.
+
+Rollback is a recovery operation and should be performed only by an administrator who understands the failed upgrade state and has reviewed the preserved recovery record.
+
+### Uninstall
+
+Use Uninstall to remove the installed CareQueue application and its operating-system services while intentionally preserving production configuration, data, and logs.
+
+A normal uninstall is not secure data destruction.
+
+## Application Version and Governance Revision
+
+CareQueue tracks three separate version values:
+
+```text
+CareQueue application version: 0.5.0
+Governance attestation version: 1
+Governance document revision: governance-attestation-v1
+```
+
+The CareQueue application version identifies the installed software release.
+
+The governance attestation version identifies the required governance acceptance generation.
+
+The governance document revision identifies the exact revision of the governance text that was accepted.
+
+A governance attestation is current only when both its attestation version and document revision match the values required by the installed application.
+
+Installing a new CareQueue application version does not by itself require a new governance attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists for the installation.
+
+Historical attestations created before document-revision tracking was introduced may not contain a document revision. These records are preserved as historical evidence but do not satisfy a current requirement that includes a document revision.
+
+After an upgrade, verify that the expected governance status, required attestation version, and required document revision are shown before returning the installation to normal use.
+
+## General Upgrade Safety
+
+Before upgrading any CareQueue installation:
+
+- Identify the exact release artifact being installed.
+- Record the current application version and source release information when available.
+- Confirm the current installation is healthy before changing it.
+- Create or confirm a recent encrypted backup.
+- Verify the selected backup for higher-risk upgrades.
+- Confirm required encryption and recovery keys are available.
+- Review release notes for configuration, migration, or security changes.
+- Schedule an appropriate maintenance window.
+- Keep the previously trusted release artifact and recovery documentation available.
+- Preserve failed-upgrade recovery records and referenced recovery assets until upgrade validation or rollback is complete.
+- Ensure that only approved administrators can access the host during the upgrade.
+- Do not begin an upgrade while the database, services, or storage state is uncertain.
+
+An application upgrade is not a substitute for backup, restore, migration, or disaster-recovery planning.
+
+## Database Migration Safety
+
+CareQueue uses ordered, versioned database migrations for schema changes that must be applied to an existing installation.
+
+Applied migrations are recorded in the database table:
+
+```text
+schema_migrations
+```
+
+Each migration has a unique migration identifier and an application timestamp. Registered migrations are applied in migration-ID order, and migrations already recorded in the ledger are skipped on later startups. This makes normal startup and repair operations idempotent with respect to previously completed migrations.
+
+Current migration identifiers include:
+
+```text
+0001_security_walkthrough_columns
+0002_security_authentication_and_session_columns
+0003_authorization_core_columns
+0004_authorization_denial_follow_up_columns
+0005_governance_append_only_history
+0006_audit_event_columns
+0007_governance_document_revision
+```
+
+Each individual migration runs inside a database savepoint. If a migration step raises an error, CareQueue rolls that step back to its savepoint, does not record that migration as applied, and raises a migration error instead of continuing silently.
+
+Database initialization commits only after schema initialization and registered migrations complete successfully. If initialization raises an exception, the normal initialization path does not commit the failed startup attempt.
+
+Operators should not manually insert, delete, or alter rows in `schema_migrations` to bypass a failed upgrade. The migration ledger is part of the database's upgrade state.
+
+Before an upgrade that includes database migrations:
+
+- Create or confirm a recent encrypted backup.
+- Prefer a verified backup for higher-risk changes.
+- Preserve the required database and backup encryption keys.
+- Confirm sufficient free disk space for the application, database, logs, and recovery files.
+- Confirm the current installation is healthy before beginning the upgrade.
+- Review release notes for schema or migration changes.
+
+After the upgrade:
+
+- Confirm CareQueue starts normally.
+- Confirm readiness and health checks pass.
+- Confirm expected application workflows operate correctly.
+- Confirm governance status is correct.
+- Confirm backup and recovery functions remain available.
+
+A successful migration is not a downgrade guarantee. Reverting application files to an older release does not automatically make a database that has been migrated by a newer release compatible with that older application.
+
+CareQueue's supported failed-upgrade rollback workflow addresses this by restoring the preserved previous application together with the verified pre-upgrade encrypted database backup. Do not substitute an application-only downgrade for the supported rollback workflow.
+
+## Release Validation Before Deployment
+
+Before a release artifact is used for an upgrade, the source revision and release build should already have passed the project's release validation.
+
+Typical source checks include:
+
+```powershell
+pytest backend\tests -n auto -q
+ruff check backend\authstatus_api backend\tests --fix
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Additional release security checks may include:
+
+```powershell
+bandit -r backend\authstatus_api backend\scripts -c backend\pyproject.toml
+python -m pip_audit -r backend\requirements.txt
+npm --prefix frontend audit
+```
+
+Review the repository state before building release artifacts:
+
+```powershell
+git status --short
+git rev-parse HEAD
+git log -1 --oneline
+```
+
+Do not package or deploy:
+
+- Real patient data
+- Production databases
+- Production environment files
+- Encryption keys
+- Backup files
+- Restored databases
+- Real PDFs containing PHI
+- Unreviewed generated files
+- Sensitive screenshots
+
+## Release Version Preparation
+
+Use the repository release-version helper to update controlled application and installer version declarations:
+
+```powershell
+.\deployment\bump-version.ps1 -Version 0.5.0
+```
+
+Replace `0.5.0` with the intended release version when preparing a later release.
+
+The version helper intentionally does not rewrite arbitrary matching version strings in tests, dependency versions, documentation examples, or historical governance fixtures.
+
+Review the resulting changes:
+
+```powershell
+git status --short
+git diff
+```
+
+## Windows Upgrade Workflow
+
+The packaged Windows installer is the normal Windows upgrade path.
+
+A versioned release has a filename such as:
+
+```text
+CareQueue-Setup-0.5.0.exe
+```
+
+The lower-level installer engine is:
+
+```text
+deployment/windows/installer/invoke-install.ps1
+```
+
+Direct engine invocation is intended for development, validation, and troubleshooting rather than normal operator use.
+
+### Windows Production Services
+
+The packaged Windows services are:
+
+```text
+CareQueueApi
+CareQueueCaddy
+```
+
+The API remains bound to loopback and Caddy provides the private HTTPS application endpoint.
+
+### Windows Persistent Data
+
+Installed application files are stored under:
+
+```text
 C:\Program Files\CareQueue
+```
 
-Runtime data:
+Persistent production data is stored under:
+
+```text
 C:\ProgramData\CareQueue
+```
 
-Database:
-C:\ProgramData\CareQueue\Data
+The production environment file is:
 
-Backups:
-C:\ProgramData\CareQueue\Backups
-
-Restores:
-C:\ProgramData\CareQueue\Restores
-
-Recovery:
-C:\ProgramData\CareQueue\Recovery
-
-Environment:
+```text
 C:\ProgramData\CareQueue\Config\carequeue.env
 ```
 
-The packaged Windows installer removes application files during uninstall but preserves runtime data under `C:\ProgramData\CareQueue`, including the production environment file, database, backups, restore files, recovery files, and installer logs.
+An upgrade or repair preserves the existing environment file and runtime data.
 
-
-### Linux production
-
-```text
-Application files:
-/opt/carequeue
-
-Configuration:
-/etc/carequeue
-
-Database and runtime data:
-/var/lib/carequeue
-
-Backups:
-/var/lib/carequeue/backups
-
-Environment:
-/etc/carequeue/carequeue.env
-
-Logs:
-/var/log/carequeue
-```
-
-The packaged Linux uninstall removes the application files and CareQueue systemd units while preserving `/etc/carequeue`, `/var/lib/carequeue`, and `/var/log/carequeue`.
-
-### Development
+This includes settings and keys such as:
 
 ```text
-backend/data/
-backend/backups/
-backend/restores/
+AUTHSTATUS_ENCRYPTION_KEY
+AUTHSTATUS_SQLCIPHER_KEY
+AUTHSTATUS_BACKUP_ENCRYPTION_KEY
 ```
 
-These local directories must remain uncommitted.
+Persistent data can include:
 
-## Backup Format
+- Active database
+- Encrypted backups
+- Restore staging
+- Recovery staging
+- Logs
+- Caddy runtime data
+- Local certificate data
 
-Encrypted backups end with:
+### What a Windows Upgrade Replaces
+
+A Windows upgrade may replace application files under:
 
 ```text
-.db.enc
+C:\Program Files\CareQueue
 ```
 
-CareQueue creates a consistent database snapshot, encrypts it, writes the output atomically, and verifies the result.
+including:
 
-It does not simply copy the live database file while it may be changing.
+```text
+backend/
+frontend/
+deployment/
+runtime/
+vendor/
+```
 
-## Create a Development Backup
+The packaged installer recreates the installed backend environment from the packaged private Python runtime and bundled dependency wheelhouse.
 
-From the repository root:
+### What Windows Repair Replaces
+
+Repair may restore:
+
+- Installed backend files
+- Installed frontend files
+- Deployment scripts
+- Private Python runtime files
+- Packaged vendor binaries
+- Windows service definitions
+- Runtime directory structure
+- Filesystem permissions
+
+Repair does not intentionally reset:
+
+- Admin users
+- Production encryption keys
+- Active database data
+- Encrypted backups
+- Governance attestation history
+
+### Windows Pre-Upgrade Health Check
+
+Before starting the installer, confirm:
 
 ```powershell
-backend\.venv\Scripts\python.exe `
-    backend\scripts\create_encrypted_backup.py
+Get-Service CareQueueApi, CareQueueCaddy |
+    Select-Object Name, Status, StartType
 ```
 
-A successful result includes:
+Both services should normally be running.
 
-```text
-Created and verified encrypted backup: <path>
+Check liveness:
+
+```powershell
+Invoke-RestMethod `
+    -Method Get `
+    -Uri "https://carequeue.local/api/health/live" `
+    -TimeoutSec 5
 ```
 
-Retention is applied after successful creation.
+Check readiness:
 
-## Create a Windows Production Backup
+```powershell
+Invoke-RestMethod `
+    -Method Get `
+    -Uri "https://carequeue.local/api/health/ready" `
+    -TimeoutSec 5
+```
 
-Use the installed backup runner:
+Also verify normal browser login and a basic authorization workflow before changing the installation.
+
+Do not use an upgrade to hide an existing production failure.
+
+### Create a Windows Pre-Upgrade Backup
+
+Run the installed backup helper:
 
 ```powershell
 & "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1"
 ```
 
-Default destination:
-
-```text
-C:\ProgramData\CareQueue\Backups
-```
-
-The runner loads the protected production environment and returns a nonzero exit code when creation or retention fails.
-
-## Create a Linux Production Backup
-
-The packaged Linux deployment installs:
-
-```text
-carequeue-backup.service
-carequeue-backup.timer
-```
-
-Run an encrypted backup immediately with:
-
-```bash
-sudo systemctl start carequeue-backup.service
-```
-
-Review the result:
-
-```bash
-sudo systemctl status carequeue-backup.service
-sudo journalctl -u carequeue-backup.service --since today
-```
-
-The packaged service writes backups to:
-
-```text
-/var/lib/carequeue/backups
-```
-
-The service runs as the dedicated `carequeue` account and loads the protected production environment from:
-
-```text
-/etc/carequeue/carequeue.env
-```
-
-## Custom Backup Directory
-
-Development:
-
-```powershell
-backend\.venv\Scripts\python.exe `
-    backend\scripts\create_encrypted_backup.py `
-    --backup-directory "G:\CareQueue\local_backups"
-```
-
-Windows production:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\run-backup.ps1" `
-    -BackupDirectory "D:\CareQueueBackups"
-```
-
-External storage may require:
-
-```env
-AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=true
-```
-
-That setting permits the path. It does not secure it.
-
-The destination still requires appropriate permissions, volume protection, retention, and off-host policy.
-
-## Inspect Recent Backups
-
-Production example:
+Review the newest backups:
 
 ```powershell
 Get-ChildItem `
     "C:\ProgramData\CareQueue\Backups" `
     -Filter "*.db.enc" |
 Sort-Object LastWriteTime -Descending |
-Select-Object -First 10 `
+Select-Object -First 3 `
     Name,
     Length,
     LastWriteTime
 ```
 
-Confirm:
+A file listing confirms only that a backup file exists. It does not prove recoverability.
 
-- A recent file exists.
-- File size is greater than zero.
-- Timestamp matches the expected run.
-- The correct directory is being inspected.
+For higher-risk upgrades, verify the selected encrypted backup through the supported backup verification workflow before proceeding.
 
-A file listing does not prove recoverability.
+The Windows Upgrade workflow also creates and verifies its own pre-upgrade encrypted backup before replacing the application. The operator-created backup above remains useful as independent recovery evidence.
 
-## Verification
+### Windows Upgrade Recovery Assets
 
-Backup verification confirms that CareQueue can:
+Before replacing the installed application during Upgrade, the Windows installer engine preserves recovery material for a possible failed-upgrade rollback.
 
-1. Read the encrypted file.
-2. Decrypt it with the backup key.
-3. Open the decrypted database in the configured mode.
-4. Run an integrity check.
-5. Confirm required CareQueue tables exist.
-
-Verification is stronger than checking for a file, but it is not a full recovery drill.
-
-## Admin Backup Interface
-
-Admin-only backup operations are available under:
+Recovery records are stored under:
 
 ```text
-/api/admin/system/backups
+C:\ProgramData\CareQueue\Recovery\Upgrades
 ```
 
-Current workflow supports:
+The upgrade workflow preserves:
 
-- Listing backups
-- Creating a restore point
-- Verifying a restore point
-- Viewing pending recovery status
-- Staging a backup
-- Canceling staged recovery
+- A verified encrypted pre-upgrade database backup
+- A verified archive of the previously installed application payload
+- A SHA256 checksum for the application archive
+- Previous and incoming CareQueue version information
+- The associated installer log path
+- A recovery status record
 
-Backup and recovery events are recorded in the audit log.
+If the upgrade completes successfully, its recovery record is marked completed.
 
-## Retention
+If the upgrade fails after the recovery record has been created, the record is marked failed and may become eligible for supported rollback when all referenced recovery assets remain valid.
 
-Retention settings:
+Do not edit recovery JSON files, application archive checksums, or referenced backup files to force rollback eligibility.
 
-```env
-AUTHSTATUS_BACKUP_RETENTION_DAYS=
-AUTHSTATUS_BACKUP_MINIMUM_COUNT=
-```
+### Build the Windows Release
 
-Default Windows values are equivalent to:
-
-```text
-Retention period: 90 days
-Minimum retained backups: 5
-```
-
-Rules:
-
-- Old backups may become eligible for deletion.
-- The minimum count remains protected.
-- A backup tied to pending recovery remains protected.
-
-A pruning failure does not necessarily mean the newly created backup is invalid.
-
-## Windows Scheduled Backups
-
-Deployment scripts:
-
-```text
-deployment/windows/install-backup-task.ps1
-deployment/windows/remove-backup-task.ps1
-deployment/windows/run-backup.ps1
-```
-
-Default task:
-
-```text
-Name: CareQueue Encrypted Backup
-Schedule: Daily at 02:00
-Account: SYSTEM
-```
-
-Install:
+Build the production frontend first:
 
 ```powershell
-& "C:\Program Files\CareQueue\deployment\windows\install-backup-task.ps1"
+npm --prefix frontend run build
 ```
 
-Custom time:
+Build the Windows payload:
 
 ```powershell
-& "C:\Program Files\CareQueue\deployment\windows\install-backup-task.ps1" `
-    -RunAt "03:30"
+.\deployment\windows\installer\build-payload.ps1 `
+    -EmbeddedPythonArchive ".\local_installer_assets\python-3.14.6-embed-amd64.zip"
 ```
 
-Validate:
+Compile the Inno Setup installer:
 
 ```powershell
-Get-ScheduledTask `
-    -TaskName "CareQueue Encrypted Backup"
-
-Start-ScheduledTask `
-    -TaskName "CareQueue Encrypted Backup"
-
-Get-ScheduledTaskInfo `
-    -TaskName "CareQueue Encrypted Backup"
+& "C:\Program Files\Inno Setup 7\ISCC.exe" `
+    ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-Then confirm a new nonempty backup exists.
-
-Remove the task:
-
-```powershell
-& "C:\Program Files\CareQueue\deployment\windows\remove-backup-task.ps1"
-```
-
-Removing the task does not delete existing backups.
-
-## Linux Scheduled Backups
-
-Systemd files:
+For CareQueue `0.5.0`, the resulting artifact is:
 
 ```text
-deployment/linux/systemd/carequeue-backup.service
-deployment/linux/systemd/carequeue-backup.timer
+build\windows\installer\CareQueue-Setup-0.5.0.exe
 ```
 
-Expected paths:
+Validate the release package:
+
+```powershell
+.\deployment\windows\installer\validate-release-package.ps1
+```
+
+### Run the Windows Upgrade
+
+Launch the versioned installer:
+
+```powershell
+.\build\windows\installer\CareQueue-Setup-0.5.0.exe
+```
+
+When an existing installation is detected, select:
 
 ```text
-Install: /opt/carequeue
-Environment: /etc/carequeue/carequeue.env
-Backups: /var/lib/carequeue/backups
+Upgrade existing installation
 ```
 
-Validate:
+Review the installer summary before continuing.
+
+### Run Windows Repair
+
+Launch the same versioned installer and select:
+
+```text
+Repair existing installation
+```
+
+Repair should preserve production configuration and runtime data while restoring packaged application and service components.
+
+### Run Windows Rollback
+
+The packaged Windows installer offers:
+
+```text
+Roll back most recent failed upgrade
+```
+
+only when an existing CareQueue installation has an eligible failed-upgrade recovery record.
+
+Rollback is not shown for a normal healthy installation with no failed upgrade recovery state.
+
+The Windows rollback workflow:
+
+1. Selects the newest eligible failed-upgrade recovery record.
+2. Validates the referenced encrypted pre-upgrade database backup.
+3. Validates the previous application archive and SHA256 checksum.
+4. Stages and validates the previous application before activation.
+5. Preserves the failed incoming application.
+6. Stops CareQueue services before application replacement.
+7. Activates the preserved previous application.
+8. Stages the verified pre-upgrade database backup.
+9. Records `rollback_staged`.
+10. Activates the staged pre-upgrade database.
+11. Records `rollback_activated`.
+12. Starts `CareQueueApi` and `CareQueueCaddy`.
+13. Runs post-rollback service and application-health validation.
+14. Restores the previous installed-version metadata.
+15. Records `rollback_completed`.
+16. Removes temporary rollback staging when cleanup succeeds.
+
+A cleanup failure after `rollback_completed` is logged but does not invalidate an otherwise successful rollback.
+
+If a failure occurs after the pre-upgrade database has been activated, the Windows rollback failure path attempts to stop the CareQueue services again and preserves the last durable rollback state for investigation.
+
+Do not manually change a recovery record from `rollback_activated` to `rollback_completed`.
+
+After a successful rollback, verify:
+
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy |
+    Select-Object Name, Status, StartType
+```
+
+Then verify:
+
+```text
+https://carequeue.local/
+https://carequeue.local/api/health/live
+https://carequeue.local/api/health/ready
+```
+
+Confirm the expected previous CareQueue version is shown and perform a representative synthetic-data workflow check before returning the installation to normal use.
+
+### Run Windows Uninstall
+
+Launch the installer and select:
+
+```text
+Uninstall CareQueue
+```
+
+The uninstall workflow removes the installed application and CareQueue Windows services while preserving persistent runtime data.
+
+After uninstall, verify:
+
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy -ErrorAction SilentlyContinue
+
+Test-Path "C:\Program Files\CareQueue"
+Test-Path "C:\ProgramData\CareQueue"
+Test-Path "C:\ProgramData\CareQueue\Config\carequeue.env"
+Test-Path "C:\ProgramData\CareQueue\Data\auth_tracker.sqlcipher.db"
+```
+
+For a normal populated installation, the expected pattern is:
+
+```text
+No CareQueue service output
+False
+True
+True
+True
+```
+
+The final database-path result depends on whether that installation already contains an active database.
+
+### Windows Installer Sequence
+
+The Windows installer performs Upgrade in a controlled sequence that includes:
+
+1. Validate installer state, application origin, and incoming version.
+2. Validate required packaged payload files.
+3. Verify the packaged payload hash manifest.
+4. Prepare required runtime directories and logging.
+5. Create and verify the pre-upgrade encrypted database backup.
+6. Archive and verify the previously installed application.
+7. Write the upgrade recovery record.
+8. Preserve or migrate the production environment configuration.
+9. Stop the HTTPS proxy.
+10. Stop the API service.
+11. Replace installed application and packaged runtime files.
+12. Recreate the installed backend environment.
+13. Install backend dependencies from the packaged wheelhouse.
+14. Validate the installed backend.
+15. Reinstall or refresh service configuration.
+16. Reapply runtime permission hardening.
+17. Start the API.
+18. Start Caddy.
+19. Validate the installed services and application health.
+20. Mark the upgrade recovery record completed only after successful completion.
+
+If the upgrade fails after the recovery record exists, the installer records a failed recovery state so the preserved assets can be evaluated for Rollback.
+
+The exact implementation may evolve, so release validation should always use the installer included with the release being tested.
+
+### Windows Service Order
+
+The normal stop order is:
+
+```text
+1. CareQueueCaddy
+2. CareQueueApi
+```
+
+The normal start order is:
+
+```text
+1. CareQueueApi
+2. CareQueueCaddy
+```
+
+This keeps the reverse proxy from serving requests while the API is unavailable during planned replacement work.
+
+### Windows Installer Logs
+
+Installer logs are stored under:
+
+```text
+C:\ProgramData\CareQueue\Logs\Installer
+```
+
+Find the newest log:
+
+```powershell
+$latestLog = Get-ChildItem `
+    -Path "$env:ProgramData\CareQueue\Logs\Installer" `
+    -Filter "CareQueue-*.log" `
+    -ErrorAction SilentlyContinue |
+Sort-Object LastWriteTime -Descending |
+Select-Object -First 1
+
+$latestLog.FullName
+```
+
+Read the newest log:
+
+```powershell
+Get-Content `
+    -LiteralPath $latestLog.FullName `
+    -Tail 240
+```
+
+Review logs before sharing them because deployment logs can reveal environment and host information.
+
+## Linux Upgrade Workflow
+
+CareQueue includes a packaged Linux release workflow for supported Debian-based systems.
+
+The release archive has a filename such as:
+
+```text
+CareQueue-Linux-Setup-0.5.0.tar.gz
+```
+
+The packaged entry point is:
+
+```text
+deployment/linux/installer/invoke-install.sh
+```
+
+Supported Linux modes are:
+
+```text
+install
+upgrade
+repair
+rollback
+uninstall
+```
+
+### Linux Production Services
+
+The packaged Linux services are:
+
+```text
+carequeue-api.service
+carequeue-caddy.service
+carequeue-backup.service
+carequeue-backup.timer
+```
+
+### Linux Persistent Paths
+
+Installed application files:
+
+```text
+/opt/carequeue
+```
+
+Production configuration:
+
+```text
+/etc/carequeue
+```
+
+Runtime data:
+
+```text
+/var/lib/carequeue
+```
+
+Logs:
+
+```text
+/var/log/carequeue
+```
+
+Upgrade and repair replace application/runtime files under `/opt/carequeue` while preserving production configuration and runtime data.
+
+### What a Linux Upgrade Replaces
+
+The Linux installer refreshes:
+
+- Backend application files
+- Frontend production build
+- Deployment files
+- Python virtual environment
+- Backend dependencies
+- systemd unit files
+- Caddy configuration
+- Installed application metadata
+
+Existing production configuration is preserved and required deployment settings may be migrated.
+
+### What Linux Repair Replaces
+
+Repair uses the same production installation engine to restore the packaged application state while preserving:
+
+- `/etc/carequeue`
+- `/var/lib/carequeue`
+- `/var/log/carequeue`
+
+Repair is appropriate when application files, Python dependencies, service definitions, or other packaged installation components need to be restored.
+
+### Linux Pre-Upgrade Health Check
+
+Check the API service:
 
 ```bash
-systemd-analyze verify \
-  deployment/linux/systemd/carequeue-backup.service \
-  deployment/linux/systemd/carequeue-backup.timer
+sudo systemctl status carequeue-api.service
 ```
 
-Install and test the service before enabling the timer:
+Check the HTTPS service:
 
 ```bash
-sudo systemctl start carequeue-backup.service
-sudo systemctl status carequeue-backup.service
-sudo journalctl -u carequeue-backup.service --since today
+sudo systemctl status carequeue-caddy.service
 ```
 
-Enable the timer only after a successful manual run:
+Check the backup timer:
 
 ```bash
-sudo systemctl enable --now carequeue-backup.timer
+sudo systemctl status carequeue-backup.timer
 ```
 
-## Restore to a Safe File
+Check liveness:
 
-Restoring does not activate a backup.
-
-Development example:
-
-```powershell
-backend\.venv\Scripts\python.exe `
-    backend\scripts\restore_encrypted_backup.py `
-    "G:\CareQueue\backend\backups\<backup-file>.db.enc"
+```bash
+curl --fail --silent --show-error \
+  https://carequeue.local/api/health/live
 ```
 
-Successful output includes:
+Check readiness:
+
+```bash
+curl --fail --silent --show-error \
+  https://carequeue.local/api/health/ready
+```
+
+Also verify normal browser login and a basic authorization workflow.
+
+Do not proceed until unexplained service or readiness failures have been resolved.
+
+### Create or Verify a Linux Pre-Upgrade Backup
+
+Confirm that the scheduled backup timer is active:
+
+```bash
+sudo systemctl is-enabled carequeue-backup.timer
+sudo systemctl is-active carequeue-backup.timer
+```
+
+Review the most recent encrypted backup files in the configured CareQueue backup directory.
+
+Use the supported backup verification workflow for higher-risk upgrades.
+
+Do not assume that the presence of a backup file proves it can be restored.
+
+The Linux Upgrade workflow also creates and verifies its own pre-upgrade encrypted backup before replacing the installed application.
+
+### Linux Upgrade Recovery Assets
+
+Before replacing the existing application, a supported Linux Upgrade preserves:
+
+- A verified encrypted pre-upgrade database backup
+- A verified archive of the previously installed application
+- The application archive SHA256 checksum
+- Previous and incoming CareQueue version information
+- The installer log path
+- A versioned upgrade recovery record
+
+Linux recovery records are stored under:
 
 ```text
-Restored backup to: <path>
-This did not overwrite the active database.
+/var/lib/carequeue/recovery/upgrades
 ```
 
-Restored files normally end with:
+and are named:
 
 ```text
-.restored.db
+upgrade-*.env
 ```
 
-## Restore Validation
-
-Restore processing:
-
-1. Resolves the backup through approved storage.
-2. Rejects unsafe paths.
-3. Decrypts into a temporary file.
-4. Opens the database in the configured mode.
-5. Runs an integrity check.
-6. Confirms required tables.
-7. Moves the validated file into the restore directory.
-8. Cleans temporary files after failure.
-
-A restored file is still not active.
-
-## Stage a Recovery
-
-Staging prepares a verified backup for later activation.
-
-It creates:
-
-- A validated staged database
-- A pending-recovery manifest
-- Metadata identifying the source backup and staged filename
-
-Only one pending recovery should exist at a time.
-
-Staging does not stop services or replace the active database.
-
-## Cancel a Staged Recovery
-
-Canceling removes the pending state and records an audit event.
-
-It does not delete the original encrypted backup.
-
-Cancel when:
-
-- The wrong backup was selected.
-- A newer restore point is needed.
-- Review raised concerns.
-- Recovery was postponed.
-- A drill is complete.
-
-## Activation Requirements
-
-Recovery activation is offline and interactive.
-
-Before activation:
-
-- API service is stopped.
-- API port is free.
-- Database is not locked.
-- Staged and active databases are on the same filesystem.
-- No SQLite sidecar files remain.
-- A verified encrypted safety backup is created.
-- Exact confirmation phrase is entered.
-
-Confirmation phrase:
+If the upgrade fails after the recovery record is created, the record is marked:
 
 ```text
-ACTIVATE RECOVERY
+CAREQUEUE_UPGRADE_STATUS=failed
 ```
 
-The application remains stopped after activation for review.
+Do not remove or edit the recovery record or referenced recovery assets while rollback may still be required.
 
-## Activate on Windows
+### Build the Linux Release
 
-Recovery activation is an offline administrative operation.
-
-Stop services:
+Build the production frontend:
 
 ```powershell
-Stop-Service -Name "CareQueueCaddy"
-Stop-Service -Name "CareQueueApi"
+npm --prefix frontend run build
 ```
 
-Load the production environment into the current PowerShell process, then run:
+Build the Linux release archive:
 
 ```powershell
-Set-Location "C:\Program Files\CareQueue\backend"
-
-& ".\.venv\Scripts\python.exe" `
-    ".\scripts\activate_staged_recovery.py" `
-    --service-name "CareQueueApi" `
-    --api-host "127.0.0.1" `
-    --api-port 8000
+.\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
 ```
 
-Review the printed plan:
+After the repository version has already been bumped, the default version can be used:
 
-- Active database path
-- Staged database path
-- Rollback path
-- Safety backup path
-- Managed service
-- API socket
-- Detected sidecars
+```powershell
+.\deployment\linux\installer\build-payload.ps1
+```
 
-Then enter:
+For CareQueue `0.5.0`, the resulting artifact is:
 
 ```text
-ACTIVATE RECOVERY
+build\linux\installer\CareQueue-Linux-Setup-0.5.0.tar.gz
 ```
 
-exactly.
+The build script reports the package path, size, and SHA256 value.
 
+### Extract the Linux Release
 
-## Activate on Linux
-
-Recovery activation is supported on Linux through the same backend activation script.
-
-Stop the HTTPS and API services:
+On the target Linux system:
 
 ```bash
-sudo systemctl stop carequeue-caddy.service
-sudo systemctl stop carequeue-api.service
+mkdir carequeue-installer
+tar -xzf CareQueue-Linux-Setup-0.5.0.tar.gz \
+  -C carequeue-installer
+cd carequeue-installer
 ```
 
-Confirm the API service is stopped and port `8000` is free.
+Use a newly extracted, reviewed release package for upgrade and repair operations.
 
-Load the production environment into the shell used for activation:
+### Run the Linux Upgrade
+
+From the extracted release package:
 
 ```bash
-set -a
-source /etc/carequeue/carequeue.env
-set +a
+sudo bash deployment/linux/installer/invoke-install.sh upgrade
 ```
 
-Then run:
+Upgrade preserves the existing production configuration and data.
+
+### Run Linux Repair
+
+From the extracted release package:
 
 ```bash
-cd /opt/carequeue/backend
-
-sudo -E ./.venv/bin/python \
-  ./scripts/activate_staged_recovery.py \
-  --service-name carequeue-api.service \
-  --api-host 127.0.0.1 \
-  --api-port 8000
+sudo bash deployment/linux/installer/invoke-install.sh repair
 ```
 
-Review the printed plan before confirming activation.
+Repair also preserves production configuration and data.
 
-Enter:
+### Run Linux Rollback
+
+Linux rollback is available after a failed supported upgrade that created a valid CareQueue upgrade recovery record and preserved the required database and application recovery assets.
+
+From an extracted CareQueue release package:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh rollback
+```
+
+Rollback resolves the newest eligible failed-upgrade recovery record under:
 
 ```text
-ACTIVATE RECOVERY
+/var/lib/carequeue/recovery/upgrades
 ```
 
-exactly when the selected staged recovery and paths have been verified.
+The rollback workflow:
 
-CareQueue remains stopped after successful activation so the resulting database state can be reviewed before services are restarted.
+- Verifies the preserved previous application archive and SHA256 checksum.
+- Stages and validates the previous application in an isolated directory.
+- Preserves the failed incoming application before replacement.
+- Stops CareQueue services before application replacement.
+- Restores the previous application and packaged systemd service definitions.
+- Stages the verified pre-upgrade encrypted database backup.
+- Records `rollback_staged`.
+- Stops `carequeue-api.service` before database activation.
+- Activates the staged pre-upgrade database through the installed recovery tooling.
+- Records `rollback_activated`.
+- Starts `carequeue-api.service` and `carequeue-caddy.service`.
+- Restores and enables `carequeue-backup.timer`.
+- Validates required service state.
+- Validates application health and readiness.
+- Restores the previous installed application version metadata.
+- Records `rollback_completed`.
+- Removes temporary rollback application staging while retaining durable recovery assets.
 
-## Recovery Preflight
+The current rollback activation is performed by the installer workflow; there is no separate interactive confirmation step in `invoke-install.sh rollback`.
 
-Before cutover, the script:
+If database activation fails, the API remains stopped for safety.
 
-1. Resolves active, staged, and rollback paths.
-2. Confirms the service is stopped.
-3. Confirms the API socket is free.
-4. Requests exclusive database access.
-5. Detects sidecar files.
-6. Creates and verifies a safety backup.
-7. Confirms files are on the same filesystem.
-8. Prints the activation plan.
-9. Waits for confirmation.
+If application replacement fails and CareQueue successfully restores the failed incoming application, the recovery record may enter:
 
-No active database file is replaced during preflight.
-
-## Atomic Cutover
-
-After confirmation:
-
-1. Service and socket checks run again.
-2. Exclusive access is rechecked.
-3. Sidecar files cause refusal.
-4. Active database moves to rollback path.
-5. Staged database moves to active path.
-6. New active database is validated.
-7. Pending manifest is removed after success.
-
-## Failed Final Validation
-
-When final validation fails, the script attempts to:
-
-1. Move the failed activated database back to staging.
-2. Restore the rollback database.
-3. Preserve the encrypted safety backup.
-
-Keep CareQueue stopped until the final state is understood.
-
-## Post-Activation Validation
-
-Before restarting:
-
-- Confirm the active database exists.
-- Confirm the rollback database exists.
-- Confirm the safety backup exists.
-- Confirm the pending manifest is gone.
-- Confirm no unexpected sidecars exist.
-- Review activation output.
-
-### Windows
-
-Start the API:
-
-```powershell
-Start-Service -Name "CareQueueApi"
+```text
+rollback_application_restored
 ```
 
-Check direct readiness:
+In that state, services remain stopped pending administrator review.
 
-```powershell
-Invoke-RestMethod `
-    -Uri "http://127.0.0.1:8000/api/health/ready"
-```
-
-Start Caddy:
-
-```powershell
-Start-Service -Name "CareQueueCaddy"
-```
-
-Check HTTPS readiness:
-
-```powershell
-Invoke-RestMethod `
-    -Uri "https://carequeue.local/api/health/ready"
-```
-
-### Linux
-
-Start the API:
+After rollback reports success, verify:
 
 ```bash
-sudo systemctl start carequeue-api.service
+sudo systemctl is-active carequeue-api.service
+sudo systemctl is-active carequeue-caddy.service
+sudo systemctl is-active carequeue-backup.timer
 ```
 
-Check direct readiness:
+Then verify:
 
 ```bash
-curl --fail --silent --show-error   http://127.0.0.1:8000/api/health/ready
-```
+curl --fail --silent --show-error   https://carequeue.local/api/health/live
 
-Start Caddy:
-
-```bash
-sudo systemctl start carequeue-caddy.service
-```
-
-Check HTTPS readiness:
-
-```bash
 curl --fail --silent --show-error   https://carequeue.local/api/health/ready
 ```
 
-### Application validation
+Confirm the expected previous CareQueue version is shown and perform a representative synthetic-data workflow check before returning the installation to normal use.
 
-After the services are healthy, verify:
+### Run Linux Uninstall
 
-- Login
-- Current governance status
-- Representative authorization records
-- Timeline events
-- Registered options
-- Audit continuity and integrity status
-- Dashboard summaries
-- Backup scheduling
+From the extracted release package:
 
-See [Health Checks](../operations/health-checks.md) for broader post-recovery validation.
-
-## Rollback and Safety Backup
-
-The previous active database remains as a rollback database.
-
-Recovery activation also creates a fresh encrypted safety backup before cutover.
-
-Keep both until:
-
-- Services start successfully.
-- Readiness passes.
-- Login succeeds.
-- Critical records are verified.
-- Governance status is correct.
-- Audit continuity and integrity status are verified.
-- Recovery is accepted.
-- Retention requirements permit removal.
-
-A rollback database preserves the database state that existed immediately before recovery activation. It is not the same as an application-version rollback plan.
-
-CareQueue database schema changes are applied through versioned migrations. A database that has been migrated by a newer CareQueue release may not be compatible with an older application release.
-
-Do not assume that replacing newer application files with older application files is sufficient to roll back an upgrade.
-
-When rollback to an older CareQueue release is required, use a verified backup created before the newer release applied its database migrations, unless that older release is explicitly documented as compatible with the migrated database.
-
-Preserve pre-upgrade backups until the upgraded installation has passed application, governance, audit, backup, and recovery validation.
-
-## Sidecar Files
-
-Common sidecars:
-
-```text
--wal
--shm
--journal
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh uninstall
 ```
 
-Their presence may indicate the database is in use or did not shut down cleanly.
+The uninstall workflow:
 
-Do not delete them blindly.
+- Stops and disables the CareQueue backup timer.
+- Stops and disables the CareQueue Caddy service.
+- Stops and disables the CareQueue API service.
+- Removes CareQueue systemd unit files.
+- Removes `/opt/carequeue`.
+- Removes the CareQueue-managed local hosts-file entry.
+- Preserves configuration, runtime data, and logs.
 
-Confirm all services and maintenance processes are stopped, then retry preflight.
+The following paths are intentionally preserved:
 
-## Recovery Drills
+```text
+/etc/carequeue
+/var/lib/carequeue
+/var/log/carequeue
+```
 
-A backup is not fully proven until restored and validated.
+A normal uninstall does not delete the database or encryption keys.
 
-A drill should include:
+### Linux Upgrade Sequence
 
-1. Select a recent backup.
-2. Confirm all required keys are available.
-3. Restore to an isolated directory.
-4. Verify integrity and required tables.
-5. Confirm SQLCipher protection.
-6. Start an isolated test instance.
-7. Verify login and representative records.
-8. Verify governance status and audit integrity.
-9. Confirm the restored database schema is compatible with the CareQueue release used for the drill.
-10. Record elapsed time and issues.
-11. Remove drill data securely.
+The Linux production installer performs installation and refresh operations in a controlled sequence.
 
-Do not wait for an emergency to perform the first drill.
+For Upgrade, the workflow validates the existing version and preserves verified pre-upgrade database and application recovery assets before application replacement.
 
-## Off-Host Backups
+The production installation engine then performs the application refresh in this general order:
 
-Local backups do not protect against:
+1. Require root privileges.
+2. Validate the HTTPS application origin.
+3. Validate the Linux distribution.
+4. Validate required release-package contents.
+5. Install required system dependencies.
+6. Ensure the dedicated CareQueue service account exists.
+7. Create or validate production directories.
+8. Replace installed application files under `/opt/carequeue`.
+9. Recreate the CareQueue Python virtual environment.
+10. Install backend dependencies.
+11. Validate the backend import.
+12. Preserve or create the production environment file.
+13. Write installation state.
+14. Install or refresh systemd units.
+15. Install Caddy when required.
+16. Disable the distribution's default Caddy service where necessary.
+17. Install and validate the CareQueue Caddy configuration.
+18. Ensure the packaged local hostname configuration exists.
+19. Start or restart CareQueue services.
+20. Ensure the Caddy internal root certificate is trusted.
+21. Validate the API service, Caddy service, and backup timer.
+22. Validate the HTTPS frontend, liveness endpoint, and readiness endpoint.
 
-- Device theft
-- Disk failure
-- Ransomware
-- Fire
-- Whole-machine administrative error
-- Loss of both data and keys
+Upgrade and Repair refresh the packaged application state while preserving existing production configuration and runtime data. Upgrade additionally maintains failed-upgrade recovery metadata so a supported rollback can restore the previous application and pre-upgrade database together.
 
-Use an approved off-host process when required.
+### Linux Installer Logs
 
-CareQueue does not currently upload backups externally by itself.
+Installer logs are stored under:
 
-## Monitoring
+```text
+/var/log/carequeue/installer/
+```
 
-Monitor:
+Review the relevant log after upgrade, repair, rollback, or uninstall.
 
-- Last successful backup
-- Backup file size
-- Windows scheduled-task status where applicable
-- Linux backup timer status where applicable
-- Backup-service failures
-- Retention failures
-- Available storage
-- Last backup verification
-- Last restore test
-- Last key-recovery test
+API logs:
 
-A successful schedule or timer status does not prove that the most recent backup is recoverable. Periodic verification and recovery drills remain necessary.
+```bash
+sudo journalctl \
+  -u carequeue-api.service \
+  --since today
+```
 
-## Common Failures
+Caddy logs:
 
-### Backup key missing or wrong
+```bash
+sudo journalctl \
+  -u carequeue-caddy.service \
+  --since today
+```
 
-A new key cannot decrypt old backups.
+Backup logs:
 
-Restore the correct key from approved custody.
+```bash
+sudo journalctl \
+  -u carequeue-backup.service \
+  --since today
+```
 
-### SQLCipher key wrong
+## Post-Operation Validation
 
-The backup may decrypt but database validation will fail.
+After any upgrade, repair, or rollback, validate the installation before returning it to routine use.
 
-Confirm the key belongs to that database.
+### Service Health
 
-### Field-level key wrong
+Confirm that required services are running.
 
-The database may open while selected values fail to decrypt.
+Windows:
 
-Do not accept the recovery until representative encrypted fields are verified.
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy |
+    Select-Object Name, Status, StartType
+```
 
-### Backup corrupted or truncated
+Linux:
 
-Do not stage it.
+```bash
+sudo systemctl is-active carequeue-api.service
+sudo systemctl is-active carequeue-caddy.service
+sudo systemctl is-enabled carequeue-backup.timer
+```
 
-Select another verified backup and investigate storage integrity.
+### HTTPS Application Health
 
-### Backup directory full
+Confirm:
 
-Free space through approved retention or archival procedures.
+```text
+https://carequeue.local/
+https://carequeue.local/api/health/live
+https://carequeue.local/api/health/ready
+```
 
-Do not delete the only recent verified backup.
+The packaged installer performs automated health checks, but operator validation should still include the browser workflow.
 
-### Windows scheduled task fails
+### Browser Smoke Test
 
-Run the installed backup runner manually and check permissions, environment loading, script paths, and task history.
+At minimum:
 
-### Linux backup service or timer fails
+1. Open CareQueue through the approved HTTPS origin.
+2. Sign in with an approved test or administrative account.
+3. Confirm any required governance attestation state is correct.
+4. Confirm the authorization queue loads.
+5. Open an existing authorization.
+6. Confirm expected role restrictions.
+7. Confirm logout works.
+8. Sign in again.
+9. Confirm the Admin System page reports the expected application version.
+10. Confirm backup scheduling remains enabled.
+
+Use only synthetic or approved non-production data during release validation environments.
+
+### Security-Sensitive Checks
+
+For releases that modify authentication, session, governance, encryption, or deployment behavior, perform targeted checks appropriate to the change.
+
+Examples include:
+
+- MFA enrollment and login
+- Remembered-device behavior
+- Single-session invalidation
+- Inactivity timeout warning and expiration
+- Session renewal
+- Cross-tab logout behavior
+- Governance enforcement and history
+- Audit integrity verification
+- Backup creation and verification
+- Certificate trust
+- Production same-origin API behavior
+
+## Failure Handling
+
+If an upgrade or repair fails:
+
+1. Preserve the installer log and relevant service logs.
+2. Do not delete the production database or encryption keys.
+3. Confirm the current state of the installed services.
+4. Confirm whether the application files were partially replaced.
+5. Confirm the production environment file is still present.
+6. Confirm the verified pre-upgrade recovery backup and application archive are available when the failed operation was Upgrade.
+7. Preserve the failed-upgrade recovery record.
+8. Avoid repeated repair or upgrade attempts until the failure is understood.
+9. Use supported Rollback only when the recovery record and referenced recovery assets validate successfully.
+10. Use the documented backup-and-recovery workflow when rollback is unavailable or inappropriate.
+
+If Rollback itself fails:
+
+1. Preserve the recovery record and installer log.
+2. Preserve the pre-upgrade database backup and application archive.
+3. Preserve any failed-application archive created by the rollback workflow.
+4. Determine the last durable recovery state.
+5. Confirm whether database activation occurred.
+6. Confirm the current service state before starting or stopping anything manually.
+7. Do not rewrite the recovery status to force a later state.
+8. Do not delete staging or recovery material while the incident is under investigation.
+
+Do not edit encrypted database or backup files manually.
+
+## Rollback
+
+CareQueue provides assisted rollback workflows for supported packaged Windows and Linux upgrades.
+
+Rollback is designed specifically for a failed Upgrade that preserved the required pre-upgrade recovery assets. It is not a general downgrade mechanism.
+
+A supported Upgrade preserves recovery information before replacing the installed application. When version metadata is available, this includes:
+
+- A verified encrypted pre-upgrade database backup
+- A preserved archive of the previous application
+- A SHA256 checksum for the previous application archive
+- Previous and incoming application versions
+- Installer log location
+- Upgrade recovery status
+
+If the Upgrade fails after the recovery record exists, the recovery record is marked failed and may become eligible for rollback.
+
+During rollback, CareQueue also preserves the failed incoming application before restoring the previous release. This keeps the failed state available for troubleshooting after recovery.
+
+The recovery lifecycle may include:
+
+```text
+failed
+rollback_staged
+rollback_activated
+rollback_completed
+```
+
+Linux may additionally record:
+
+```text
+rollback_application_restored
+```
+
+when application replacement fails but the failed incoming application is restored successfully.
+
+A rollback is marked complete only after the previous application and pre-upgrade database have been restored together and the platform-specific post-rollback validation succeeds.
+
+Windows completion includes:
+
+- Previous application activated
+- Pre-upgrade database activated
+- `CareQueueApi` running
+- `CareQueueCaddy` running
+- Post-rollback health validation passing
+- Previous installed-version metadata restored
+
+Linux completion includes:
+
+- Previous application activated
+- Previous systemd service definitions restored
+- Pre-upgrade database activated
+- `carequeue-api.service` active
+- `carequeue-caddy.service` active
+- `carequeue-backup.timer` active
+- Post-rollback health and readiness validation passing
+- Previous installed-version metadata restored
+
+Temporary rollback application staging is removed after successful completion. Durable recovery evidence is retained.
+
+Rollback should not be treated as a substitute for independent backup and recovery planning. Preserve encryption keys, backups, release artifacts, and recovery documentation independently of the application installation.
+
+## What the Installers Do Not Prove
+
+A successful installer result does not prove that:
+
+- The newest backup is recoverable.
+- Every browser workflow works.
+- Every role-specific workflow works.
+- External network policy is correct.
+- Endpoint protection is healthy.
+- Organizational access reviews are current.
+- Required agreements have been executed.
+- The deployment is HIPAA compliant.
+- The release is appropriate for public internet exposure.
+- Disaster recovery has been tested.
+
+Those remain part of release validation and organizational operations.
+
+## Permission Review
+
+After upgrade or repair, confirm that persistent production directories still have the intended restricted permissions.
+
+Windows deployments should review access under:
+
+```text
+C:\ProgramData\CareQueue
+```
+
+Linux deployments should review ownership and modes under:
+
+```text
+/etc/carequeue
+/var/lib/carequeue
+/var/log/carequeue
+```
+
+Do not broaden permissions simply to bypass an unrelated installation or service failure.
+
+## Common Problems
+
+### Upgrade is unavailable
+
+Confirm CareQueue is already installed.
+
+Windows detects the installed backend, frontend, private Python runtime, and Caddy files under the installation directory.
+
+Linux upgrade should be run against an existing packaged installation using a newly extracted release package.
+
+### Install is rejected because CareQueue already exists
+
+Use Upgrade or Repair rather than Install.
+
+### Rollback is unavailable
+
+Windows shows Rollback only when an eligible failed-upgrade recovery record exists.
+
+Linux rollback also requires an eligible failed-upgrade recovery record and valid referenced assets.
+
+Do not create, rename, or edit recovery records manually to make rollback available.
+
+If a supported Upgrade failed but no eligible recovery record exists, preserve the installation and use the backup-and-recovery documentation to determine the safest next action.
+
+### Rollback fails checksum or recovery-asset validation
+
+Do not bypass the validation.
+
+A missing, empty, or checksum-mismatched recovery asset means the preserved rollback state cannot be trusted as recorded.
+
+Preserve the recovery record and referenced files for investigation.
+
+### Rollback reaches `rollback_activated` but not `rollback_completed`
+
+Treat the installation as an incomplete recovery state.
+
+The pre-upgrade database may already be active even though final service or health validation did not complete.
+
+Review the installer log, service state, recovery record, and health-check output before taking another state-changing action.
+
+Do not manually mark the recovery record complete.
+
+### Application does not start after upgrade
+
+Review:
+
+- Installer logs
+- API service logs
+- Caddy service logs
+- Production environment-file presence
+- Database path
+- Encryption-key availability
+- Service-account permissions
+- Backend dependency installation
+- Health and readiness results
+
+### Readiness fails after upgrade
+
+Readiness can fail even when the process is running.
+
+Review:
+
+- Database accessibility
+- SQLCipher configuration
+- Production path validation
+- Encryption configuration
+- Service logs
+- Application environment
+- Installed application version
+
+Do not treat liveness alone as proof that the application is ready.
+
+### Login succeeds but protected pages require governance setup
+
+The current organization governance attestation has not been completed.
+
+An Admin must complete the current attestation before normal protected application functionality becomes available.
+
+A CareQueue application-version change does not automatically require re-attestation. Re-attestation is required when the required governance attestation version changes, when the required governance document revision changes, or when no current attestation exists.
+
+### Certificate warning appears after upgrade
+
+Confirm that the packaged Caddy service is running and the CareQueue internal root certificate is trusted on the approved client system.
+
+Do not permanently disable TLS certificate validation to work around a trust problem.
+
+### Backup timer is missing after Linux upgrade
 
 Check:
 
 ```bash
-sudo systemctl status carequeue-backup.service
 sudo systemctl status carequeue-backup.timer
-sudo journalctl -u carequeue-backup.service --since today
+sudo systemctl list-timers carequeue-backup.timer
 ```
 
-Confirm that:
+Review the installer log and reinstall or repair only after the cause is understood.
 
-- `/etc/carequeue/carequeue.env` exists.
-- `/var/lib/carequeue/backups` exists.
-- The `carequeue` service account can write to the backup directory.
-- The required encryption keys are present in the protected production environment.
-- The installed backend and virtual environment are intact.
+### Windows services are missing after repair
 
-### Unsafe restore path
+Check:
 
-Use configured backup and restore directories.
+```powershell
+Get-Service CareQueueApi, CareQueueCaddy -ErrorAction SilentlyContinue
+```
 
-Do not bypass path validation merely to make the command succeed.
+Review the newest installer log before retrying the operation.
 
-### Service or port still active during recovery
+## Recommended Change Record
 
-Stop the CareQueue HTTPS service first, then stop the API service, confirm port `8000` is free, and retry.
-
-Windows services:
+For production upgrades, retain an organizational change record containing at least:
 
 ```text
-CareQueueCaddy
-CareQueueApi
+Date and time
+Operator
+Previous CareQueue version
+New CareQueue version
+Release artifact filename
+Release artifact SHA256
+Source commit or tag
+Pre-upgrade health result
+Backup filename
+Backup verification result
+Upgrade, repair, or rollback result
+Post-operation health result
+Browser smoke-test result
+Governance status
+Unexpected findings
+Recovery or rollback actions and final durable recovery state, if any
 ```
 
-Linux services:
-
-```text
-carequeue-caddy.service
-carequeue-api.service
-```
-
-### Database locked
-
-Close all services, development servers, backup scripts, restore scripts, and database tools.
-
-### Activation fails after cutover
-
-Keep CareQueue stopped.
-
-Confirm which file is active, locate rollback and safety backup files, and do not make manual moves until the state is understood.
-
-## Files That Must Not Be Committed
-
-```text
-backend/data/
-backend/backups/
-backend/restores/
-local_backups/
-*.db
-*.sqlite
-*.sqlite3
-*.db.enc
-*.restored.db
-*.rollback.db
-.env
-```
-
-Encrypted backups remain sensitive.
-
-## Recovery Record
-
-For a real recovery, record:
-
-- Incident or change reference
-- Recovery owner
-- Approval
-- Start time
-- Selected backup
-- Backup timestamp
-- Verification result
-- Safety backup path
-- Rollback path
-- Activation time
-- Validation results
-- Service restart time
-- Final acceptance
-- Follow-up actions
-
-Do not include PHI, credentials, or keys.
-
-## Minimum Recovery Checklist
-
-Before declaring success:
-
-- Selected backup was verified.
-- Required keys were available.
-- Services were stopped.
-- Preflight passed.
-- Safety backup was created.
-- Exact confirmation phrase was entered.
-- Final database validation passed.
-- Rollback database was preserved.
-- Direct readiness passed.
-- HTTPS readiness passed.
-- Login succeeded.
-- Representative records were reviewed.
-- Audit continuity and integrity status were reviewed.
-- Governance status was reviewed.
-- Backup scheduling was confirmed after restart.
-- Recovery owner accepted the result.
-- Recovery record was completed.
+Do not include passwords, MFA secrets, encryption keys, session tokens, PHI, or other sensitive values in the change record.

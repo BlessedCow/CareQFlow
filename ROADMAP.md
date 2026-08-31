@@ -1,6 +1,6 @@
 # Roadmap
 
-CareQueue is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, and packaged Windows and Linux deployment workflows are in place.
+CareQueue is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, controlled upgrades, and failed-upgrade rollback workflows are in place.
 
 The current focus is release hardening, deployment validation, upgrade safety, maintainability, broader testing, and operational maturity.
 
@@ -45,11 +45,14 @@ CareQueue currently includes:
 - Windows services for the API and HTTPS frontend
 - Linux systemd services for the API, HTTPS frontend, and scheduled backups
 - Private HTTPS through Caddy
-- Installer modes for Install, Upgrade, Repair, and Uninstall
+- Installer modes for Install, Upgrade, Repair, Rollback, and Uninstall
 - First-time Admin setup for packaged Windows and Linux deployments
 - Windows scheduled backup support
 - Linux systemd backup scheduling
 - Versioned release tooling for Windows and Linux artifacts
+- Failed-upgrade recovery records and verified pre-upgrade recovery assets
+- Assisted Windows and Linux rollback workflows with post-rollback validation
+- Version-based licensing with historical MIT releases and Business Source License 1.1 beginning with CareQueue 0.5.0
 
 Packaged production deployments keep the CareQueue API bound to the loopback interface and use Caddy to serve the frontend and proxy `/api` requests through private HTTPS.
 
@@ -106,6 +109,7 @@ The Windows installer supports:
 - Fresh installation
 - Upgrade over an existing installation
 - Repair of an existing installation
+- Rollback after an eligible failed upgrade
 - Uninstall while preserving runtime data
 - Fresh installation after uninstall using preserved data
 - Production configuration and encryption-key preservation
@@ -115,6 +119,10 @@ The Windows installer supports:
 - Private HTTPS through Caddy
 - Windows service installation
 - Scheduled encrypted backups
+- Verified pre-upgrade database backups and previous-application archives
+- Durable upgrade recovery records
+- Rollback activation of the previous application and pre-upgrade database
+- Post-rollback service and health validation
 
 The installer packages application files, backend runtime files, frontend build output, Caddy, WinSW service wrappers, and the private Python runtime required by the backend.
 
@@ -125,7 +133,7 @@ CareQueue now includes a versioned Linux release package for supported Debian-ba
 The Linux deployment workflow includes:
 
 - Versioned `CareQueue-Linux-Setup-<version>.tar.gz` release archives
-- Install, Upgrade, Repair, and Uninstall modes
+- Install, Upgrade, Repair, Rollback, and Uninstall modes
 - Ubuntu and Debian validation
 - Dedicated `carequeue` service account
 - Production application and runtime directory creation
@@ -140,8 +148,29 @@ The Linux deployment workflow includes:
 - Caddy internal certificate trust setup
 - Post-install frontend and API health validation
 - First-time Admin setup
+- Verified pre-upgrade database and application recovery assets
+- Durable failed-upgrade recovery records
+- Rollback of the previous application, database, systemd definitions, and installed-version metadata
+- Post-rollback service, liveness, and readiness validation
 
 Linux deployment remains more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
+
+### Licensing transition
+
+CareQueue `0.5.0` begins a new source-available licensing phase.
+
+The repository now distinguishes:
+
+- CareQueue `0.4.x` and earlier releases under the MIT License
+- CareQueue `0.5.0` and later versions expressly released under Business Source License 1.1
+- Non-production use under the applicable BSL terms
+- Separate commercial licensing for production use while a release remains under the BSL
+- Per-version Change Dates
+- GNU GPL version 3 or later as the current Change License
+- Historical MIT license preservation under `LICENSES/MIT.txt`
+- Public licensing guidance under `docs/licensing.md`
+
+Licensing documentation must remain consistent with the authoritative root `LICENSE` and applicable license texts.
 
 ### Backup and recovery
 
@@ -212,6 +241,7 @@ Windows validation should include:
 - Scheduled backup validation
 - Repair
 - Upgrade
+- Failed-upgrade rollback
 - Uninstall
 - Confirmation that runtime data is preserved where documented
 - Fresh install after uninstall using preserved data
@@ -227,6 +257,7 @@ Linux validation should include:
 - Backup timer behavior
 - Upgrade
 - Repair
+- Failed-upgrade rollback
 - Uninstall
 - File ownership and permission review
 - Certificate trust behavior
@@ -271,21 +302,32 @@ It should verify:
 
 The tool should report clear pass/fail results and point operators to the relevant log locations.
 
-### 4. Improve upgrade and rollback handling
+### 4. Harden upgrade and rollback recovery
 
-Current packaged deployments support upgrade and repair, but rollback behavior should become more formal.
+Assisted rollback is now implemented for packaged Windows and Linux upgrades.
 
-Remaining work includes:
+Current recovery behavior includes:
 
-- Pre-upgrade backup verification
-- Versioned installation metadata
-- Validation before replacing the active application
-- Clear rollback instructions
-- Better failure summaries
-- Recovery steps when a packaged dependency fails
-- Recovery steps after an interrupted upgrade
-- Automatic or assisted rollback to a previously trusted release
-- Tests for upgrade failure and rollback scenarios
+- Verified pre-upgrade encrypted database backups
+- Preserved previous-application archives
+- Application archive SHA256 verification
+- Versioned upgrade recovery records
+- Durable rollback states
+- Failed-application preservation
+- Database staging and activation
+- Service restart and post-rollback health validation
+- Installed-version metadata restoration
+
+Remaining work focuses on failure injection and operational resilience:
+
+- Interrupted-upgrade testing at multiple cutover points
+- Interrupted-rollback testing at multiple recovery states
+- Recovery validation when service restart fails
+- Recovery validation when health checks fail after database activation
+- Clear operator guidance for incomplete durable rollback states
+- Cross-release recovery drills using previously published artifacts
+- Retention guidance for failed-application and recovery evidence
+- Automated production smoke testing after upgrade and rollback
 
 ### 5. Validate cross-release migrations and recovery
 
@@ -301,8 +343,8 @@ Planned work includes:
 - Compatibility validation before and after migration-bearing upgrades
 - Recovery testing after interrupted or failed upgrades
 - Clear supported-version upgrade paths
-- Better downgrade planning where rollback to an older application release is required
-- Preservation and validation of verified pre-upgrade backups
+- Supported-path validation for rollback to previously released application/database pairs
+- Preservation and validation of verified pre-upgrade backups and application archives
 
 ### 6. Expand end-to-end browser testing
 
@@ -432,8 +474,7 @@ Any OCR or extraction expansion should remain local by default and must preserve
 The packaged Linux workflow is now implemented, but additional Linux maturity work remains:
 
 - Broader supported-distribution testing
-- Reboot and interrupted-upgrade testing
-- Automated rollback
+- Reboot, interrupted-upgrade, and interrupted-rollback testing
 - More detailed package smoke testing
 - Log rotation review
 - Certificate lifecycle guidance
@@ -452,8 +493,11 @@ Before a release is considered stable:
 - Release artifacts should be built from the intended source revision.
 - Clean-machine installation should be validated for supported deployment targets.
 - Upgrade behavior should be tested when the release changes installed application behavior.
+- Rollback behavior should be tested when release or migration changes affect recovery compatibility.
 - Security-sensitive workflows should receive targeted manual checks.
 - Documentation should describe the behavior of the release being published.
+- Release packaging should carry the applicable licensing material for that release.
+- Version-specific licensing statements should match the authoritative repository license.
 - Release notes should distinguish implemented controls from remaining deployment and organizational responsibilities.
 
 A new CareQueue application version does not automatically imply a new governance attestation version or document revision. Governance requirements should be versioned independently when the attestation content or required acknowledgments change. A change to either the required attestation version or required document revision causes the existing acceptance to no longer be current.
