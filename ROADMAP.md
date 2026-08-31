@@ -162,6 +162,7 @@ CareQFlow `0.5.0` begins a new source-available licensing phase.
 The repository now distinguishes:
 
 - CareQueue `0.4.x` and earlier releases under the MIT License
+- CareQueue `0.5.0` is expressly released under Business Source License 1.1
 - CareQFlow `0.5.0` and later versions expressly released under Business Source License 1.1
 - Non-production use under the applicable BSL terms
 - Separate commercial licensing for production use while a release remains under the BSL
