@@ -420,10 +420,25 @@ create_environment_file() {
 
         migrated_environment_file="${environment_file}.tmp"
 
-        awk '
-            !/^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=/ &&
-            !/^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=/ &&
-            !/^AUTHSTATUS_PRODUCTION_DATA_ROOT=/
+        awk \
+            -v application_origin="${APPLICATION_ORIGIN}" \
+            '
+            /^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=/ {
+                next
+            }
+            /^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=/ {
+                next
+            }
+            /^AUTHSTATUS_PRODUCTION_DATA_ROOT=/ {
+                next
+            }
+            $0 == "AUTHSTATUS_CORS_ORIGINS=[\"https://carequeue.local\"]" {
+                printf "AUTHSTATUS_CORS_ORIGINS=[\"%s\"]\n", application_origin
+                next
+            }
+            {
+                print
+            }
         ' "${environment_file}" > "${migrated_environment_file}"
 
         printf 'AUTHSTATUS_PRODUCTION_DATA_ROOT=%s\n' \
@@ -787,7 +802,7 @@ validate_source() {
         "backend/requirements.txt"
         "frontend/dist/index.html"
         "deployment/linux/Caddyfile"
-        "deployment/linux/CareQueue-AdminSetup.sh"
+        "deployment/linux/CareQFlow-AdminSetup.sh"
         "deployment/linux/systemd/carequeue-api.service"
         "deployment/linux/systemd/carequeue-backup.service"
         "deployment/linux/systemd/carequeue-backup.timer"

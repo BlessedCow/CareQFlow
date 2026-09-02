@@ -13,7 +13,7 @@ The repository currently includes:
 ```text
 deployment/linux/
 ├── Caddyfile
-├── CareQueue-AdminSetup.sh
+├── CareQFlow-AdminSetup.sh
 ├── install-production.sh
 ├── uninstall-production.sh
 ├── installer/
@@ -66,6 +66,14 @@ Current limitations include:
 - Public DNS and publicly trusted certificate deployment require separate planning and configuration.
 - Production disaster-recovery activation still requires operator review and validation.
 - The exact target distribution and operating-system version should be validated before introducing sensitive production data.
+
+### Legacy Linux Runtime Namespace
+
+CareQFlow retains the `carequeue` Linux runtime namespace for compatibility with existing installations.
+
+This includes paths such as `/opt/carequeue`, `/etc/carequeue`, `/var/lib/carequeue`, and `/var/log/carequeue`, the `carequeue` service account and group, `carequeue-*` systemd unit names, `carequeue.env`, `carequeue-release.env`, and `CAREQUEUE_*` installer metadata variables.
+
+These identifiers are compatibility interfaces and do not represent the current product name. User-facing application branding and installer messages use **CareQFlow**.
 
 ## Architecture
 
@@ -559,12 +567,20 @@ curl \
   https://careqflow.local/api/health/ready
 ```
 
+### Legacy runtime namespace
+
+CareQFlow retains the `carequeue` Linux runtime namespace for compatibility with existing installations.
+
+This includes installation and data paths such as `/opt/carequeue`, `/etc/carequeue`, `/var/lib/carequeue`, and `/var/log/carequeue`, as well as `carequeue-*` systemd unit names and `CAREQUEUE_*` installer metadata variables.
+
+These identifiers are implementation and upgrade compatibility interfaces. They should not be interpreted as the current product name. User-facing documentation, installer messages, and application branding use **CareQFlow**.
+
 ## First-Time Admin Setup
 
 On a new installation, `invoke-install.sh install` launches the installed Admin setup utility:
 
 ```text
-/opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
+/opt/carequeue/deployment/linux/CareQFlow-AdminSetup.sh
 ```
 
 The setup utility checks whether initial Admin setup is still available and, when required, prompts interactively for the first Admin account.

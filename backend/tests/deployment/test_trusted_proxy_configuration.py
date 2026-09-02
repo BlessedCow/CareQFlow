@@ -31,7 +31,7 @@ WINDOWS_ADMIN_SETUP = (
     PROJECT_ROOT / "deployment" / "windows" / "CareQueue-AdminSetup.ps1"
 )
 
-LINUX_ADMIN_SETUP = PROJECT_ROOT / "deployment" / "linux" / "CareQueue-AdminSetup.sh"
+LINUX_ADMIN_SETUP = PROJECT_ROOT / "deployment" / "linux" / "CareQFlow-AdminSetup.sh"
 
 
 def test_windows_api_trusts_forwarded_headers_only_from_loopback():
@@ -65,7 +65,7 @@ def test_windows_api_rejects_non_loopback_bind_addresses():
     content = WINDOWS_RUN_API.read_text(encoding="utf-8")
 
     assert '$HostAddress -notin @("127.0.0.1", "::1", "localhost")' in content
-    assert "CareQueue production API must bind only to loopback" in content
+    assert "CareQFlow production API must bind only to loopback" in content
 
 
 def test_windows_service_does_not_override_api_host():
@@ -161,6 +161,40 @@ def test_linux_installer_migrates_legacy_path_configuration():
     assert "Production path configuration migrated to the trusted data root." in content
 
 
+def test_linux_installer_migrates_legacy_default_application_origin():
+    content = LINUX_PRODUCTION_INSTALLER.read_text(encoding="utf-8")
+
+    environment_function = content.split(
+        "create_environment_file() {",
+        maxsplit=1,
+    )[
+        1
+    ].split("\n}", maxsplit=1,)[0]
+
+    assert '-v application_origin="${APPLICATION_ORIGIN}"' in environment_function
+    assert (
+        '$0 == "AUTHSTATUS_CORS_ORIGINS=[\\"https://carequeue.local\\"]"'
+        in environment_function
+    )
+    assert (
+        'printf "AUTHSTATUS_CORS_ORIGINS=[\\"%s\\"]\\n", application_origin'
+        in environment_function
+    )
+
+
+def test_linux_environment_migration_does_not_replace_custom_origins():
+    content = LINUX_PRODUCTION_INSTALLER.read_text(encoding="utf-8")
+
+    environment_function = content.split(
+        "create_environment_file() {",
+        maxsplit=1,
+    )[
+        1
+    ].split("\n}", maxsplit=1,)[0]
+
+    assert "/^AUTHSTATUS_CORS_ORIGINS=/" not in environment_function
+
+
 def test_linux_installer_validates_application_origin_before_installation():
     content = LINUX_PRODUCTION_INSTALLER.read_text(encoding="utf-8")
 
@@ -206,7 +240,7 @@ def test_linux_environment_migration_does_not_depend_on_grep_matches():
         1
     ].split("\n}", maxsplit=1,)[0]
 
-    assert "awk '" in environment_function
+    assert "awk \\" in environment_function
     assert "grep -Ev" not in environment_function
 
 

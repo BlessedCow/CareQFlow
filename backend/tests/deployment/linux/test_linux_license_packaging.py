@@ -8,6 +8,10 @@ LINUX_PACKAGE_BUILDER = (
     PROJECT_ROOT / "deployment" / "linux" / "installer" / "build-payload.ps1"
 )
 
+LINUX_TEST_PACKAGE_BUILDER = (
+    PROJECT_ROOT / "deployment" / "linux" / "installer" / "build-test-payload.ps1"
+)
+
 LINUX_INSTALLER_WRAPPER = (
     PROJECT_ROOT / "deployment" / "linux" / "installer" / "invoke-install.sh"
 )
@@ -252,3 +256,47 @@ def test_linux_failed_swap_recovery_restores_failed_license_material():
 
     assert '"${INSTALL_DIRECTORY}/LICENSE"' in function
     assert '"${INSTALL_DIRECTORY}/LICENSES"' in function
+
+
+def test_linux_test_package_builder_reuses_production_builder():
+    content = _read(LINUX_TEST_PACKAGE_BUILDER)
+
+    assert '"build-payload.ps1"' in content
+    assert "& $productionBuilder" in content
+    assert "-Version $Version" in content
+    assert '"CareQFlow-Linux-Setup-$Version.tar.gz"' in content
+
+
+def test_linux_test_package_builder_adds_backend_tests():
+    content = _read(LINUX_TEST_PACKAGE_BUILDER)
+
+    assert '"backend\\tests"' in content
+    assert 'Join-Path $repositoryRoot "backend\\tests"' in content
+    assert "-Destination $backendDestination" in content
+    assert "-Recurse" in content
+
+
+def test_linux_test_package_builder_adds_dev_requirements():
+    content = _read(LINUX_TEST_PACKAGE_BUILDER)
+
+    assert '"backend\\requirements-dev.txt"' in content
+    assert 'Join-Path $repositoryRoot "backend\\requirements-dev.txt"' in content
+
+
+def test_linux_test_package_is_clearly_separate_from_production_package():
+    content = _read(LINUX_TEST_PACKAGE_BUILDER)
+
+    assert '"CareQFlow-Linux-Test-$Version.tar.gz"' in content
+    assert (
+        "This package includes development tests and is not a production release artifact."
+        in content
+    )
+
+
+def test_linux_test_package_builder_removes_python_cache_artifacts():
+    content = _read(LINUX_TEST_PACKAGE_BUILDER)
+
+    assert '"__pycache__"' in content
+    assert '".pyc"' in content
+    assert '".pyo"' in content
+    assert "-LiteralPath $testStagingDirectory" in content

@@ -234,7 +234,7 @@ The setup interface does not pass the password through command-line arguments.
 The packaged Linux installer includes:
 
 ```text
-/opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
+/opt/carequeue/deployment/linux/CareQFlow-AdminSetup.sh
 ```
 
 For a new installation, the installer runs the setup utility after CareQFlow services and HTTPS validation succeed.

@@ -143,7 +143,7 @@ def test_upgrade_accepts_newer_release(
         """)
 
     assert result.returncode == 0
-    assert "Validated CareQueue upgrade path: 0.3.0 -> 0.4.0" in result.stdout
+    assert "Validated CareQFlow upgrade path: 0.3.0 -> 0.4.0" in result.stdout
 
 
 def test_upgrade_rejects_same_release(
@@ -201,7 +201,7 @@ def test_upgrade_rejects_downgrade(
         """)
 
     assert result.returncode != 0
-    assert "CareQueue downgrade refused:" in result.stderr
+    assert "CareQFlow downgrade refused:" in result.stderr
 
 
 def test_upgrade_allows_legacy_install_without_state_metadata(
@@ -226,7 +226,7 @@ def test_upgrade_allows_legacy_install_without_state_metadata(
         """)
 
     assert result.returncode == 0
-    assert "Installed CareQueue version metadata is unavailable." in result.stdout
+    assert "Installed CareQFlow version metadata is unavailable." in result.stdout
     assert "Continuing legacy upgrade validation." in result.stdout
 
 
@@ -257,7 +257,7 @@ def test_upgrade_rejects_invalid_incoming_version(
 
     assert result.returncode != 0
     assert (
-        "Incoming CareQueue package has an invalid application version:"
+        "Incoming CareQFlow package has an invalid application version:"
         in result.stderr
     )
 
@@ -288,7 +288,7 @@ def test_upgrade_rejects_invalid_installed_version(
         """)
 
     assert result.returncode != 0
-    assert "Installed CareQueue version metadata is invalid:" in result.stderr
+    assert "Installed CareQFlow version metadata is invalid:" in result.stderr
 
 
 def test_upgrade_recovery_record_is_created_with_expected_state(
@@ -590,7 +590,7 @@ def test_rollback_rejects_when_no_failed_upgrade_record_exists(
         """)
 
     assert result.returncode != 0
-    assert "No failed CareQueue upgrade recovery record was found." in result.stderr
+    assert "No failed CareQFlow upgrade recovery record was found." in result.stderr
 
 
 def test_rollback_rejects_missing_backup_file(
@@ -746,7 +746,7 @@ def test_rollback_resolver_does_not_reselect_staged_record(
         """)
 
     assert result.returncode != 0
-    assert "No failed CareQueue upgrade recovery record was found." in result.stderr
+    assert "No failed CareQFlow upgrade recovery record was found." in result.stderr
 
 
 def test_rollback_activation_stops_api_before_recovery_and_restarts_after_success(
@@ -869,7 +869,7 @@ exit 0
     assert "CAREQUEUE_UPGRADE_STATUS=rollback_activated" not in record
 
     assert "Rollback database activation completed." in result.stdout
-    assert "CareQueue services started after rollback activation." in result.stdout
+    assert "CareQFlow services started after rollback activation." in result.stdout
 
     assert "Upgrade recovery status: rollback_completed" in result.stdout
 
@@ -969,7 +969,7 @@ exit 1
     assert "CAREQUEUE_UPGRADE_STATUS=rollback_staged" in record
     assert "CAREQUEUE_UPGRADE_STATUS=rollback_activated" not in record
 
-    assert "CareQueue API remains stopped for safety." in result.stdout
+    assert "CareQFlow API remains stopped for safety." in result.stdout
 
 
 def test_rollback_activation_does_not_mark_success_when_api_restart_fails(
@@ -1163,7 +1163,7 @@ def test_rollback_rejects_invalid_previous_version_metadata(
     assert result.returncode != 0
     assert (
         "Cannot restore installed version metadata because the previous "
-        "CareQueue version is invalid:" in result.stderr
+        "CareQFlow version is invalid:" in result.stderr
     )
 
     assert (
@@ -1303,7 +1303,7 @@ def test_pre_upgrade_application_archive_rejects_missing_application_tree(
 
     assert result.returncode != 0
     assert (
-        "Cannot preserve the installed CareQueue application because "
+        "Cannot preserve the installed CareQFlow application because "
         "required application directories are missing." in result.stderr
     )
 
@@ -1982,7 +1982,7 @@ exit 0
     assert (install_directory / "deployment").is_dir()
 
     assert (
-        "CareQueue rollback could not stop carequeue-api.service "
+        "CareQFlow rollback could not stop carequeue-api.service "
         "before application replacement." in result.stderr
     )
 
@@ -2046,7 +2046,7 @@ exit 0
     assert (install_directory / "deployment").is_dir()
 
     assert (
-        "CareQueue rollback could not stop carequeue-caddy.service "
+        "CareQFlow rollback could not stop carequeue-caddy.service "
         "before application replacement." in result.stderr
     )
 
@@ -2160,7 +2160,7 @@ exec /bin/cp "$@"
     assert not (install_directory / "deployment" / "previous.txt").exists()
 
     assert (
-        "The failed application was restored and CareQueue services remain stopped."
+        "The failed application was restored and CareQFlow services remain stopped."
         in result.stderr
     )
 
@@ -2276,8 +2276,8 @@ exit 1
     assert not (install_directory / "deployment" / "previous.txt").exists()
 
     assert (
-        "Failed to rebuild the previous CareQueue Python environment. "
-        "The failed application was restored and CareQueue services remain stopped."
+        "Failed to rebuild the previous CareQFlow Python environment. "
+        "The failed application was restored and CareQFlow services remain stopped."
         in result.stderr
     )
 
@@ -2364,7 +2364,7 @@ def test_failed_application_restore_helper_restores_all_application_trees(
     assert "CAREQUEUE_UPGRADE_STATUS=rollback_staged" not in record
 
     assert (
-        "CareQueue services remain stopped pending administrator review."
+        "CareQFlow services remain stopped pending administrator review."
         in result.stdout
     )
 
@@ -2483,7 +2483,7 @@ exit 0
 
     assert result.returncode != 0
     assert (
-        "CareQueue did not pass health and readiness checks after rollback."
+        "CareQFlow did not pass health and readiness checks after rollback."
         in result.stderr
     )
     assert "rollback was not marked complete." in result.stderr
@@ -2546,9 +2546,9 @@ def test_license_acceptance_accepts_explicit_accept(
         """)
 
     assert result.returncode == 0
-    assert "CareQueue License Agreement" in result.stdout
+    assert "CareQFlow License Agreement" in result.stdout
     assert "CareQueue test license" in result.stdout
-    assert "CareQueue license terms accepted." in result.stdout
+    assert "CareQFlow license terms accepted." in result.stdout
 
 
 def test_license_acceptance_rejects_non_accept_response(
@@ -2572,7 +2572,7 @@ def test_license_acceptance_rejects_non_accept_response(
         """)
 
     assert result.returncode != 0
-    assert "CareQueue License Agreement" in result.stdout
+    assert "CareQFlow License Agreement" in result.stdout
     assert "License terms were not accepted." in result.stdout
 
 
@@ -2617,7 +2617,7 @@ def test_license_acceptance_rejects_missing_license_notice(
         """)
 
     assert result.returncode != 0
-    assert "CareQueue license notice was not found:" in result.stderr
+    assert "CareQFlow license notice was not found:" in result.stderr
 
 
 @pytest.mark.parametrize(

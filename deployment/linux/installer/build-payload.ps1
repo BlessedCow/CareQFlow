@@ -42,7 +42,7 @@ $requiredPaths = @(
     "backend\requirements.txt"
     "frontend\dist\index.html"
     "deployment\linux\Caddyfile"
-    "deployment\linux\CareQueue-AdminSetup.sh"
+    "deployment\linux\CareQFlow-AdminSetup.sh"
     "deployment\linux\install-production.sh"
     "deployment\linux\uninstall-production.sh"
     "deployment\linux\installer\invoke-install.sh"

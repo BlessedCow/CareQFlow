@@ -1643,7 +1643,7 @@ run_uninstall_operation() {
 run_initial_admin_setup() {
     local admin_setup_script
 
-    admin_setup_script="${INSTALL_DIRECTORY}/deployment/linux/CareQueue-AdminSetup.sh"
+    admin_setup_script="${INSTALL_DIRECTORY}/deployment/linux/CareQFlow-AdminSetup.sh"
 
     if [[ ! -f "${admin_setup_script}" ]]; then
         fail "CareQFlow admin setup script was not installed."

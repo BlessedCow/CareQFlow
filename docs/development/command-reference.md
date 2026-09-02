@@ -843,13 +843,13 @@ If the local Caddy root has not yet been trusted by the invoking environment, re
 The packaged Linux utility is installed at:
 
 ```text
-/opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
+/opt/carequeue/deployment/linux/CareQFlow-AdminSetup.sh
 ```
 
 Run it manually when initial setup is still available:
 
 ```bash
-sudo bash /opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
+sudo bash /opt/carequeue/deployment/linux/CareQFlow-AdminSetup.sh
 ```
 
 The utility submits the initial Admin credentials only to the loopback CareQFlow API.
@@ -910,7 +910,7 @@ Logs:
 /var/log/carequeue
 
 Admin setup utility:
-/opt/carequeue/deployment/linux/CareQueue-AdminSetup.sh
+/opt/carequeue/deployment/linux/CareQFlow-AdminSetup.sh
 ```
 
 ## Review Release Licensing

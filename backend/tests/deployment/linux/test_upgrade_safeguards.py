@@ -16,6 +16,8 @@ LINUX_PRODUCTION_INSTALLER = (
     PROJECT_ROOT / "deployment" / "linux" / "install-production.sh"
 )
 
+LINUX_ADMIN_SETUP = PROJECT_ROOT / "deployment" / "linux" / "CareQFlow-AdminSetup.sh"
+
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -30,6 +32,56 @@ def _shell_function(content: str, name: str) -> str:
         "\n}",
         maxsplit=1,
     )[0]
+
+
+def test_linux_runtime_namespace_remains_compatible():
+    production_installer = _read(LINUX_PRODUCTION_INSTALLER)
+    installer_wrapper = _read(LINUX_INSTALLER_WRAPPER)
+
+    expected_defaults = (
+        'INSTALL_DIRECTORY="${INSTALL_DIRECTORY:-/opt/carequeue}"',
+        'DATA_DIRECTORY="${DATA_DIRECTORY:-/var/lib/carequeue}"',
+        'CONFIG_DIRECTORY="${CONFIG_DIRECTORY:-/etc/carequeue}"',
+        'LOG_DIRECTORY="${LOG_DIRECTORY:-/var/log/carequeue}"',
+    )
+
+    for expected in expected_defaults:
+        assert expected in production_installer
+        assert expected in installer_wrapper
+
+    assert 'CAREQUEUE_USER="${CAREQUEUE_USER:-carequeue}"' in production_installer
+    assert 'CAREQUEUE_GROUP="${CAREQUEUE_GROUP:-carequeue}"' in production_installer
+
+    assert "carequeue-api.service" in production_installer
+    assert "carequeue-caddy.service" in production_installer
+    assert "carequeue-backup.service" in production_installer
+    assert "carequeue-backup.timer" in production_installer
+
+    assert "carequeue-api.service" in installer_wrapper
+    assert "carequeue-caddy.service" in installer_wrapper
+    assert "carequeue-backup.service" in installer_wrapper
+    assert "carequeue-backup.timer" in installer_wrapper
+
+    assert "carequeue.env" in production_installer
+    assert "carequeue-release.env" in production_installer
+    assert "carequeue.env" in installer_wrapper
+    assert "carequeue-release.env" in installer_wrapper
+
+
+def test_linux_admin_setup_uses_careqflow_filename():
+    package_builder = _read(LINUX_PACKAGE_BUILDER)
+    production_installer = _read(LINUX_PRODUCTION_INSTALLER)
+    installer_wrapper = _read(LINUX_INSTALLER_WRAPPER)
+
+    assert LINUX_ADMIN_SETUP.is_file()
+
+    assert "CareQFlow-AdminSetup.sh" in package_builder
+    assert "CareQFlow-AdminSetup.sh" in production_installer
+    assert "CareQFlow-AdminSetup.sh" in installer_wrapper
+
+    assert "CareQueue-AdminSetup.sh" not in package_builder
+    assert "CareQueue-AdminSetup.sh" not in production_installer
+    assert "CareQueue-AdminSetup.sh" not in installer_wrapper
 
 
 def test_linux_package_contains_versioned_release_metadata():
