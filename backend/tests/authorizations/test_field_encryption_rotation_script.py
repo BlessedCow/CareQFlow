@@ -96,7 +96,7 @@ def test_main_reports_backup_and_rotation_counts(
     assert f"Created and verified encrypted backup: {backup_path}" in captured.out
     assert "Rotated authorization fields: 12" in captured.out
     assert "Rotated authorization event notes: 4" in captured.out
-    assert "Rotated MFA secrets: 2" in captured.out
+    assert "Rotated MFA secrets" not in captured.out
     assert "Rotated authorization documents: 3" in captured.out
 
 

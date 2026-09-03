@@ -105,7 +105,6 @@ def main() -> int:
     print(f"Created and verified encrypted backup: {backup_path}")
     print("Rotated authorization fields: " f"{counts['authorization_fields']}")
     print(f"Rotated authorization event notes: {counts['event_notes']}")
-    print(f"Rotated MFA secrets: {counts['mfa_secrets']}")
     print(f"Rotated authorization documents: {counts['documents']}")
 
     return 0
