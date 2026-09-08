@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import sqlite3
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -100,29 +99,6 @@ def _atomic_write_bytes(destination_path: Path, data: bytes) -> None:
                 pass
 
 
-def _create_plaintext_snapshot(
-    source_path: Path,
-    snapshot_path: Path,
-) -> None:
-    source_conn: sqlite3.Connection | None = None
-    snapshot_conn: sqlite3.Connection | None = None
-
-    try:
-        source_conn = sqlite3.connect(source_path)
-        snapshot_conn = sqlite3.connect(snapshot_path)
-        source_conn.backup(snapshot_conn)
-    except sqlite3.DatabaseError as exc:
-        raise BackupError(
-            "Unable to create a consistent plaintext database snapshot."
-        ) from exc
-    finally:
-        if snapshot_conn is not None:
-            snapshot_conn.close()
-
-        if source_conn is not None:
-            source_conn.close()
-
-
 def _create_sqlcipher_snapshot(
     source_path: Path,
     snapshot_path: Path,
@@ -167,21 +143,10 @@ def _create_database_snapshot(
 ) -> None:
     settings = get_settings()
 
-    if settings.database_encryption == "plaintext":
-        _create_plaintext_snapshot(source_path, snapshot_path)
-        return
-
-    if settings.database_encryption == "sqlcipher":
-        _create_sqlcipher_snapshot(
-            source_path,
-            snapshot_path,
-            passphrase=settings.sqlcipher_key.strip(),
-        )
-        return
-
-    raise BackupConfigError(
-        "Unsupported AUTHSTATUS_DATABASE_ENCRYPTION value: "
-        f"{settings.database_encryption}"
+    _create_sqlcipher_snapshot(
+        source_path,
+        snapshot_path,
+        passphrase=settings.sqlcipher_key.strip(),
     )
 
 
@@ -222,19 +187,6 @@ def _validate_database_connection(conn: Any) -> None:
         )
 
 
-def _validate_plaintext_database(database_path: Path) -> None:
-    try:
-        conn = sqlite3.connect(database_path)
-        try:
-            _validate_database_connection(conn)
-        finally:
-            conn.close()
-    except sqlite3.DatabaseError as exc:
-        raise BackupError(
-            "Restored file is not a valid plaintext SQLite database."
-        ) from exc
-
-
 def _validate_sqlcipher_database(
     database_path: Path,
     *,
@@ -266,20 +218,9 @@ def _validate_sqlcipher_database(
 def _validate_restored_database(database_path: Path) -> None:
     settings = get_settings()
 
-    if settings.database_encryption == "plaintext":
-        _validate_plaintext_database(database_path)
-        return
-
-    if settings.database_encryption == "sqlcipher":
-        _validate_sqlcipher_database(
-            database_path,
-            passphrase=settings.sqlcipher_key.strip(),
-        )
-        return
-
-    raise BackupConfigError(
-        "Unsupported AUTHSTATUS_DATABASE_ENCRYPTION value: "
-        f"{settings.database_encryption}"
+    _validate_sqlcipher_database(
+        database_path,
+        passphrase=settings.sqlcipher_key.strip(),
     )
 
 

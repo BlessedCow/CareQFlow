@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 
 import pytest
 
@@ -23,8 +22,22 @@ from authstatus_api.backups.service import (
     verify_encrypted_database_backup,
 )
 from authstatus_api.crypto import generate_encryption_key
+from authstatus_api.database_encryption.sqlcipher_probe import (
+    apply_sqlcipher_key,
+    import_sqlcipher,
+)
 from authstatus_api.persistence.schema import init_db
 from authstatus_api.settings import get_settings
+
+
+def _open_sqlcipher_database(database_path):
+    sqlcipher3 = import_sqlcipher()
+    conn = sqlcipher3.connect(str(database_path))
+    apply_sqlcipher_key(
+        conn,
+        get_settings().sqlcipher_key.strip(),
+    )
+    return conn
 
 
 def test_verify_encrypted_database_backup_accepts_valid_backup(
@@ -123,7 +136,7 @@ def test_verify_encrypted_database_backup_removes_invalid_decrypted_file(
 
     with pytest.raises(
         BackupError,
-        match="not a valid plaintext SQLite database",
+        match="not a valid SQLCipher database for the configured key",
     ):
         verify_encrypted_database_backup(backup_path=backup_path)
 
@@ -194,7 +207,10 @@ def configure_test_settings(tmp_path, monkeypatch):
         "AUTHSTATUS_BACKUP_ENCRYPTION_KEY",
         generate_encryption_key(),
     )
-    monkeypatch.setenv("AUTHSTATUS_DATABASE_ENCRYPTION", "plaintext")
+    monkeypatch.setenv(
+        "AUTHSTATUS_SQLCIPHER_KEY",
+        "careqflow-backup-test-sqlcipher-key",
+    )
     get_settings.cache_clear()
 
     yield
@@ -217,7 +233,7 @@ def test_create_encrypted_database_backup_writes_encrypted_snapshot(tmp_path):
 
     init_db()
 
-    with sqlite3.connect(database_path) as conn:
+    with _open_sqlcipher_database(database_path) as conn:
         conn.execute(
             """
             INSERT INTO users (
@@ -258,7 +274,7 @@ def test_create_encrypted_database_backup_writes_encrypted_snapshot(tmp_path):
     restored_snapshot_path = tmp_path / "snapshot.db"
     restored_snapshot_path.write_bytes(decrypted_snapshot)
 
-    with sqlite3.connect(restored_snapshot_path) as conn:
+    with _open_sqlcipher_database(restored_snapshot_path) as conn:
         username = conn.execute(
             "SELECT username FROM users WHERE username = ?",
             ("backup@example.com",),
@@ -289,17 +305,17 @@ def test_create_encrypted_database_backup_removes_temporary_snapshot(
     assert not list(backup_directory.glob("*.tmp"))
 
 
-def test_create_encrypted_database_backup_rejects_invalid_plaintext_database(
+def test_create_encrypted_database_backup_rejects_invalid_sqlcipher_database(
     tmp_path,
 ):
     database_path = tmp_path / "invalid.db"
     backup_directory = tmp_path / "backups"
 
-    database_path.write_bytes(b"not a valid SQLite database")
+    database_path.write_bytes(b"not a valid SQLCipher database")
 
     with pytest.raises(
         BackupError,
-        match="consistent plaintext database snapshot",
+        match="consistent SQLCipher database snapshot",
     ):
         create_encrypted_database_backup(
             database_path=database_path,
@@ -447,14 +463,14 @@ def test_restore_encrypted_database_backup_writes_valid_safe_restore_file(
     assert restored_path.parent == restore_directory
     assert restored_path.name.endswith(".restored.db")
 
-    with sqlite3.connect(database_path) as original_conn:
+    with _open_sqlcipher_database(database_path) as original_conn:
         original_tables = {row[0] for row in original_conn.execute("""
                 SELECT name
                 FROM sqlite_master
                 WHERE type = 'table'
                 """).fetchall()}
 
-    with sqlite3.connect(restored_path) as restored_conn:
+    with _open_sqlcipher_database(restored_path) as restored_conn:
         restored_tables = {row[0] for row in restored_conn.execute("""
                 SELECT name
                 FROM sqlite_master
@@ -480,7 +496,7 @@ def test_restore_rejects_decrypted_file_that_is_not_a_carequeue_database(
 
     with pytest.raises(
         BackupError,
-        match="not a valid plaintext SQLite database",
+        match="not a valid SQLCipher database for the configured key",
     ):
         restore_encrypted_database_backup(
             backup_path=backup_path,
@@ -858,7 +874,7 @@ def test_stage_encrypted_database_recovery_creates_valid_staged_copy(
 
     assert manifest == recovery_info
 
-    with sqlite3.connect(staged_path) as conn:
+    with _open_sqlcipher_database(staged_path) as conn:
         integrity_result = conn.execute("PRAGMA quick_check").fetchone()
 
     assert integrity_result is not None

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from typing import Any
 
 from authstatus_api.database_encryption.sqlcipher_probe import (
@@ -14,13 +13,6 @@ from authstatus_api.settings import get_settings
 
 class DatabaseEncryptionError(RuntimeError):
     pass
-
-
-def _get_plaintext_conn(database_path):
-    conn = sqlite3.connect(database_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
 
 
 def _get_sqlcipher_conn(database_path, passphrase: str):
@@ -48,15 +40,12 @@ def get_conn() -> Any:
         exist_ok=True,
     )
 
-    if settings.database_encryption == "sqlcipher":
-        passphrase = settings.sqlcipher_key.strip()
+    passphrase = settings.sqlcipher_key.strip()
 
-        if not passphrase:
-            raise DatabaseEncryptionError("Missing AUTHSTATUS_DATABASE_PASSPHRASE.")
+    if not passphrase:
+        raise DatabaseEncryptionError("Missing AUTHSTATUS_DATABASE_PASSPHRASE.")
 
-        return _get_sqlcipher_conn(
-            database_path,
-            passphrase,
-        )
-
-    return _get_plaintext_conn(database_path)
+    return _get_sqlcipher_conn(
+        database_path,
+        passphrase,
+    )

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -20,6 +18,7 @@ from authstatus_api.authorizations.documents import (
     rotate_encrypted_pdf_bytes,
 )
 from authstatus_api.authorizations.records import create_auth, get_auth
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.settings import get_settings
 
 
@@ -87,10 +86,7 @@ def test_create_auth_document_stores_encrypted_pdf_metadata_only():
     assert document["file_size_bytes"] == len(pdf_bytes)
     assert "encrypted_pdf" not in document
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute(
             "SELECT encrypted_pdf FROM auth_documents WHERE id = ?",
             (document["id"],),

@@ -2,9 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from authstatus_api.database_encryption.sqlcipher_probe import (
-    plaintext_sqlite_can_read_database,
-)
 from authstatus_api.persistence.connections import (
     DatabaseEncryptionError,
     get_conn,
@@ -75,31 +72,34 @@ def test_database_path_rejects_non_database_suffix(tmp_path):
         resolve_database_path(tmp_path / "auth_tracker.txt")
 
 
-def test_get_conn_uses_plaintext_database_by_default(tmp_path, monkeypatch):
+def test_get_conn_uses_sqlcipher_database_by_default(tmp_path, monkeypatch):
     database_path = tmp_path / "auth_tracker.db"
 
     monkeypatch.setenv("AUTHSTATUS_DATABASE_PATH", str(database_path))
-    monkeypatch.delenv("AUTHSTATUS_DATABASE_ENCRYPTION", raising=False)
+    monkeypatch.setenv(
+        "AUTHSTATUS_SQLCIPHER_KEY",
+        "correct horse battery staple",
+    )
     get_settings.cache_clear()
 
     init_db()
 
     assert database_path.exists()
-    assert plaintext_sqlite_can_read_database(database_path) is True
 
 
-def test_get_conn_uses_sqlcipher_database_when_enabled(tmp_path, monkeypatch):
+def test_get_conn_uses_sqlcipher_database_when_explicitly_configured(
+    tmp_path,
+    monkeypatch,
+):
     database_path = tmp_path / "auth_tracker.sqlcipher.db"
 
     monkeypatch.setenv("AUTHSTATUS_DATABASE_PATH", str(database_path))
-    monkeypatch.setenv("AUTHSTATUS_DATABASE_ENCRYPTION", "sqlcipher")
     monkeypatch.setenv("AUTHSTATUS_SQLCIPHER_KEY", "correct horse battery staple")
     get_settings.cache_clear()
 
     init_db()
 
     assert database_path.exists()
-    assert plaintext_sqlite_can_read_database(database_path) is False
 
     with get_conn() as conn:
         row = conn.execute("""
@@ -112,11 +112,10 @@ def test_get_conn_uses_sqlcipher_database_when_enabled(tmp_path, monkeypatch):
     assert row["table_count"] == 1
 
 
-def test_sqlcipher_mode_requires_key(tmp_path, monkeypatch):
+def test_database_requires_sqlcipher_key(tmp_path, monkeypatch):
     database_path = tmp_path / "auth_tracker.sqlcipher.db"
 
     monkeypatch.setenv("AUTHSTATUS_DATABASE_PATH", str(database_path))
-    monkeypatch.setenv("AUTHSTATUS_DATABASE_ENCRYPTION", "sqlcipher")
     monkeypatch.setenv("AUTHSTATUS_SQLCIPHER_KEY", "")
     get_settings.cache_clear()
 

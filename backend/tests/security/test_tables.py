@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
+from sqlcipher3 import IntegrityError
 
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
@@ -161,7 +160,7 @@ def test_init_db_creates_trusted_devices_table():
 def test_user_role_constraint_rejects_unknown_role():
     init_db()
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         with get_conn() as conn:
             conn.execute(
                 """

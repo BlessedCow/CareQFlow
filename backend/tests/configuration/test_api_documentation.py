@@ -50,10 +50,6 @@ def test_production_disables_api_documentation(
         str(database_path),
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_ENCRYPTION",
-        "sqlcipher",
-    )
-    monkeypatch.setenv(
         "AUTHSTATUS_SQLCIPHER_KEY",
         "a" * 32,
     )

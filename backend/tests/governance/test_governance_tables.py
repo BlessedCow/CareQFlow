@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
+from sqlcipher3 import IntegrityError
 
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
@@ -95,7 +94,7 @@ def test_governance_attestation_rejects_unknown_deployment_mode():
         role="Admin",
     )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         with get_conn() as conn:
             conn.execute(
                 """
@@ -123,7 +122,7 @@ def test_governance_attestation_rejects_unknown_deployment_mode():
 def test_governance_attestation_requires_existing_user():
     init_db()
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         with get_conn() as conn:
             conn.execute(
                 """

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
 
 from authstatus_api.crypto import ENCRYPTED_TEXT_PREFIX, generate_encryption_key
 from authstatus_api.main import create_app
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
@@ -133,10 +133,7 @@ def test_upload_auth_document_stores_encrypted_pdf_metadata_only(
     assert data["file_size_bytes"] == len(pdf_bytes)
     assert "encrypted_pdf" not in data
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute(
             """
             SELECT encrypted_pdf
@@ -359,10 +356,7 @@ def test_auth_document_audit_events_do_not_include_filename_or_pdf_content(
 
     assert delete_response.status_code == 200
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         rows = conn.execute("""
             SELECT action, metadata
             FROM audit_events

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import sqlite3
 from datetime import timedelta
 from typing import Any
+
+from sqlcipher3 import IntegrityError
 
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
@@ -208,7 +209,7 @@ def update_user(
                 )
             else:
                 return get_user_by_id(user_id)
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise
 
     if cursor.rowcount == 0:

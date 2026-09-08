@@ -19,7 +19,7 @@ CareQFlow development uses:
 
 - Python and FastAPI for the backend
 - React, TypeScript, Vite, and Tailwind for the frontend
-- SQLite or SQLCipher for local data storage
+- SQLCipher for local data storage
 - Separate backend and frontend development servers
 - Local application accounts stored in the active development database
 - TOTP MFA and remembered-device authentication
@@ -40,7 +40,7 @@ FastAPI
   |
   | http://127.0.0.1:8000
   v
-SQLite or SQLCipher database
+SQLCipher database
 ```
 
 Packaged production deployment uses a different shape: operating-system services, packaged runtime dependencies, Caddy, and `https://careqflow.local`. Do not use the development server setup as proof that a packaged Windows or Linux release works.
@@ -222,7 +222,6 @@ AUTHSTATUS_SQLCIPHER_KEY=<independent SQLCipher key>
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=<backup Fernet key>
 
 AUTHSTATUS_DATABASE_PATH=backend/data/auth_tracker.sqlcipher.db
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
 AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=false
 AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=false
 
@@ -247,18 +246,6 @@ Replace placeholders with local values.
 
 Do not commit the completed file.
 
-## Plaintext SQLite Mode
-
-For limited local development:
-
-```env
-AUTHSTATUS_DATABASE_PATH=backend/data/auth_tracker.db
-AUTHSTATUS_DATABASE_ENCRYPTION=plaintext
-```
-
-Only one database mode should be active at a time.
-
-Plaintext mode does not provide database-file encryption and must not be used for production data.
 
 ## Frontend Environment
 
@@ -671,22 +658,6 @@ Remembered-device state is separate from the authenticated session and does not 
 
 Do not copy development-only cookie security settings into production.
 
-## Switching Database Modes
-
-Do not point SQLCipher mode at a plaintext database or plaintext mode at a SQLCipher database and expect automatic conversion.
-
-Relevant scripts:
-
-```text
-backend/scripts/prepare_sqlcipher_cutover.py
-backend/scripts/migrate_to_sqlcipher.py
-backend/scripts/verify_sqlcipher_database.py
-```
-
-Review the current scripts before running them.
-
-Database migration and backup procedures belong in [Backup and Recovery](../workflows/backup-and-recovery.md).
-
 ## Stop Development Servers
 
 Use:
@@ -880,8 +851,6 @@ local_config/
 local_installer_assets/
 local_vobs/
 *.db
-*.sqlite
-*.sqlite3
 *.db.enc
 *.restored.db
 __pycache__/

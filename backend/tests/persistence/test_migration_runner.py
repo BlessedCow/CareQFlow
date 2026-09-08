@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime
 
 import pytest
+from sqlcipher3 import IntegrityError
 
+from authstatus_api.database_encryption.sqlcipher_probe import (
+    apply_sqlcipher_key,
+    import_sqlcipher,
+)
 from authstatus_api.persistence.migration_runner import (
     Migration,
     MigrationError,
@@ -30,10 +34,23 @@ from authstatus_api.persistence.migration_steps.security import (
 )
 
 
+def _open_sqlcipher_database(database_path, passphrase):
+    sqlcipher3 = import_sqlcipher()
+    connection = sqlcipher3.connect(str(database_path))
+    connection.row_factory = sqlcipher3.Row
+    apply_sqlcipher_key(connection, passphrase)
+    return connection
+
+
 @pytest.fixture
 def conn():
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
+    sqlcipher3 = import_sqlcipher()
+    connection = sqlcipher3.connect(":memory:")
+    connection.row_factory = sqlcipher3.Row
+    apply_sqlcipher_key(
+        connection,
+        "careqflow-migration-runner-test-key",
+    )
 
     yield connection
 
@@ -377,7 +394,12 @@ def test_schema_migrations_table_is_created_during_init_db(
 
     init_db()
 
-    with sqlite3.connect(database_path) as connection:
+    settings = get_settings()
+
+    with _open_sqlcipher_database(
+        database_path,
+        settings.sqlcipher_key.strip(),
+    ) as connection:
         row = connection.execute("""
             SELECT name
             FROM sqlite_master
@@ -398,7 +420,19 @@ def test_init_db_upgrades_legacy_users_table_and_preserves_existing_user(
 
     database_path = tmp_path / "auth_tracker.db"
 
-    with sqlite3.connect(database_path) as connection:
+    monkeypatch.setenv(
+        "AUTHSTATUS_DATABASE_PATH",
+        str(database_path),
+    )
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    passphrase = settings.sqlcipher_key.strip()
+
+    with _open_sqlcipher_database(
+        database_path,
+        passphrase,
+    ) as connection:
         connection.execute("""
             CREATE TABLE users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -450,16 +484,12 @@ def test_init_db_upgrades_legacy_users_table_and_preserves_existing_user(
 
         connection.commit()
 
-    monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_PATH",
-        str(database_path),
-    )
-    get_settings.cache_clear()
-
     init_db()
 
-    with sqlite3.connect(database_path) as connection:
-        connection.row_factory = sqlite3.Row
+    with _open_sqlcipher_database(
+        database_path,
+        passphrase,
+    ) as connection:
 
         user_row = connection.execute(
             """
@@ -510,7 +540,19 @@ def test_init_db_applies_registered_migrations_in_order(
 
     database_path = tmp_path / "auth_tracker.db"
 
-    with sqlite3.connect(database_path) as connection:
+    monkeypatch.setenv(
+        "AUTHSTATUS_DATABASE_PATH",
+        str(database_path),
+    )
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    passphrase = settings.sqlcipher_key.strip()
+
+    with _open_sqlcipher_database(
+        database_path,
+        passphrase,
+    ) as connection:
         connection.execute("""
             CREATE TABLE users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -581,16 +623,12 @@ def test_init_db_applies_registered_migrations_in_order(
 
         connection.commit()
 
-    monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_PATH",
-        str(database_path),
-    )
-    get_settings.cache_clear()
-
     init_db()
 
-    with sqlite3.connect(database_path) as connection:
-        connection.row_factory = sqlite3.Row
+    with _open_sqlcipher_database(
+        database_path,
+        passphrase,
+    ) as connection:
 
         migration_rows = connection.execute("""
             SELECT migration_id
@@ -666,7 +704,19 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
 
     database_path = tmp_path / "auth_tracker.db"
 
-    with sqlite3.connect(database_path) as connection:
+    monkeypatch.setenv(
+        "AUTHSTATUS_DATABASE_PATH",
+        str(database_path),
+    )
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    passphrase = settings.sqlcipher_key.strip()
+
+    with _open_sqlcipher_database(
+        database_path,
+        passphrase,
+    ) as connection:
         connection.execute("""
             CREATE TABLE users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -808,16 +858,12 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
 
         connection.commit()
 
-    monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_PATH",
-        str(database_path),
-    )
-    get_settings.cache_clear()
-
     init_db()
 
-    with sqlite3.connect(database_path) as connection:
-        connection.row_factory = sqlite3.Row
+    with _open_sqlcipher_database(
+        database_path,
+        passphrase,
+    ) as connection:
 
         migration_rows = connection.execute("""
             SELECT migration_id
@@ -1766,7 +1812,7 @@ def test_governance_append_only_migration_blocks_attestation_update(conn):
     )
 
     with pytest.raises(
-        sqlite3.IntegrityError,
+        IntegrityError,
         match="governance attestations are append-only",
     ):
         conn.execute("""
@@ -1814,7 +1860,7 @@ def test_governance_append_only_migration_blocks_attestation_delete(conn):
     )
 
     with pytest.raises(
-        sqlite3.IntegrityError,
+        IntegrityError,
         match="governance attestations are append-only",
     ):
         conn.execute("""

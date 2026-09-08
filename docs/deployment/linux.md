@@ -313,7 +313,6 @@ The generated configuration includes production settings such as:
 
 ```env
 AUTHSTATUS_APP_ENVIRONMENT=production
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
 AUTHSTATUS_SESSION_COOKIE_SECURE=true
 ```
 
@@ -362,13 +361,7 @@ The existing database and encryption keys must remain available across upgrades 
 
 ## Database Encryption
 
-Production configuration uses:
-
-```env
-AUTHSTATUS_DATABASE_ENCRYPTION=sqlcipher
-```
-
-with the default database path:
+Production configuration default database path:
 
 ```text
 /var/lib/carequeue/data/auth_tracker.sqlcipher.db

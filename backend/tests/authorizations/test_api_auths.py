@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
@@ -118,10 +117,7 @@ def test_create_auth_endpoint_stores_selected_fields_encrypted(client, auth_head
 
     assert response.status_code == 201
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute("SELECT * FROM auths WHERE id = 1").fetchone()
 
     assert row is not None
@@ -228,9 +224,7 @@ def test_list_auths_endpoint_returns_existing_records_with_null_pipeline_fields(
 
     assert create_response.status_code == 201
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
+    with get_conn() as conn:
         conn.execute("""
             UPDATE auths
             SET
@@ -382,10 +376,7 @@ def test_patch_auth_endpoint_encrypts_updated_sensitive_fields(client, auth_head
     assert data["member_id"] == "XYZ789"
     assert data["auth_number"] == "AUTH-999"
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute("SELECT * FROM auths WHERE id = 1").fetchone()
 
     assert row is not None
@@ -838,10 +829,7 @@ def test_patch_auth_endpoint_tracks_denial_p2p_appeal_and_retro_pipeline_fields(
     assert data["retro_outcome"] == "Pending"
     assert data["retro_notes"] == "Retro auth needed for gap days."
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute("SELECT * FROM auths WHERE id = 1").fetchone()
 
     assert row is not None

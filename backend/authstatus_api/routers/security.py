@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from ipaddress import ip_address
 
 from fastapi import (
@@ -12,6 +11,7 @@ from fastapi import (
     Response,
     status,
 )
+from sqlcipher3 import IntegrityError
 
 from authstatus_api.audit.service import list_audit_events, record_audit_event
 from authstatus_api.audit.verification import verify_audit_chain
@@ -204,7 +204,7 @@ def setup_initial_admin(
             role="Admin",
             must_change_password=False,
         )
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Initial admin setup is no longer available.",

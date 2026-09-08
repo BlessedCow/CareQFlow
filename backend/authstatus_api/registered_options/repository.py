@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import sqlite3
 from datetime import UTC, datetime
 from typing import Any, Literal
+
+from sqlcipher3 import IntegrityError
 
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
@@ -145,7 +146,7 @@ def create_registered_option(
             )
 
             option_id = int(cursor.lastrowid)
-    except sqlite3.IntegrityError as error:
+    except IntegrityError as error:
         raise RegisteredOptionAlreadyExistsError(
             "A registered option with this name already exists."
         ) from error

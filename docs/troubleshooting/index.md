@@ -428,7 +428,6 @@ Symptoms:
 - Field-level decryption fails
 - Database path is rejected
 - Database is locked
-- Plaintext and SQLCipher modes are confused
 - Application starts against the wrong database
 - A restore produces unexpected application state
 
@@ -444,8 +443,6 @@ docs/operations/health-checks.md
 Do not:
 
 - Generate a new key for an existing encrypted database
-- Open a plaintext database as SQLCipher
-- Open a SQLCipher database as plaintext
 - Delete sidecar files while a process may still be using the database
 - Enable unsafe paths merely to bypass a path error
 - Rewrite encrypted values with a guessed key

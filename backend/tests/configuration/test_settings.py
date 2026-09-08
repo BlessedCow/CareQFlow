@@ -17,7 +17,6 @@ def encryption_key() -> str:
 def valid_production_settings(**overrides):
     values = {
         "AUTHSTATUS_APP_ENVIRONMENT": "production",
-        "AUTHSTATUS_DATABASE_ENCRYPTION": "sqlcipher",
         "AUTHSTATUS_SQLCIPHER_KEY": secrets.token_urlsafe(32),
         "AUTHSTATUS_ENCRYPTION_KEY": encryption_key(),
         "AUTHSTATUS_BACKUP_ENCRYPTION_KEY": encryption_key(),
@@ -415,22 +414,11 @@ def test_production_accepts_secure_configuration():
     )
 
     assert settings.app_environment == "production"
-    assert settings.database_encryption == "sqlcipher"
     assert settings.session_cookie_secure is True
     assert settings.cors_origins == [
         "https://carequeue.example",
         "https://admin.carequeue.example",
     ]
-
-
-def test_production_rejects_plaintext_database_mode():
-    with pytest.raises(
-        ValidationError,
-        match="Production requires SQLCipher",
-    ):
-        valid_production_settings(
-            AUTHSTATUS_DATABASE_ENCRYPTION="plaintext",
-        )
 
 
 def test_production_requires_sqlcipher_key():

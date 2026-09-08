@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
+from sqlcipher3 import IntegrityError
 
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
@@ -84,7 +83,7 @@ def test_init_db_does_not_duplicate_seeded_options():
 def test_registered_options_reject_unknown_category():
     init_db()
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         with get_conn() as conn:
             conn.execute(
                 """
@@ -131,7 +130,7 @@ def test_registered_options_reject_duplicate_normalized_name_per_category():
             ),
         )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         with get_conn() as conn:
             conn.execute(
                 """

@@ -279,7 +279,7 @@ SQLCipher key changes must use a separately tested migration/cutover procedure t
 5. Performs a deliberate cutover rather than overwriting the only known-good database.
 6. Retains rollback material and the previous SQLCipher key until recovery is proven.
 
-The existing plaintext-to-SQLCipher migration scripts are not a general promise of automatic SQLCipher key rotation. A key change should not be performed until the exact deployment-specific migration procedure has been tested.
+Changing the SQLCipher database key is a separate operation from field-encryption key rotation and must not be performed until the deployment-specific database key rotation procedure has been tested and validated.
 
 ## Backup Encryption Key Lifecycle
 

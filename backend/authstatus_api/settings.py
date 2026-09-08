@@ -99,10 +99,6 @@ class Settings(BaseSettings):
         default=Path("backend/data/auth_tracker.db"),
         validation_alias="AUTHSTATUS_DATABASE_PATH",
     )
-    database_encryption: str = Field(
-        default="plaintext",
-        validation_alias="AUTHSTATUS_DATABASE_ENCRYPTION",
-    )
     production_data_root: Path = Field(
         default=Path("backend"),
         validation_alias="AUTHSTATUS_PRODUCTION_DATA_ROOT",
@@ -204,16 +200,6 @@ class Settings(BaseSettings):
             raise ValueError(
                 "app_environment must be development, test, or production."
             )
-
-        return normalized_value
-
-    @field_validator("database_encryption")
-    @classmethod
-    def validate_database_encryption(cls, value: str) -> str:
-        normalized_value = value.strip().lower()
-
-        if normalized_value not in {"plaintext", "sqlcipher"}:
-            raise ValueError("database_encryption must be plaintext or sqlcipher.")
 
         return normalized_value
 
@@ -365,9 +351,6 @@ class Settings(BaseSettings):
                 "Production database files cannot be stored inside "
                 "backup or restore directories."
             )
-
-        if self.database_encryption != "sqlcipher":
-            raise ValueError("Production requires SQLCipher database encryption.")
 
         sqlcipher_key = self.sqlcipher_key.strip()
 

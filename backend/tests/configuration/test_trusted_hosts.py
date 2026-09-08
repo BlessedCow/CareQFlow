@@ -28,10 +28,6 @@ def configure_production(
         str(database_path),
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_ENCRYPTION",
-        "sqlcipher",
-    )
-    monkeypatch.setenv(
         "AUTHSTATUS_SQLCIPHER_KEY",
         "a" * 32,
     )

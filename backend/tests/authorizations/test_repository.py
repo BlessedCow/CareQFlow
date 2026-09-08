@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
 
 from authstatus_api import crypto
@@ -20,6 +18,7 @@ from authstatus_api.authorizations.records import (
     list_auths,
     update_auth,
 )
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.settings import get_settings
 
 
@@ -86,10 +85,7 @@ def test_create_auth_returns_decrypted_record():
 def test_create_auth_stores_selected_fields_encrypted():
     created = create_auth(make_payload())
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM auths WHERE id = ?", (created["id"],)
         ).fetchone()
@@ -221,10 +217,7 @@ def test_update_auth_encrypts_updated_sensitive_fields():
     assert updated["member_id"] == "XYZ789"
     assert updated["auth_number"] == "12345-678910"
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM auths WHERE id = ?", (created["id"],)
         ).fetchone()
@@ -295,10 +288,7 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
     assert updated["retro_outcome"] == "Pending"
     assert updated["retro_notes"] == "Retro auth needed for gap days."
 
-    database_path = get_settings().database_path
-
-    with sqlite3.connect(database_path) as conn:
-        conn.row_factory = sqlite3.Row
+    with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM auths WHERE id = ?", (created["id"],)
         ).fetchone()

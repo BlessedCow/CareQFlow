@@ -14,7 +14,7 @@ This threat model covers the CareQFlow application and the packaged private depl
 - TOTP MFA and remembered-device MFA state
 - Server-side sessions and CSRF protection
 - Governance attestation workflow
-- SQLite or SQLCipher persistence
+- SQLCipher persistence
 - Field-level encryption
 - Encrypted backups and restore/recovery workflows
 - PDF-assisted intake
@@ -192,7 +192,7 @@ Security assumptions:
 
 ### FastAPI to database boundary
 
-The backend reads and writes persistent application state through SQLite or SQLCipher connections.
+The backend reads and writes persistent application state through SQLCipher connections.
 
 Production security assumptions:
 

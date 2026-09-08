@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import errno
 import os
-import sqlite3
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -32,8 +31,22 @@ from authstatus_api.backups.service import (
     verify_encrypted_database_backup,
 )
 from authstatus_api.crypto import generate_encryption_key
+from authstatus_api.database_encryption.sqlcipher_probe import (
+    apply_sqlcipher_key,
+    import_sqlcipher,
+)
 from authstatus_api.persistence.schema import init_db
 from authstatus_api.settings import get_settings
+
+
+def _open_sqlcipher_database(database_path: Path):
+    sqlcipher3 = import_sqlcipher()
+    conn = sqlcipher3.connect(str(database_path))
+    apply_sqlcipher_key(
+        conn,
+        get_settings().sqlcipher_key.strip(),
+    )
+    return conn
 
 
 @pytest.fixture(autouse=True)
@@ -58,8 +71,8 @@ def configure_recovery_activation_settings(
         generate_encryption_key(),
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_ENCRYPTION",
-        "plaintext",
+        "AUTHSTATUS_SQLCIPHER_KEY",
+        "careqflow-recovery-test-sqlcipher-key",
     )
     get_settings.cache_clear()
 
@@ -506,7 +519,7 @@ def test_validate_active_database_rejects_missing_required_tables(
 ):
     database_path = tmp_path / "auth_tracker.db"
 
-    with sqlite3.connect(database_path) as conn:
+    with _open_sqlcipher_database(database_path) as conn:
         conn.execute("""
             CREATE TABLE unrelated_table (
                 id INTEGER PRIMARY KEY
@@ -1131,7 +1144,7 @@ def test_verify_exclusive_database_access_rejects_locked_database():
     settings = get_settings()
     database_path = Path(settings.database_path).resolve()
 
-    locking_connection = sqlite3.connect(database_path)
+    locking_connection = _open_sqlcipher_database(database_path)
 
     try:
         locking_connection.execute("BEGIN EXCLUSIVE")

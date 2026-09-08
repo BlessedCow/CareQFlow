@@ -60,14 +60,11 @@ def main() -> int:
         print("Missing AUTHSTATUS_SQLCIPHER_KEY.", file=sys.stderr)
         return 1
 
-    plaintext_path = get_database_path()
-    encrypted_path = args.database_path or plaintext_path.with_name(
-        f"{plaintext_path.stem}.sqlcipher{plaintext_path.suffix}"
-    )
+    database_path = args.database_path or get_database_path()
 
     try:
         result = verify_sqlcipher_database(
-            database_path=encrypted_path,
+            database_path=database_path,
             passphrase=sqlcipher_key,
             required_tables=CAREQUEUE_REQUIRED_TABLES,
         )

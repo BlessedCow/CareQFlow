@@ -3,11 +3,11 @@ from __future__ import annotations
 import argparse
 import getpass
 import os
-import sqlite3
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from sqlcipher3 import IntegrityError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_ROOT.parents[1]
@@ -56,7 +56,7 @@ def main() -> int:
 
     try:
         user = create_user(args.username, password, role=args.role)
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         print("A user with that username already exists.", file=sys.stderr)
         return 1
 

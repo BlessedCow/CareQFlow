@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
+from sqlcipher3 import IntegrityError
 
 from authstatus_api.security.password_hashing import verify_password
 from authstatus_api.security.password_policy import (
@@ -395,5 +394,5 @@ def test_update_user_password_rejects_password_below_policy_minimum():
 def test_create_user_rejects_duplicate_username():
     create_user("duplicate@example.com", "password value", role="UR")
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         create_user("DUPLICATE@example.com", "password value", role="UR")

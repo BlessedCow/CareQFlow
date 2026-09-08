@@ -5,8 +5,6 @@ from contextlib import closing
 
 import pytest
 
-from authstatus_api.persistence.migration_runner import MIGRATIONS
-
 V0_2_0_SCHEMA = """
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -437,10 +435,11 @@ def _create_v0_3_0_database(database_path) -> None:
         connection.commit()
 
 
-def test_current_init_db_upgrades_released_v0_2_0_database(
+def test_current_init_db_rejects_released_v0_2_0_plaintext_database(
     tmp_path,
     monkeypatch,
 ):
+    from authstatus_api.persistence.connections import DatabaseEncryptionError
     from authstatus_api.persistence.schema import init_db
     from authstatus_api.settings import get_settings
 
@@ -453,538 +452,62 @@ def test_current_init_db_upgrades_released_v0_2_0_database(
     )
     get_settings.cache_clear()
 
-    init_db()
-
-    with sqlite3.connect(database_path) as connection:
-        connection.row_factory = sqlite3.Row
-
-        migration_rows = connection.execute("""
-            SELECT migration_id
-            FROM schema_migrations
-            ORDER BY migration_id
-            """).fetchall()
-
-        user_row = connection.execute(
-            """
-            SELECT
-                username,
-                role,
-                walkthrough_status,
-                walkthrough_step
-            FROM users
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        session_row = connection.execute(
-            """
-            SELECT
-                token_hash,
-                ip_address,
-                user_agent
-            FROM sessions
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        auth_row = connection.execute(
-            """
-            SELECT
-                facility,
-                client_name,
-                member_id,
-                auth_number,
-                requested_days,
-                approved_days,
-                review_due_date
-            FROM auths
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        event_row = connection.execute(
-            """
-            SELECT
-                event_type,
-                outcome,
-                notes,
-                requested_days,
-                approved_days,
-                review_due_date
-            FROM auth_events
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        audit_row = connection.execute(
-            """
-            SELECT
-                username,
-                action,
-                resource_type,
-                resource_id,
-                metadata,
-                previous_hash,
-                event_hash
-            FROM audit_events
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        registered_option_row = connection.execute(
-            """
-            SELECT
-                category,
-                name,
-                normalized_name
-            FROM registered_options
-            WHERE normalized_name = ?
-            """,
-            ("release facility",),
-        ).fetchone()
-
-        governance_columns = {
-            row["name"]
-            for row in connection.execute(
-                "PRAGMA table_info(governance_attestations)"
-            ).fetchall()
-        }
-
-        governance_triggers = {row["name"] for row in connection.execute("""
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'trigger'
-                  AND tbl_name = 'governance_attestations'
-                """).fetchall()}
-
-        audit_chain_state_table = connection.execute("""
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name = 'audit_chain_state'
-            """).fetchone()
-
-    assert [row["migration_id"] for row in migration_rows] == [
-        migration.migration_id for migration in MIGRATIONS
-    ]
-
-    assert user_row is not None
-    assert user_row["username"] == "release-admin"
-    assert user_row["role"] == "Admin"
-    assert user_row["walkthrough_status"] == "pending"
-    assert user_row["walkthrough_step"] is None
-
-    assert session_row is not None
-    assert session_row["token_hash"] == "release-session-token"
-    assert session_row["ip_address"] == "127.0.0.1"
-    assert session_row["user_agent"] == "CareQueue v0.2.0 test client"
-
-    assert auth_row is not None
-    assert auth_row["facility"] == "Release Facility"
-    assert auth_row["client_name"] == "Release Client"
-    assert auth_row["member_id"] == "MEMBER-020"
-    assert auth_row["auth_number"] == "AUTH-020"
-    assert auth_row["requested_days"] == 7
-    assert auth_row["approved_days"] == 3
-    assert auth_row["review_due_date"] == "2026-08-25"
-
-    assert event_row is not None
-    assert event_row["event_type"] == "Submitted"
-    assert event_row["outcome"] == "Pending"
-    assert event_row["notes"] == "Release event"
-    assert event_row["requested_days"] == 7
-    assert event_row["approved_days"] == 3
-    assert event_row["review_due_date"] == "2026-08-25"
-
-    assert audit_row is not None
-    assert audit_row["username"] == "release-admin"
-    assert audit_row["action"] == "auth.created"
-    assert audit_row["resource_type"] == "authorization"
-    assert audit_row["resource_id"] == 1
-    assert audit_row["metadata"] == '{"release":"0.2.0"}'
-    assert audit_row["previous_hash"] is None
-    assert audit_row["event_hash"] is None
-
-    assert registered_option_row is not None
-    assert registered_option_row["category"] == "facility"
-    assert registered_option_row["name"] == "Release Facility"
-    assert registered_option_row["normalized_name"] == "release facility"
-
-    assert "document_revision" in governance_columns
-    assert governance_triggers == {
-        "governance_attestations_prevent_delete",
-        "governance_attestations_prevent_update",
-    }
-    assert audit_chain_state_table is not None
+    with pytest.raises(
+        DatabaseEncryptionError,
+        match="Unable to open the encrypted database",
+    ):
+        init_db()
 
 
-def test_current_recovery_activates_and_upgrades_v0_2_0_backup(
+def test_current_recovery_rejects_v0_2_0_plaintext_backup(
     tmp_path,
     monkeypatch,
 ):
     from cryptography.fernet import Fernet
 
-    from authstatus_api.backups.recovery_activation import (
-        RECOVERY_CONFIRMATION_PHRASE,
-        activate_staged_database_recovery,
-    )
     from authstatus_api.backups.service import (
-        create_encrypted_database_backup,
-        stage_encrypted_database_recovery,
+        BackupError,
         verify_encrypted_database_backup,
     )
     from authstatus_api.crypto import generate_encryption_key
-    from authstatus_api.persistence.schema import init_db
     from authstatus_api.settings import get_settings
 
-    active_database = tmp_path / "auth_tracker.db"
     released_database = tmp_path / "v0_2_0.db"
     backup_directory = tmp_path / "backups"
-    restore_directory = tmp_path / "restores"
-
-    backup_key = generate_encryption_key()
-    monkeypatch.setenv("AUTHSTATUS_DATABASE_PATH", str(active_database))
-    monkeypatch.setenv("AUTHSTATUS_BACKUP_DIRECTORY", str(backup_directory))
-    monkeypatch.setenv("AUTHSTATUS_RESTORE_DIRECTORY", str(restore_directory))
-    monkeypatch.setenv("AUTHSTATUS_BACKUP_ENCRYPTION_KEY", backup_key)
-    monkeypatch.setenv("AUTHSTATUS_DATABASE_ENCRYPTION", "plaintext")
-    get_settings.cache_clear()
-
-    init_db()
-    _create_v0_2_0_database(released_database)
-
-    backup_directory.mkdir(exist_ok=True)
-    released_backup = backup_directory / "auth_tracker_20260818_000000_000000.db.enc"
-    released_backup.write_bytes(
-        Fernet(backup_key.encode("utf-8")).encrypt(released_database.read_bytes())
-    )
-
-    verify_encrypted_database_backup(backup_path=released_backup)
-
-    recovery_info = stage_encrypted_database_recovery(
-        filename=released_backup.name,
-        backup_directory=backup_directory,
-        restore_directory=restore_directory,
-    )
-
-    staged_database = restore_directory / recovery_info["staged_filename"]
-    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
-    safety_backup = create_encrypted_database_backup(
-        database_path=active_database,
-        backup_directory=backup_directory,
-    )
-    verify_encrypted_database_backup(backup_path=safety_backup)
-
-    plan = {
-        "active_database": active_database.resolve(),
-        "staged_database": staged_database.resolve(),
-        "rollback_database": rollback_database.resolve(),
-        "safety_backup": safety_backup.resolve(),
-        "sidecars": [],
-        "service_name": None,
-        "api_host": "127.0.0.1",
-        "api_port": 8000,
-    }
-
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation.verify_managed_service_stopped",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation.verify_api_port_available",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation.verify_exclusive_database_access",
-        lambda: None,
-    )
-
-    result = activate_staged_database_recovery(
-        plan=plan,
-        confirmation=RECOVERY_CONFIRMATION_PHRASE,
-    )
-
-    assert result["active_database"] == active_database.resolve()
-    assert result["rollback_database"] == rollback_database.resolve()
-    assert result["safety_backup"] == safety_backup.resolve()
-    assert rollback_database.exists()
-    assert active_database.exists()
-    assert not staged_database.exists()
-    assert not (restore_directory / "pending_recovery.json").exists()
-
-    with sqlite3.connect(active_database) as connection:
-        recovered_user = connection.execute(
-            "SELECT username, role FROM users WHERE id = ?",
-            (1,),
-        ).fetchone()
-        recovered_auth = connection.execute(
-            "SELECT client_name, auth_number FROM auths WHERE id = ?",
-            (1,),
-        ).fetchone()
-
-    assert recovered_user == ("release-admin", "Admin")
-    assert recovered_auth == ("Release Client", "AUTH-020")
-
-    init_db()
-
-    with sqlite3.connect(active_database) as connection:
-        connection.row_factory = sqlite3.Row
-
-        migration_rows = connection.execute("""
-            SELECT migration_id
-            FROM schema_migrations
-            ORDER BY migration_id
-            """).fetchall()
-
-        user_row = connection.execute(
-            """
-            SELECT username, role, walkthrough_status, walkthrough_step
-            FROM users
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        auth_row = connection.execute(
-            """
-            SELECT client_name, auth_number, requested_days, approved_days
-            FROM auths
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-    assert [row["migration_id"] for row in migration_rows] == [
-        migration.migration_id for migration in MIGRATIONS
-    ]
-
-    assert user_row is not None
-    assert user_row["username"] == "release-admin"
-    assert user_row["role"] == "Admin"
-    assert user_row["walkthrough_status"] == "pending"
-    assert user_row["walkthrough_step"] is None
-
-    assert auth_row is not None
-    assert auth_row["client_name"] == "Release Client"
-    assert auth_row["auth_number"] == "AUTH-020"
-    assert auth_row["requested_days"] == 7
-    assert auth_row["approved_days"] == 3
-
-
-def test_failed_post_recovery_migration_preserves_recovery_paths(
-    tmp_path,
-    monkeypatch,
-):
-    from cryptography.fernet import Fernet
-
-    from authstatus_api.backups.recovery_activation import (
-        RECOVERY_CONFIRMATION_PHRASE,
-        activate_staged_database_recovery,
-    )
-    from authstatus_api.backups.service import (
-        create_encrypted_database_backup,
-        stage_encrypted_database_recovery,
-        verify_encrypted_database_backup,
-    )
-    from authstatus_api.crypto import generate_encryption_key
-    from authstatus_api.persistence.migration_runner import MigrationError
-    from authstatus_api.persistence.schema import init_db
-    from authstatus_api.settings import get_settings
-
-    active_database = tmp_path / "auth_tracker.db"
-    released_database = tmp_path / "v0_2_0.db"
-    backup_directory = tmp_path / "backups"
-    restore_directory = tmp_path / "restores"
-
     backup_key = generate_encryption_key()
 
-    monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_PATH",
-        str(active_database),
-    )
     monkeypatch.setenv(
         "AUTHSTATUS_BACKUP_DIRECTORY",
         str(backup_directory),
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_RESTORE_DIRECTORY",
-        str(restore_directory),
-    )
-    monkeypatch.setenv(
         "AUTHSTATUS_BACKUP_ENCRYPTION_KEY",
         backup_key,
     )
-    monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_ENCRYPTION",
-        "plaintext",
-    )
     get_settings.cache_clear()
-
-    init_db()
-
-    with closing(sqlite3.connect(active_database)) as connection:
-        connection.execute(
-            """
-            INSERT INTO users (
-                username,
-                password_hash,
-                role,
-                is_active,
-                failed_login_count,
-                password_changed_at,
-                must_change_password,
-                mfa_enabled,
-                created_at,
-                updated_at,
-                walkthrough_status
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "pre-recovery-admin",
-                "pre-recovery-password-hash",
-                "Admin",
-                1,
-                0,
-                "2026-08-27T00:00:00+00:00",
-                0,
-                0,
-                "2026-08-27T00:00:00+00:00",
-                "2026-08-27T00:00:00+00:00",
-                "completed",
-            ),
-        )
-        connection.commit()
 
     _create_v0_2_0_database(released_database)
 
     backup_directory.mkdir(exist_ok=True)
-
     released_backup = backup_directory / "auth_tracker_20260818_000000_000000.db.enc"
     released_backup.write_bytes(
         Fernet(backup_key.encode("utf-8")).encrypt(released_database.read_bytes())
     )
 
-    verify_encrypted_database_backup(
-        backup_path=released_backup,
-    )
-
-    recovery_info = stage_encrypted_database_recovery(
-        filename=released_backup.name,
-        backup_directory=backup_directory,
-        restore_directory=restore_directory,
-    )
-
-    staged_database = restore_directory / recovery_info["staged_filename"]
-    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
-
-    safety_backup = create_encrypted_database_backup(
-        database_path=active_database,
-        backup_directory=backup_directory,
-    )
-
-    verify_encrypted_database_backup(
-        backup_path=safety_backup,
-    )
-
-    plan = {
-        "active_database": active_database.resolve(),
-        "staged_database": staged_database.resolve(),
-        "rollback_database": rollback_database.resolve(),
-        "safety_backup": safety_backup.resolve(),
-        "sidecars": [],
-        "service_name": None,
-        "api_host": "127.0.0.1",
-        "api_port": 8000,
-    }
-
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation." "verify_managed_service_stopped",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation." "verify_api_port_available",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation."
-        "verify_exclusive_database_access",
-        lambda: None,
-    )
-
-    activate_staged_database_recovery(
-        plan=plan,
-        confirmation=RECOVERY_CONFIRMATION_PHRASE,
-    )
-
-    assert active_database.exists()
-    assert rollback_database.exists()
-    assert safety_backup.exists()
-
-    def fail_registered_migrations(_conn):
-        raise MigrationError("Simulated post-recovery migration failure.")
-
-    monkeypatch.setattr(
-        "authstatus_api.persistence.schema.run_registered_migrations",
-        fail_registered_migrations,
-    )
-
     with pytest.raises(
-        MigrationError,
-        match="Simulated post-recovery migration failure",
+        BackupError,
+        match="not a valid SQLCipher database for the configured key",
     ):
-        init_db()
-
-    assert active_database.exists()
-    assert rollback_database.exists()
-    assert safety_backup.exists()
-
-    with closing(sqlite3.connect(active_database)) as connection:
-        recovered_user = connection.execute(
-            """
-            SELECT username
-            FROM users
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        migration_table = connection.execute("""
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name = 'schema_migrations'
-            """).fetchone()
-
-    assert recovered_user == ("release-admin",)
-    assert migration_table is None
-
-    with closing(sqlite3.connect(rollback_database)) as connection:
-        original_user = connection.execute(
-            """
-            SELECT username
-            FROM users
-            WHERE username = ?
-            """,
-            ("pre-recovery-admin",),
-        ).fetchone()
-
-    assert original_user == ("pre-recovery-admin",)
-
-    verify_encrypted_database_backup(
-        backup_path=safety_backup,
-    )
+        verify_encrypted_database_backup(
+            backup_path=released_backup,
+        )
 
 
-def test_current_init_db_upgrades_released_v0_3_0_database(
+def test_current_init_db_rejects_released_v0_3_0_plaintext_database(
     tmp_path,
     monkeypatch,
 ):
+    from authstatus_api.persistence.connections import DatabaseEncryptionError
     from authstatus_api.persistence.schema import init_db
     from authstatus_api.settings import get_settings
 
@@ -997,334 +520,52 @@ def test_current_init_db_upgrades_released_v0_3_0_database(
     )
     get_settings.cache_clear()
 
-    init_db()
-
-    with closing(sqlite3.connect(database_path)) as connection:
-        connection.row_factory = sqlite3.Row
-
-        migration_rows = connection.execute("""
-            SELECT migration_id
-            FROM schema_migrations
-            ORDER BY migration_id
-            """).fetchall()
-
-        governance_row = connection.execute(
-            """
-            SELECT
-                attestation_version,
-                organization_name,
-                deployment_mode,
-                accepted_by_user_id,
-                accepted_at,
-                app_version,
-                document_revision
-            FROM governance_attestations
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        governance_triggers = {row["name"] for row in connection.execute("""
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'trigger'
-                  AND tbl_name = 'governance_attestations'
-                """).fetchall()}
-
-        user_row = connection.execute(
-            """
-            SELECT
-                username,
-                role,
-                walkthrough_status,
-                walkthrough_step
-            FROM users
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        auth_row = connection.execute(
-            """
-            SELECT
-                facility,
-                client_name,
-                auth_number,
-                requested_days,
-                approved_days
-            FROM auths
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-    assert [row["migration_id"] for row in migration_rows] == [
-        migration.migration_id for migration in MIGRATIONS
-    ]
-
-    assert governance_row is not None
-    assert governance_row["attestation_version"] == 1
-    assert governance_row["organization_name"] == "Release Organization"
-    assert governance_row["deployment_mode"] == "self_hosted"
-    assert governance_row["accepted_by_user_id"] == 1
-    assert governance_row["accepted_at"] == "2026-08-23T12:00:00+00:00"
-    assert governance_row["app_version"] == "0.3.0"
-    assert governance_row["document_revision"] is None
-
-    assert governance_triggers == {
-        "governance_attestations_prevent_delete",
-        "governance_attestations_prevent_update",
-    }
-
-    assert user_row is not None
-    assert user_row["username"] == "release-admin"
-    assert user_row["role"] == "Admin"
-    assert user_row["walkthrough_status"] == "pending"
-    assert user_row["walkthrough_step"] is None
-
-    assert auth_row is not None
-    assert auth_row["facility"] == "Release Facility"
-    assert auth_row["client_name"] == "Release Client"
-    assert auth_row["auth_number"] == "AUTH-020"
-    assert auth_row["requested_days"] == 7
-    assert auth_row["approved_days"] == 3
+    with pytest.raises(
+        DatabaseEncryptionError,
+        match="Unable to open the encrypted database",
+    ):
+        init_db()
 
 
-def test_current_recovery_activates_and_upgrades_v0_3_0_backup(
+def test_current_recovery_rejects_v0_3_0_plaintext_backup(
     tmp_path,
     monkeypatch,
 ):
     from cryptography.fernet import Fernet
 
-    from authstatus_api.backups.recovery_activation import (
-        RECOVERY_CONFIRMATION_PHRASE,
-        activate_staged_database_recovery,
-    )
     from authstatus_api.backups.service import (
-        create_encrypted_database_backup,
-        stage_encrypted_database_recovery,
+        BackupError,
         verify_encrypted_database_backup,
     )
     from authstatus_api.crypto import generate_encryption_key
-    from authstatus_api.persistence.schema import init_db
     from authstatus_api.settings import get_settings
 
-    active_database = tmp_path / "auth_tracker.db"
     released_database = tmp_path / "v0_3_0.db"
     backup_directory = tmp_path / "backups"
-    restore_directory = tmp_path / "restores"
-
     backup_key = generate_encryption_key()
 
-    monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_PATH",
-        str(active_database),
-    )
     monkeypatch.setenv(
         "AUTHSTATUS_BACKUP_DIRECTORY",
         str(backup_directory),
     )
     monkeypatch.setenv(
-        "AUTHSTATUS_RESTORE_DIRECTORY",
-        str(restore_directory),
-    )
-    monkeypatch.setenv(
         "AUTHSTATUS_BACKUP_ENCRYPTION_KEY",
         backup_key,
     )
-    monkeypatch.setenv(
-        "AUTHSTATUS_DATABASE_ENCRYPTION",
-        "plaintext",
-    )
     get_settings.cache_clear()
 
-    init_db()
     _create_v0_3_0_database(released_database)
 
     backup_directory.mkdir(exist_ok=True)
-
     released_backup = backup_directory / "auth_tracker_20260823_120000_000000.db.enc"
     released_backup.write_bytes(
         Fernet(backup_key.encode("utf-8")).encrypt(released_database.read_bytes())
     )
 
-    verify_encrypted_database_backup(
-        backup_path=released_backup,
-    )
-
-    recovery_info = stage_encrypted_database_recovery(
-        filename=released_backup.name,
-        backup_directory=backup_directory,
-        restore_directory=restore_directory,
-    )
-
-    staged_database = restore_directory / recovery_info["staged_filename"]
-    rollback_database = tmp_path / "auth_tracker.pre_recovery.db"
-
-    safety_backup = create_encrypted_database_backup(
-        database_path=active_database,
-        backup_directory=backup_directory,
-    )
-
-    verify_encrypted_database_backup(
-        backup_path=safety_backup,
-    )
-
-    plan = {
-        "active_database": active_database.resolve(),
-        "staged_database": staged_database.resolve(),
-        "rollback_database": rollback_database.resolve(),
-        "safety_backup": safety_backup.resolve(),
-        "sidecars": [],
-        "service_name": None,
-        "api_host": "127.0.0.1",
-        "api_port": 8000,
-    }
-
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation." "verify_managed_service_stopped",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation." "verify_api_port_available",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "authstatus_api.backups.recovery_activation."
-        "verify_exclusive_database_access",
-        lambda: None,
-    )
-
-    result = activate_staged_database_recovery(
-        plan=plan,
-        confirmation=RECOVERY_CONFIRMATION_PHRASE,
-    )
-
-    assert result["active_database"] == active_database.resolve()
-    assert result["rollback_database"] == rollback_database.resolve()
-    assert result["safety_backup"] == safety_backup.resolve()
-
-    assert active_database.exists()
-    assert rollback_database.exists()
-    assert safety_backup.exists()
-    assert not staged_database.exists()
-    assert not (restore_directory / "pending_recovery.json").exists()
-
-    with closing(sqlite3.connect(active_database)) as connection:
-        governance_before_migration = connection.execute(
-            """
-            SELECT
-                attestation_version,
-                organization_name,
-                deployment_mode,
-                accepted_by_user_id,
-                accepted_at,
-                app_version
-            FROM governance_attestations
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-    assert governance_before_migration == (
-        1,
-        "Release Organization",
-        "self_hosted",
-        1,
-        "2026-08-23T12:00:00+00:00",
-        "0.3.0",
-    )
-
-    init_db()
-
-    with closing(sqlite3.connect(active_database)) as connection:
-        connection.row_factory = sqlite3.Row
-
-        migration_rows = connection.execute("""
-            SELECT migration_id
-            FROM schema_migrations
-            ORDER BY migration_id
-            """).fetchall()
-
-        governance_row = connection.execute(
-            """
-            SELECT
-                attestation_version,
-                organization_name,
-                deployment_mode,
-                accepted_by_user_id,
-                accepted_at,
-                app_version,
-                document_revision
-            FROM governance_attestations
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        governance_triggers = {row["name"] for row in connection.execute("""
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'trigger'
-                  AND tbl_name = 'governance_attestations'
-                """).fetchall()}
-
-        user_row = connection.execute(
-            """
-            SELECT
-                username,
-                role,
-                walkthrough_status,
-                walkthrough_step
-            FROM users
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-        auth_row = connection.execute(
-            """
-            SELECT
-                client_name,
-                auth_number,
-                requested_days,
-                approved_days
-            FROM auths
-            WHERE id = ?
-            """,
-            (1,),
-        ).fetchone()
-
-    assert [row["migration_id"] for row in migration_rows] == [
-        migration.migration_id for migration in MIGRATIONS
-    ]
-
-    assert governance_row is not None
-    assert governance_row["attestation_version"] == 1
-    assert governance_row["organization_name"] == "Release Organization"
-    assert governance_row["deployment_mode"] == "self_hosted"
-    assert governance_row["accepted_by_user_id"] == 1
-    assert governance_row["accepted_at"] == "2026-08-23T12:00:00+00:00"
-    assert governance_row["app_version"] == "0.3.0"
-    assert governance_row["document_revision"] is None
-
-    assert governance_triggers == {
-        "governance_attestations_prevent_delete",
-        "governance_attestations_prevent_update",
-    }
-
-    assert user_row is not None
-    assert user_row["username"] == "release-admin"
-    assert user_row["role"] == "Admin"
-    assert user_row["walkthrough_status"] == "pending"
-    assert user_row["walkthrough_step"] is None
-
-    assert auth_row is not None
-    assert auth_row["client_name"] == "Release Client"
-    assert auth_row["auth_number"] == "AUTH-020"
-    assert auth_row["requested_days"] == 7
-    assert auth_row["approved_days"] == 3
-
-    verify_encrypted_database_backup(
-        backup_path=safety_backup,
-    )
+    with pytest.raises(
+        BackupError,
+        match="not a valid SQLCipher database for the configured key",
+    ):
+        verify_encrypted_database_backup(
+            backup_path=released_backup,
+        )
