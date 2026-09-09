@@ -35,6 +35,7 @@ AUTH_TABLE_COLUMNS = {
     "date_of_birth",
     "loc",
     "insurance",
+    "insurance_plan",
     "insurance_phone",
     "insurance_fax",
     "submission_methods",

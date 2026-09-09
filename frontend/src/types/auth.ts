@@ -39,6 +39,7 @@ export interface AuthRequest {
   dateStr: string;
   facility: Facility;
   payer: Payer;
+  insurancePlan?: string;
   loc: LOC;
   status: Status;
   requestedDays: number;

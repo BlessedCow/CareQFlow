@@ -40,6 +40,7 @@ function buildAuthorizationPayload(
     requested_days: Number(form.requestedDays) || 0,
     approved_days: Number(form.approvedDays) || 0,
     insurance: form.insurance,
+    insurance_plan: form.insurancePlan,
     auth_type: form.authType,
     submission_methods: form.submissionMethod,
     insurance_phone: form.phoneExtension

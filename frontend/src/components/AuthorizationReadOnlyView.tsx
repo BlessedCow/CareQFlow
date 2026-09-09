@@ -221,6 +221,11 @@ export function AuthorizationReadOnlyView({
         </div>
 
         <div>
+          <div className={labelClass}>Insurance Plan</div>
+          <div className={valueClass}>{formatValue(auth.insurancePlan)}</div>
+        </div>
+
+        <div>
           <div className={labelClass}>Level of Care</div>
           <div className={valueClass}>{formatValue(auth.loc)}</div>
         </div>

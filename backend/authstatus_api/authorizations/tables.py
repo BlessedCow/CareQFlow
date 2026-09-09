@@ -15,6 +15,7 @@ def initialize_authorization_tables(conn: Any) -> None:
             date_of_birth TEXT,
             loc TEXT NOT NULL,
             insurance TEXT,
+            insurance_plan TEXT,
             insurance_phone TEXT,
             insurance_fax TEXT,
             submission_methods TEXT NOT NULL,

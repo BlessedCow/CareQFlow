@@ -57,6 +57,7 @@ class AuthBase(BaseModel):
     date_of_birth: str = ""
     loc: str
     insurance: str = ""
+    insurance_plan: str = ""
     insurance_phone: str = ""
     insurance_fax: str = ""
     submission_methods: str
@@ -164,6 +165,7 @@ class AuthUpdate(BaseModel):
     date_of_birth: str | None = None
     loc: str | None = None
     insurance: str | None = None
+    insurance_plan: str | None = None
     insurance_phone: str | None = None
     insurance_fax: str | None = None
     submission_methods: str | None = None

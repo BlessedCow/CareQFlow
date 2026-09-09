@@ -9,6 +9,7 @@ from authstatus_api.persistence.migration_steps.audit import (
     add_audit_event_columns,
 )
 from authstatus_api.persistence.migration_steps.authorizations import (
+    add_authorization_analytics_columns,
     add_core_authorization_columns,
     add_denial_follow_up_columns,
 )
@@ -155,6 +156,10 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         migration_id="0007_governance_document_revision",
         apply=add_governance_document_revision,
+    ),
+    Migration(
+        migration_id="0008_authorization_analytics_columns",
+        apply=add_authorization_analytics_columns,
     ),
 )
 

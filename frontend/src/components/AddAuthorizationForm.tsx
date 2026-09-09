@@ -676,6 +676,26 @@ export function AddAuthorizationForm({
         </select>
       </label>
 
+      <label className="space-y-1 text-sm">
+        <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
+          Insurance Plan
+        </span>
+        <input
+          type="text"
+          value={form.insurancePlan}
+          onChange={(event) =>
+            onFieldChange("insurancePlan", event.target.value)
+          }
+          placeholder="PPO, HMO, plan name, or product"
+          className={cn(
+            "w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500",
+            darkMode
+              ? "border-gray-700 bg-gray-900 text-gray-100 placeholder-gray-500"
+              : "border-gray-300 bg-white text-gray-900 placeholder-gray-400"
+          )}
+        />
+      </label>
+
       <label data-walkthrough="auth-type" className="space-y-1 text-sm">
         <span className={darkMode ? "text-gray-300" : "text-gray-700"}>
           Auth Type

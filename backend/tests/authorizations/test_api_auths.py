@@ -69,6 +69,7 @@ def make_payload() -> dict:
         "date_of_birth": "1990-01-15",
         "loc": "RTC",
         "insurance": "Test Plan",
+        "insurance_plan": "Gold PPO 250",
         "insurance_phone": "555-123-4567",
         "insurance_fax": "555-987-6543",
         "submission_methods": "Fax",
@@ -107,6 +108,7 @@ def test_create_auth_endpoint_returns_decrypted_record(client, auth_headers):
     assert data["group_number"] == "GRP456"
     assert data["date_of_birth"] == "1990-01-15"
     assert data["facility"] == "Facility A"
+    assert data["insurance_plan"] == "Gold PPO 250"
     assert data["care_manager_enabled"] is True
     assert data["progress_made"] is True
     assert data["waiting_on_clinicals"] is True
@@ -131,6 +133,7 @@ def test_create_auth_endpoint_stores_selected_fields_encrypted(client, auth_head
     assert row["fax_numbers"].startswith(ENCRYPTED_TEXT_PREFIX)
     assert row["facility"] == "Facility A"
     assert row["loc"] == "RTC"
+    assert row["insurance_plan"] == "Gold PPO 250"
 
 
 def test_list_auths_endpoint_returns_decrypted_records(client, auth_headers):
@@ -336,6 +339,7 @@ def test_patch_auth_endpoint_updates_selected_fields(client, auth_headers):
             "status": "Submitted",
             "days_approved": "4",
             "facility_informed": True,
+            "insurance_plan": "Platinum PPO 500",
         },
         headers=auth_headers,
     )
@@ -348,6 +352,7 @@ def test_patch_auth_endpoint_updates_selected_fields(client, auth_headers):
     assert data["status"] == "Submitted"
     assert data["days_approved"] == "4"
     assert data["facility_informed"] is True
+    assert data["insurance_plan"] == "Platinum PPO 500"
     assert data["client_name"] == "John Smith"
 
 

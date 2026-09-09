@@ -16,6 +16,7 @@ function mapApiAuthToAuthRequest(item: any): AuthRequest {
     facility: item.facility ?? "Unknown Facility",
     status: item.status ?? "Pending",
     payer: item.insurance ?? "Unknown Insurance",
+    insurancePlan: item.insurance_plan ?? "",
     date: authDate ? parseISO(authDate.slice(0, 10)) : new Date(),
     dateStr: authDate
       ? authDate.slice(0, 10)
@@ -95,6 +96,7 @@ export interface CreateAuthRequestPayload {
   loc: string;
   status: string;
   insurance: string;
+  insurance_plan?: string;
   auth_type: string;
   submission_methods: string;
   requested_days?: number;

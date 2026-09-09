@@ -19,6 +19,7 @@ export interface NewAuthFormState {
   requestedDays: string;
   approvedDays: string;
   insurance: string;
+  insurancePlan: string;
   authType: string;
   submissionMethod: string;
   phoneNumber: string;
@@ -71,6 +72,8 @@ export const DEFAULT_AUTH_FORM: NewAuthFormState = {
   requestedDays: "",
   approvedDays: "",
   insurance: "",
+  insurancePlan: "",
+
   authType: "Initial",
   submissionMethod: "Web Portal",
   phoneNumber: "",
@@ -149,6 +152,7 @@ export function getAuthFormFromAuth(auth: AuthRequest): NewAuthFormState {
     requestedDays: String(auth.requestedDays ?? ""),
     approvedDays: String(auth.approvedDays ?? ""),
     insurance: auth.payer,
+    insurancePlan: auth.insurancePlan ?? "",
     authType: auth.authType ?? "Initial",
     submissionMethod: auth.submissionMethods ?? "",
     phoneNumber: "",

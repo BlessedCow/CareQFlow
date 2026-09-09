@@ -301,6 +301,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0005_governance_append_only_history",
         "0006_audit_event_columns",
         "0007_governance_document_revision",
+        "0008_authorization_analytics_columns",
     ]
     assert get_applied_migration_ids(conn) == {
         "0001_security_walkthrough_columns",
@@ -310,6 +311,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0005_governance_append_only_history",
         "0006_audit_event_columns",
         "0007_governance_document_revision",
+        "0008_authorization_analytics_columns",
     }
 
     governance_triggers = {row["name"] for row in conn.execute("""
@@ -356,6 +358,7 @@ def test_registered_migrations_apply_registered_registry(conn):
     assert "member_id" in auth_columns
     assert "requested_days" in auth_columns
     assert "review_due_date" in auth_columns
+    assert "insurance_plan" in auth_columns
 
     assert "requested_days" in event_columns
     assert "auth_start_date" in event_columns
@@ -675,6 +678,7 @@ def test_init_db_applies_registered_migrations_in_order(
         "0005_governance_append_only_history",
         "0006_audit_event_columns",
         "0007_governance_document_revision",
+        "0008_authorization_analytics_columns",
     ]
 
     assert user_row is not None
@@ -904,6 +908,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
                 facility,
                 client_name,
                 insurance,
+                insurance_plan,
                 requested_days,
                 approved_days,
                 denial_reason_category,
@@ -940,6 +945,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
         "0005_governance_append_only_history",
         "0006_audit_event_columns",
         "0007_governance_document_revision",
+        "0008_authorization_analytics_columns",
     ]
 
     assert user_row is not None
@@ -959,6 +965,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
     assert auth_row["facility"] == "Legacy Facility"
     assert auth_row["client_name"] == "Legacy Client"
     assert auth_row["insurance"] is None
+    assert auth_row["insurance_plan"] is None
     assert auth_row["requested_days"] == 0
     assert auth_row["approved_days"] == 0
     assert auth_row["denial_reason_category"] is None

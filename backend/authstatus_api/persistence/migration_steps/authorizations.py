@@ -80,3 +80,15 @@ def add_denial_follow_up_columns(conn: Any) -> None:
     for column_name, definition in column_definitions:
         if column_name not in auth_columns:
             conn.execute(f"ALTER TABLE auths ADD COLUMN {column_name} {definition}")
+
+
+def add_authorization_analytics_columns(conn: Any) -> None:
+    auth_columns = {
+        str(row["name"]) for row in conn.execute("PRAGMA table_info(auths)").fetchall()
+    }
+
+    column_definitions = (("insurance_plan", "TEXT"),)
+
+    for column_name, definition in column_definitions:
+        if column_name not in auth_columns:
+            conn.execute(f"ALTER TABLE auths ADD COLUMN {column_name} {definition}")
