@@ -5,6 +5,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from authstatus_api.audit.service import audit_field_names, record_audit_event
+from authstatus_api.authorizations.clinical_assessments import (
+    InvalidClinicalAssessmentError,
+    create_clinical_assessment,
+    delete_clinical_assessment,
+    list_clinical_assessments,
+    update_clinical_assessment,
+)
 from authstatus_api.authorizations.documents import (
     AuthDocumentLimitError,
     InvalidAuthDocumentError,
@@ -54,6 +61,10 @@ from authstatus_api.schemas import (
     AuthLocEpisodeUpdate,
     AuthRecord,
     AuthUpdate,
+    ClinicalAssessmentCreate,
+    ClinicalAssessmentListResponse,
+    ClinicalAssessmentRecord,
+    ClinicalAssessmentUpdate,
     DeleteResponse,
 )
 from authstatus_api.security.dependencies import get_current_user, require_role
@@ -573,6 +584,156 @@ def delete_auth_loc_episode_record(
     return DeleteResponse(
         deleted=True,
         id=episode_id,
+    )
+
+
+@router.get(
+    "/{auth_id}/clinical-assessments",
+    response_model=ClinicalAssessmentListResponse,
+)
+def read_clinical_assessments(
+    auth_id: int,
+    current_user: dict = ReadAuthUser,
+) -> ClinicalAssessmentListResponse:
+    assessments = list_clinical_assessments(auth_id)
+
+    if assessments is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
+        )
+
+    return ClinicalAssessmentListResponse(
+        assessments=[
+            ClinicalAssessmentRecord(**assessment) for assessment in assessments
+        ]
+    )
+
+
+@router.post(
+    "/{auth_id}/clinical-assessments",
+    response_model=ClinicalAssessmentRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_clinical_assessment_record(
+    auth_id: int,
+    payload: ClinicalAssessmentCreate,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> ClinicalAssessmentRecord:
+    payload_data = payload.model_dump()
+
+    try:
+        assessment = create_clinical_assessment(
+            auth_id,
+            payload_data,
+        )
+    except InvalidClinicalAssessmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
+        )
+
+    record_audit_event(
+        action="clinical_assessment.create",
+        resource_type="clinical_assessment",
+        resource_id=assessment["id"],
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            **audit_field_names(payload_data),
+        },
+        request=request,
+    )
+
+    return ClinicalAssessmentRecord(**assessment)
+
+
+@router.patch(
+    "/{auth_id}/clinical-assessments/{assessment_id}",
+    response_model=ClinicalAssessmentRecord,
+)
+def update_clinical_assessment_record(
+    auth_id: int,
+    assessment_id: int,
+    payload: ClinicalAssessmentUpdate,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> ClinicalAssessmentRecord:
+    payload_data = payload.model_dump(exclude_unset=True)
+
+    try:
+        assessment = update_clinical_assessment(
+            auth_id,
+            assessment_id,
+            payload_data,
+        )
+    except InvalidClinicalAssessmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clinical assessment not found.",
+        )
+
+    record_audit_event(
+        action="clinical_assessment.update",
+        resource_type="clinical_assessment",
+        resource_id=assessment_id,
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            **audit_field_names(payload_data),
+        },
+        request=request,
+    )
+
+    return ClinicalAssessmentRecord(**assessment)
+
+
+@router.delete(
+    "/{auth_id}/clinical-assessments/{assessment_id}",
+    response_model=DeleteResponse,
+)
+def delete_clinical_assessment_record(
+    auth_id: int,
+    assessment_id: int,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> DeleteResponse:
+    deleted = delete_clinical_assessment(
+        auth_id,
+        assessment_id,
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clinical assessment not found.",
+        )
+
+    record_audit_event(
+        action="clinical_assessment.delete",
+        resource_type="clinical_assessment",
+        resource_id=assessment_id,
+        user=current_user,
+        metadata={"auth_id": auth_id},
+        request=request,
+    )
+
+    return DeleteResponse(
+        deleted=True,
+        id=assessment_id,
     )
 
 

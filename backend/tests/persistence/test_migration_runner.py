@@ -22,6 +22,7 @@ from authstatus_api.persistence.migration_steps.authorizations import (
     add_core_authorization_columns,
     add_denial_follow_up_columns,
     create_authorization_loc_episodes_table,
+    create_clinical_assessments_table,
 )
 from authstatus_api.persistence.migration_steps.governance import (
     enforce_append_only_governance_attestations,
@@ -304,6 +305,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0007_governance_document_revision",
         "0008_authorization_analytics_columns",
         "0009_authorization_loc_episodes",
+        "0010_clinical_assessments",
     ]
     assert get_applied_migration_ids(conn) == {
         "0001_security_walkthrough_columns",
@@ -315,6 +317,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0007_governance_document_revision",
         "0008_authorization_analytics_columns",
         "0009_authorization_loc_episodes",
+        "0010_clinical_assessments",
     }
 
     governance_triggers = {row["name"] for row in conn.execute("""
@@ -699,6 +702,7 @@ def test_init_db_applies_registered_migrations_in_order(
         "0007_governance_document_revision",
         "0008_authorization_analytics_columns",
         "0009_authorization_loc_episodes",
+        "0010_clinical_assessments",
     ]
 
     assert user_row is not None
@@ -967,6 +971,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
         "0007_governance_document_revision",
         "0008_authorization_analytics_columns",
         "0009_authorization_loc_episodes",
+        "0010_clinical_assessments",
     ]
 
     assert user_row is not None
@@ -1873,6 +1878,86 @@ def test_loc_episode_migration_accepts_existing_table(conn):
     assert columns.count("auth_id") == 1
     assert columns.count("started_at") == 1
     assert columns.count("ended_at") == 1
+
+
+def test_clinical_assessment_migration_creates_table(conn):
+    conn.execute("""
+        CREATE TABLE auths (
+            id INTEGER PRIMARY KEY
+        )
+        """)
+
+    conn.execute("""
+        CREATE TABLE auth_events (
+            id INTEGER PRIMARY KEY,
+            auth_id INTEGER NOT NULL
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0010_clinical_assessments",
+                apply=create_clinical_assessments_table,
+            )
+        ],
+    )
+
+    columns = {
+        row["name"]: row
+        for row in conn.execute("PRAGMA table_info(clinical_assessments)").fetchall()
+    }
+
+    assert applied == ["0010_clinical_assessments"]
+
+    assert {
+        "id",
+        "auth_id",
+        "auth_event_id",
+        "instrument",
+        "score",
+        "assessed_at",
+        "loc",
+        "source",
+        "created_at",
+        "updated_at",
+    }.issubset(columns)
+
+    assert columns["auth_id"]["notnull"] == 1
+    assert columns["instrument"]["notnull"] == 1
+    assert columns["score"]["notnull"] == 1
+    assert columns["assessed_at"]["notnull"] == 1
+    assert columns["source"]["dflt_value"] == "'manual'"
+
+
+def test_clinical_assessment_migration_creates_foreign_keys(conn):
+    conn.execute("""
+        CREATE TABLE auths (
+            id INTEGER PRIMARY KEY
+        )
+        """)
+
+    conn.execute("""
+        CREATE TABLE auth_events (
+            id INTEGER PRIMARY KEY,
+            auth_id INTEGER NOT NULL
+        )
+        """)
+
+    create_clinical_assessments_table(conn)
+
+    foreign_keys = conn.execute(
+        "PRAGMA foreign_key_list(clinical_assessments)"
+    ).fetchall()
+
+    by_column = {row["from"]: row for row in foreign_keys}
+
+    assert by_column["auth_id"]["table"] == "auths"
+    assert by_column["auth_id"]["on_delete"] == "CASCADE"
+
+    assert by_column["auth_event_id"]["table"] == "auth_events"
+    assert by_column["auth_event_id"]["on_delete"] == "SET NULL"
 
 
 def test_governance_append_only_migration_creates_protection_triggers(conn):

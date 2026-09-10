@@ -437,6 +437,43 @@ class AuthLocEpisodeListResponse(BaseModel):
     episodes: list[AuthLocEpisodeRecord]
 
 
+class ClinicalAssessmentBase(BaseModel):
+    instrument: str
+    score: float
+    assessed_at: str
+    auth_event_id: int | None = None
+    loc: str | None = None
+    source: str = "manual"
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ClinicalAssessmentCreate(ClinicalAssessmentBase):
+    pass
+
+
+class ClinicalAssessmentUpdate(BaseModel):
+    instrument: str | None = None
+    score: float | None = None
+    assessed_at: str | None = None
+    auth_event_id: int | None = None
+    loc: str | None = None
+    source: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ClinicalAssessmentRecord(ClinicalAssessmentBase):
+    id: int
+    auth_id: int
+    created_at: str
+    updated_at: str
+
+
+class ClinicalAssessmentListResponse(BaseModel):
+    assessments: list[ClinicalAssessmentRecord]
+
+
 class DeleteResponse(BaseModel):
     deleted: bool
     id: int

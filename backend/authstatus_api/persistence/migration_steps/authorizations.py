@@ -108,3 +108,22 @@ def create_authorization_loc_episodes_table(conn: Any) -> None:
             FOREIGN KEY (auth_id) REFERENCES auths (id) ON DELETE CASCADE
         )
         """)
+
+
+def create_clinical_assessments_table(conn: Any) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS clinical_assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            auth_id INTEGER NOT NULL,
+            auth_event_id INTEGER,
+            instrument TEXT NOT NULL,
+            score REAL NOT NULL,
+            assessed_at TEXT NOT NULL,
+            loc TEXT,
+            source TEXT NOT NULL DEFAULT 'manual',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (auth_id) REFERENCES auths (id) ON DELETE CASCADE,
+            FOREIGN KEY (auth_event_id) REFERENCES auth_events (id) ON DELETE SET NULL
+        )
+        """)
