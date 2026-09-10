@@ -20,6 +20,14 @@ from authstatus_api.authorizations.events import (
     list_auth_events,
     update_auth_event,
 )
+from authstatus_api.authorizations.loc_episodes import (
+    InvalidAuthLocEpisodeError,
+    OverlappingAuthLocEpisodeError,
+    create_auth_loc_episode,
+    delete_auth_loc_episode,
+    list_auth_loc_episodes,
+    update_auth_loc_episode,
+)
 from authstatus_api.authorizations.records import (
     create_auth,
     delete_auth,
@@ -40,6 +48,10 @@ from authstatus_api.schemas import (
     AuthEventRecord,
     AuthEventUpdate,
     AuthListResponse,
+    AuthLocEpisodeCreate,
+    AuthLocEpisodeListResponse,
+    AuthLocEpisodeRecord,
+    AuthLocEpisodeUpdate,
     AuthRecord,
     AuthUpdate,
     DeleteResponse,
@@ -412,6 +424,156 @@ def delete_auth_event_record(
     )
 
     return DeleteResponse(deleted=True, id=event_id)
+
+
+@router.get(
+    "/{auth_id}/loc-episodes",
+    response_model=AuthLocEpisodeListResponse,
+)
+def read_auth_loc_episodes(
+    auth_id: int,
+    current_user: dict = ReadAuthUser,
+) -> AuthLocEpisodeListResponse:
+    episodes = list_auth_loc_episodes(auth_id)
+
+    if episodes is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
+        )
+
+    return AuthLocEpisodeListResponse(
+        episodes=[AuthLocEpisodeRecord(**episode) for episode in episodes]
+    )
+
+
+@router.post(
+    "/{auth_id}/loc-episodes",
+    response_model=AuthLocEpisodeRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_auth_loc_episode_record(
+    auth_id: int,
+    payload: AuthLocEpisodeCreate,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> AuthLocEpisodeRecord:
+    payload_data = payload.model_dump()
+    try:
+        episode = create_auth_loc_episode(auth_id, payload_data)
+    except InvalidAuthLocEpisodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except OverlappingAuthLocEpisodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if episode is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
+        )
+
+    record_audit_event(
+        action="auth_loc_episode.create",
+        resource_type="auth_loc_episode",
+        resource_id=episode["id"],
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            **audit_field_names(payload_data),
+        },
+        request=request,
+    )
+
+    return AuthLocEpisodeRecord(**episode)
+
+
+@router.patch(
+    "/{auth_id}/loc-episodes/{episode_id}",
+    response_model=AuthLocEpisodeRecord,
+)
+def update_auth_loc_episode_record(
+    auth_id: int,
+    episode_id: int,
+    payload: AuthLocEpisodeUpdate,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> AuthLocEpisodeRecord:
+    payload_data = payload.model_dump(exclude_unset=True)
+    try:
+        episode = update_auth_loc_episode(
+            auth_id,
+            episode_id,
+            payload_data,
+        )
+    except InvalidAuthLocEpisodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except OverlappingAuthLocEpisodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if episode is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Authorization LOC episode not found.",
+        )
+
+    record_audit_event(
+        action="auth_loc_episode.update",
+        resource_type="auth_loc_episode",
+        resource_id=episode_id,
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            **audit_field_names(payload_data),
+        },
+        request=request,
+    )
+
+    return AuthLocEpisodeRecord(**episode)
+
+
+@router.delete(
+    "/{auth_id}/loc-episodes/{episode_id}",
+    response_model=DeleteResponse,
+)
+def delete_auth_loc_episode_record(
+    auth_id: int,
+    episode_id: int,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> DeleteResponse:
+    deleted = delete_auth_loc_episode(auth_id, episode_id)
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Authorization LOC episode not found.",
+        )
+
+    record_audit_event(
+        action="auth_loc_episode.delete",
+        resource_type="auth_loc_episode",
+        resource_id=episode_id,
+        user=current_user,
+        metadata={"auth_id": auth_id},
+        request=request,
+    )
+
+    return DeleteResponse(
+        deleted=True,
+        id=episode_id,
+    )
 
 
 @router.delete("/{auth_id}", response_model=DeleteResponse)

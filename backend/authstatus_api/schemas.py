@@ -404,6 +404,39 @@ class AuthEventListResponse(BaseModel):
     events: list[AuthEventRecord]
 
 
+class AuthLocEpisodeBase(BaseModel):
+    loc: str
+    started_at: str
+    ended_at: str | None = None
+    source: str = "manual"
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthLocEpisodeCreate(AuthLocEpisodeBase):
+    pass
+
+
+class AuthLocEpisodeUpdate(BaseModel):
+    loc: str | None = None
+    started_at: str | None = None
+    ended_at: str | None = None
+    source: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthLocEpisodeRecord(AuthLocEpisodeBase):
+    id: int
+    auth_id: int
+    created_at: str
+    updated_at: str
+
+
+class AuthLocEpisodeListResponse(BaseModel):
+    episodes: list[AuthLocEpisodeRecord]
+
+
 class DeleteResponse(BaseModel):
     deleted: bool
     id: int

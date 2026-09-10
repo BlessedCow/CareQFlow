@@ -12,6 +12,7 @@ from authstatus_api.persistence.migration_steps.authorizations import (
     add_authorization_analytics_columns,
     add_core_authorization_columns,
     add_denial_follow_up_columns,
+    create_authorization_loc_episodes_table,
 )
 from authstatus_api.persistence.migration_steps.governance import (
     enforce_append_only_governance_attestations,
@@ -160,6 +161,10 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         migration_id="0008_authorization_analytics_columns",
         apply=add_authorization_analytics_columns,
+    ),
+    Migration(
+        migration_id="0009_authorization_loc_episodes",
+        apply=create_authorization_loc_episodes_table,
     ),
 )
 

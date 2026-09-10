@@ -92,3 +92,19 @@ def add_authorization_analytics_columns(conn: Any) -> None:
     for column_name, definition in column_definitions:
         if column_name not in auth_columns:
             conn.execute(f"ALTER TABLE auths ADD COLUMN {column_name} {definition}")
+
+
+def create_authorization_loc_episodes_table(conn: Any) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_loc_episodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            auth_id INTEGER NOT NULL,
+            loc TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            source TEXT NOT NULL DEFAULT 'manual',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (auth_id) REFERENCES auths (id) ON DELETE CASCADE
+        )
+        """)
