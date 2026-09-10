@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  BarChart3,
   Bell,
   CalendarDays,
   FileText,
@@ -61,6 +62,18 @@ const navigationItems: {
   },
 ];
 
+const denialInsightsNavigationItems: {
+  page: AppPage;
+  label: string;
+  icon: typeof LayoutDashboard;
+}[] = [
+  {
+    page: "denial-insights",
+    label: "Denial Insights",
+    icon: BarChart3,
+  },
+];
+
 const adminNavigationItems: {
   page: AppPage;
   label: string;
@@ -92,6 +105,7 @@ const PAGE_TITLES: Record<AppPage, string> = {
   adminUsers: "Users",
   adminAudit: "Audit Log",
   adminSystem: "System",
+  "denial-insights": "Denial Insights",
 };
 
 const PAGE_DESCRIPTIONS: Record<AppPage, string> = {
@@ -104,6 +118,8 @@ const PAGE_DESCRIPTIONS: Record<AppPage, string> = {
   adminUsers: "Manage local CareQFlow users and roles",
   adminAudit: "Review recorded security and workflow activity",
   adminSystem: "Monitor health and manage encrypted restore points",
+  "denial-insights":
+  "Review observed authorization decision patterns and historical associations",
 };
 
 export function AppShell({
@@ -117,6 +133,10 @@ export function AppShell({
   onLogout,
 }: AppShellProps) {
   const userInitials = currentUser.username.slice(0, 2).toUpperCase();
+
+  const canViewDenialInsights =
+    currentUser.role === "Admin" || currentUser.role === "UR";
+
   return (
     <div
       className={cn(
@@ -137,6 +157,7 @@ export function AppShell({
         <nav className="flex-1 space-y-2 px-4 py-6">
           {[
             ...navigationItems,
+            ...(canViewDenialInsights ? denialInsightsNavigationItems : []),
             ...(canManageUsers ? adminNavigationItems : []),
           ].map((item) => {
             const Icon = item.icon;

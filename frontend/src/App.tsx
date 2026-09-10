@@ -39,6 +39,7 @@ import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminAuditPage } from "./pages/AdminAuditPage";
 import { AdminSystemPage } from "./pages/AdminSystemPage";
 import { DenialsPipelinePage } from "./pages/DenialsPipelinePage";
+import { DenialInsightsPage } from "./pages/DenialInsightsPage";
 
 // Hooks
 import { useDashboardCardSettings } from "./hooks/useDashboardCardSettings";
@@ -494,7 +495,7 @@ function App() {
 
   const handleWalkthroughStepChange = useCallback(async (stepId: string) => {
     const result = await updateWalkthroughStep(stepId);
-  
+
     setCurrentUser((currentValue) =>
       currentValue
         ? {
@@ -508,7 +509,7 @@ function App() {
 
   const handleWalkthroughComplete = useCallback(async () => {
     const result = await completeWalkthrough();
-  
+
     setCurrentUser((currentValue) =>
       currentValue
         ? {
@@ -522,7 +523,7 @@ function App() {
 
   const handleWalkthroughSkip = useCallback(async () => {
     const result = await skipWalkthrough();
-  
+
     setCurrentUser((currentValue) =>
       currentValue
         ? {
@@ -636,10 +637,7 @@ function App() {
     }
   };
 
-  if (
-    governanceAccessState !== "ready" ||
-    !currentUser
-  ) {
+  if (governanceAccessState !== "ready" || !currentUser) {
     return null;
   }
 
@@ -835,6 +833,10 @@ function App() {
               setSelectedDenialFollowUpAuthId(null);
             }}
           />
+        )}
+
+        {activePage === "denial-insights" && canManageAuthorizations && (
+          <DenialInsightsPage darkMode={darkMode} />
         )}
 
         {activePage === "settings" && (

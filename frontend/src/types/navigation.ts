@@ -6,4 +6,5 @@ export type AppPage =
   | "adminUsers"
   | "adminAudit"
   | "adminSystem"
-  | "denials-pipeline";
+  | "denials-pipeline"
+  | "denial-insights";

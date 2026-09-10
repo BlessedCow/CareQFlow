@@ -8,6 +8,9 @@ from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from authstatus_api.authorizations.denial_insights.router import (
+    router as denial_insights_router,
+)
 from authstatus_api.backups.router import router as backups_router
 from authstatus_api.errors import register_exception_handlers
 from authstatus_api.governance.router import router as governance_router
@@ -116,6 +119,7 @@ def create_app() -> FastAPI:
     api.include_router(system_router)
     api.include_router(auths_router)
     api.include_router(analytics_router)
+    api.include_router(denial_insights_router)
     api.include_router(registered_options_router)
     api.include_router(pdf_intake_router)
 

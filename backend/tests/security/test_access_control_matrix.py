@@ -56,6 +56,7 @@ EXPECTED_API_ENDPOINTS = {
     ("POST", "/api/auths/{auth_id}/documents"),
     ("POST", "/api/auths/{auth_id}/events"),
     ("POST", "/api/auths/{auth_id}/loc-episodes"),
+    ("POST", "/api/denial-insights/query"),
     ("POST", "/api/governance/attestations"),
     ("POST", "/api/security/session/activity"),
     ("POST", "/api/pdf-intake/preview"),
@@ -134,6 +135,7 @@ ADMIN_UR_ENDPOINTS = {
     ("POST", "/api/auths/{auth_id}/documents"),
     ("POST", "/api/auths/{auth_id}/events"),
     ("POST", "/api/auths/{auth_id}/loc-episodes"),
+    ("POST", "/api/denial-insights/query"),
     ("POST", "/api/pdf-intake/preview"),
 }
 
