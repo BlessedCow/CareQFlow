@@ -474,6 +474,42 @@ class ClinicalAssessmentListResponse(BaseModel):
     assessments: list[ClinicalAssessmentRecord]
 
 
+class AuthDecisionSnapshotBase(BaseModel):
+    auth_event_id: int | None = None
+    facility: str
+    insurance: str | None = None
+    insurance_plan: str | None = None
+    loc: str
+    auth_type: str
+    outcome: str
+    requested_days: int = 0
+    approved_days: int = 0
+    denied_days: int = 0
+    decision_at: str
+    denial_reason_category: str | None = None
+    denial_source: str | None = None
+    days_at_current_loc: int | None = None
+    total_treatment_days: int | None = None
+    source: str = "manual"
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthDecisionSnapshotCreate(AuthDecisionSnapshotBase):
+    pass
+
+
+class AuthDecisionSnapshotRecord(AuthDecisionSnapshotBase):
+    id: int
+    auth_id: int
+    created_at: str
+    updated_at: str
+
+
+class AuthDecisionSnapshotListResponse(BaseModel):
+    snapshots: list[AuthDecisionSnapshotRecord]
+
+
 class DeleteResponse(BaseModel):
     deleted: bool
     id: int

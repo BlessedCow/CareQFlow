@@ -12,6 +12,11 @@ from authstatus_api.authorizations.clinical_assessments import (
     list_clinical_assessments,
     update_clinical_assessment,
 )
+from authstatus_api.authorizations.decision_snapshots import (
+    InvalidAuthDecisionSnapshotError,
+    create_auth_decision_snapshot,
+    list_auth_decision_snapshots,
+)
 from authstatus_api.authorizations.documents import (
     AuthDocumentLimitError,
     InvalidAuthDocumentError,
@@ -48,6 +53,9 @@ from authstatus_api.pdf_intake.request_body import (
 )
 from authstatus_api.schemas import (
     AuthCreate,
+    AuthDecisionSnapshotCreate,
+    AuthDecisionSnapshotListResponse,
+    AuthDecisionSnapshotRecord,
     AuthDocumentListResponse,
     AuthDocumentRecord,
     AuthEventCreate,
@@ -735,6 +743,72 @@ def delete_clinical_assessment_record(
         deleted=True,
         id=assessment_id,
     )
+
+
+@router.get(
+    "/{auth_id}/decision-snapshots",
+    response_model=AuthDecisionSnapshotListResponse,
+)
+def read_auth_decision_snapshots(
+    auth_id: int,
+    current_user: dict = ReadAuthUser,
+) -> AuthDecisionSnapshotListResponse:
+    snapshots = list_auth_decision_snapshots(auth_id)
+
+    if snapshots is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
+        )
+
+    return AuthDecisionSnapshotListResponse(
+        snapshots=[AuthDecisionSnapshotRecord(**snapshot) for snapshot in snapshots]
+    )
+
+
+@router.post(
+    "/{auth_id}/decision-snapshots",
+    response_model=AuthDecisionSnapshotRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_auth_decision_snapshot_record(
+    auth_id: int,
+    payload: AuthDecisionSnapshotCreate,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> AuthDecisionSnapshotRecord:
+    payload_data = payload.model_dump()
+
+    try:
+        snapshot = create_auth_decision_snapshot(
+            auth_id,
+            payload_data,
+        )
+    except InvalidAuthDecisionSnapshotError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
+        )
+
+    record_audit_event(
+        action="auth_decision_snapshot.create",
+        resource_type="auth_decision_snapshot",
+        resource_id=snapshot["id"],
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            **audit_field_names(payload_data),
+        },
+        request=request,
+    )
+
+    return AuthDecisionSnapshotRecord(**snapshot)
 
 
 @router.delete("/{auth_id}", response_model=DeleteResponse)

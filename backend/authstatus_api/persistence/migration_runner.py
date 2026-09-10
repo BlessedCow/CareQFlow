@@ -12,6 +12,7 @@ from authstatus_api.persistence.migration_steps.authorizations import (
     add_authorization_analytics_columns,
     add_core_authorization_columns,
     add_denial_follow_up_columns,
+    create_authorization_decision_snapshots_table,
     create_authorization_loc_episodes_table,
     create_clinical_assessments_table,
 )
@@ -170,6 +171,10 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         migration_id="0010_clinical_assessments",
         apply=create_clinical_assessments_table,
+    ),
+    Migration(
+        migration_id="0011_authorization_decision_snapshots",
+        apply=create_authorization_decision_snapshots_table,
     ),
 )
 

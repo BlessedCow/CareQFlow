@@ -127,3 +127,32 @@ def create_clinical_assessments_table(conn: Any) -> None:
             FOREIGN KEY (auth_event_id) REFERENCES auth_events (id) ON DELETE SET NULL
         )
         """)
+
+
+def create_authorization_decision_snapshots_table(conn: Any) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_decision_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            auth_id INTEGER NOT NULL,
+            auth_event_id INTEGER,
+            facility TEXT NOT NULL,
+            insurance TEXT,
+            insurance_plan TEXT,
+            loc TEXT NOT NULL,
+            auth_type TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            requested_days INTEGER NOT NULL DEFAULT 0,
+            approved_days INTEGER NOT NULL DEFAULT 0,
+            denied_days INTEGER NOT NULL DEFAULT 0,
+            decision_at TEXT NOT NULL,
+            denial_reason_category TEXT,
+            denial_source TEXT,
+            days_at_current_loc INTEGER,
+            total_treatment_days INTEGER,
+            source TEXT NOT NULL DEFAULT 'manual',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (auth_id) REFERENCES auths (id) ON DELETE CASCADE,
+            FOREIGN KEY (auth_event_id) REFERENCES auth_events (id) ON DELETE SET NULL
+        )
+        """)
