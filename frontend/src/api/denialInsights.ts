@@ -9,7 +9,17 @@ export type DenialInsightsDimension =
   | "outcome"
   | "denial_reason_category"
   | "denial_source"
-  | "source";
+  | "source"
+  | "days_at_current_loc"
+  | "total_treatment_days"
+  | "clinical_instrument"
+  | "clinical_latest_score"
+  | "clinical_score_age_days"
+  | "clinical_score_change"
+  | "clinical_score_trend"
+  | "clinical_assessment_count"
+  | "clinical_min_score"
+  | "clinical_max_score";
 
 export interface DenialInsightsSummary {
   decision_count: number;
@@ -31,6 +41,47 @@ export interface DenialInsightsGroup extends DenialInsightsSummary {
   sample_state: "insufficient" | "preliminary" | "standard";
 }
 
+export interface EvidenceStrengthCalculation {
+  version: string;
+  sample_strength: {
+    points: number;
+    maximum_points: number;
+    effective_sample_size: number;
+    standard_sample_size: number;
+  };
+  baseline_separation: {
+    points: number;
+    maximum_points: number;
+    absolute_rate_difference: number | null;
+    full_points_difference: number;
+  };
+  rate_stability: {
+    points: number;
+    maximum_points: number;
+    wilson_interval_width: number | null;
+  };
+  data_completeness: {
+    points: number;
+    maximum_points: number;
+    ratio: number;
+  };
+  uncapped_score: number;
+  sample_cap: number;
+  final_score: number;
+}
+
+export interface EvidenceStrength {
+  score: number;
+  level: string;
+  sample_size: number;
+  baseline_sample_size: number;
+  wilson_95_interval: {
+    lower: number;
+    upper: number;
+  } | null;
+  calculation?: EvidenceStrengthCalculation;
+}
+
 export interface DenialInsightsEvaluation {
   triggered: boolean;
   dimensions: Record<string, string>;
@@ -44,6 +95,7 @@ export interface DenialInsightsEvaluation {
   minimum_denial_rate: number;
   minimum_relative_increase: number;
   reason: string;
+  evidence_strength: EvidenceStrength;
 }
 
 export interface DenialInsightsResponse {
@@ -71,6 +123,7 @@ export interface DenialInsightsQuery {
     minimum_denial_rate?: number;
     minimum_relative_increase?: number;
   };
+  include_evidence_calculation?: boolean;
 }
 
 export async function fetchDenialInsights(

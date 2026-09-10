@@ -836,7 +836,10 @@ function App() {
         )}
 
         {activePage === "denial-insights" && canManageAuthorizations && (
-          <DenialInsightsPage darkMode={darkMode} />
+          <DenialInsightsPage
+            darkMode={darkMode}
+            canShowEvidenceCalculation={currentUser.role === "Admin"}
+          />
         )}
 
         {activePage === "settings" && (

@@ -8,6 +8,12 @@ from authstatus_api.authorizations.denial_insights.aggregation import (
     group_decisions,
     summarize_decisions,
 )
+from authstatus_api.authorizations.denial_insights.clinical_context import (
+    enrich_snapshots_with_clinical_context,
+)
+from authstatus_api.authorizations.denial_insights.evidence import (
+    calculate_evidence_strength,
+)
 from authstatus_api.authorizations.denial_insights.rules import (
     RuleThresholds,
     evaluate_groups_against_baseline,
@@ -181,17 +187,22 @@ def build_denial_insights(
     preliminary_minimum: int = 5,
     standard_minimum: int = 20,
     rule_thresholds: RuleThresholds | None = None,
+    include_evidence_calculation: bool = False,
 ) -> dict[str, Any]:
-    records = list_decision_snapshots(
-        start_at=start_at,
-        end_at=end_at,
-        filters=filters,
+    records = enrich_snapshots_with_clinical_context(
+        list_decision_snapshots(
+            start_at=start_at,
+            end_at=end_at,
+            filters=filters,
+        )
     )
 
-    baseline_records = list_decision_snapshots(
-        start_at=start_at,
-        end_at=end_at,
-        filters=baseline_filters,
+    baseline_records = enrich_snapshots_with_clinical_context(
+        list_decision_snapshots(
+            start_at=start_at,
+            end_at=end_at,
+            filters=baseline_filters,
+        )
     )
 
     groups = add_sample_states(
@@ -219,6 +230,20 @@ def build_denial_insights(
         baseline,
         thresholds=rule_thresholds,
     )
+
+    for group, evaluation in zip(
+        groups,
+        evaluations,
+        strict=True,
+    ):
+        evaluation["evidence_strength"] = calculate_evidence_strength(
+            group,
+            evaluation,
+            dimensions=dimensions,
+            preliminary_minimum=preliminary_minimum,
+            standard_minimum=standard_minimum,
+            include_calculation=(include_evidence_calculation),
+        )
 
     return {
         "dimensions": list(dimensions),

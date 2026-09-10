@@ -53,6 +53,7 @@ class DenialInsightsQueryRequest(BaseModel):
     rule_thresholds: DenialInsightsThresholdsRequest = Field(
         default_factory=DenialInsightsThresholdsRequest
     )
+    include_evidence_calculation: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -89,6 +90,12 @@ def query_denial_insights(
         minimum_relative_increase=(payload.rule_thresholds.minimum_relative_increase),
     )
 
+    if payload.include_evidence_calculation and current_user["role"] != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=("Evidence calculation details are restricted " "to Admin users."),
+        )
+
     try:
         result = build_denial_insights(
             dimensions=payload.dimensions,
@@ -99,6 +106,7 @@ def query_denial_insights(
             preliminary_minimum=payload.preliminary_minimum,
             standard_minimum=payload.standard_minimum,
             rule_thresholds=thresholds,
+            include_evidence_calculation=(payload.include_evidence_calculation),
         )
     except (
         InvalidDenialInsightsFilterError,

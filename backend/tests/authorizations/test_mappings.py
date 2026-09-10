@@ -55,6 +55,18 @@ def test_auth_row_to_dict_restores_boolean_fields():
     assert record["no_pa_required"] is False
 
 
+def test_auth_row_to_dict_normalizes_nullable_insurance_plan():
+    record = auth_row_to_dict(
+        {
+            "id": 1,
+            "client_name": "Example Patient",
+            "insurance_plan": None,
+        }
+    )
+
+    assert record["insurance_plan"] == ""
+
+
 def test_auth_row_to_dict_normalizes_nullable_dates():
     record = auth_row_to_dict(
         {

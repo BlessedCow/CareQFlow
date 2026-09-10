@@ -313,3 +313,92 @@ def test_denial_insights_query_applies_custom_rule_thresholds(
     assert evaluation["minimum_sample_size"] == 5
     assert evaluation["minimum_denial_rate"] == 0.4
     assert evaluation["minimum_relative_increase"] == 0.0
+
+
+def test_ur_receives_evidence_summary_without_calculation(
+    client,
+):
+    for index in range(5):
+        _create_snapshot(
+            insurance="Payer A",
+            outcome="Denied",
+            decision_at=(f"2026-09-{index + 1:02d}" "T12:00:00+00:00"),
+        )
+
+    response = client.post(
+        "/api/denial-insights/query",
+        json={
+            "dimensions": [
+                "insurance",
+            ],
+        },
+        headers=_login(
+            client,
+            role="UR",
+        ),
+    )
+
+    assert response.status_code == 200
+
+    evidence = response.json()["evaluations"][0]["evidence_strength"]
+
+    assert "score" in evidence
+    assert "level" in evidence
+    assert "wilson_95_interval" in evidence
+    assert "calculation" not in evidence
+
+
+def test_admin_can_request_evidence_calculation(
+    client,
+):
+    for index in range(5):
+        _create_snapshot(
+            insurance="Payer A",
+            outcome="Denied",
+            decision_at=(f"2026-09-{index + 1:02d}" "T12:00:00+00:00"),
+        )
+
+    response = client.post(
+        "/api/denial-insights/query",
+        json={
+            "dimensions": [
+                "insurance",
+            ],
+            "include_evidence_calculation": True,
+        },
+        headers=_login(
+            client,
+            role="Admin",
+        ),
+    )
+
+    assert response.status_code == 200
+
+    evidence = response.json()["evaluations"][0]["evidence_strength"]
+
+    assert "calculation" in evidence
+    assert evidence["calculation"]["version"] == "1.0"
+
+
+def test_ur_cannot_request_evidence_calculation(
+    client,
+):
+    response = client.post(
+        "/api/denial-insights/query",
+        json={
+            "dimensions": [
+                "insurance",
+            ],
+            "include_evidence_calculation": True,
+        },
+        headers=_login(
+            client,
+            role="UR",
+        ),
+    )
+
+    assert response.status_code == 403
+
+    assert response.json() == {
+        "detail": ("Evidence calculation details are restricted " "to Admin users."),
+    }

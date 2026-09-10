@@ -9,6 +9,7 @@ import { cn } from "../utils/cn";
 
 interface DenialInsightsPageProps {
   darkMode: boolean;
+  canShowEvidenceCalculation?: boolean;
 }
 
 const DIMENSION_OPTIONS: {
@@ -19,6 +20,46 @@ const DIMENSION_OPTIONS: {
   { value: "insurance_plan", label: "Insurance Plan" },
   { value: "facility", label: "Facility" },
   { value: "loc", label: "Level of Care" },
+  {
+    value: "days_at_current_loc",
+    label: "Days at Current LOC",
+  },
+  {
+    value: "total_treatment_days",
+    label: "Total Treatment Days",
+  },
+  {
+    value: "clinical_instrument",
+    label: "Clinical Assessment",
+  },
+  {
+    value: "clinical_latest_score",
+    label: "Latest Clinical Score",
+  },
+  {
+    value: "clinical_score_age_days",
+    label: "Clinical Score Age",
+  },
+  {
+    value: "clinical_score_change",
+    label: "Clinical Score Change",
+  },
+  {
+    value: "clinical_score_trend",
+    label: "Clinical Score Trend",
+  },
+  {
+    value: "clinical_assessment_count",
+    label: "Clinical Assessment Count",
+  },
+  {
+    value: "clinical_min_score",
+    label: "Clinical Minimum Score",
+  },
+  {
+    value: "clinical_max_score",
+    label: "Clinical Maximum Score",
+  },
   { value: "auth_type", label: "Review Type" },
   { value: "outcome", label: "Decision Outcome" },
   {
@@ -47,12 +88,54 @@ function formatSampleState(value: string): string {
   }
 }
 
-export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
-  const [dimension, setDimension] =
-    useState<DenialInsightsDimension>("insurance");
+function formatInterval(
+  interval: {
+    lower: number;
+    upper: number;
+  } | null
+): string {
+  if (!interval) {
+    return "—";
+  }
+
+  return `${(interval.lower * 100).toFixed(1)}% to ${(
+    interval.upper * 100
+  ).toFixed(1)}%`;
+}
+
+function formatPoints(points: number, maximum: number): string {
+  return `${points.toFixed(1)} / ${maximum.toFixed(0)}`;
+}
+
+export function DenialInsightsPage({
+  darkMode,
+  canShowEvidenceCalculation = false,
+}: DenialInsightsPageProps) {
+  const [dimensions, setDimensions] = useState<DenialInsightsDimension[]>([
+    "insurance",
+  ]);
   const [result, setResult] = useState<DenialInsightsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showEvidenceCalculation, setShowEvidenceCalculation] = useState(false);
+
+  const toggleDimension = (dimension: DenialInsightsDimension) => {
+    setDimensions((current) => {
+      if (current.includes(dimension)) {
+        if (current.length === 1) {
+          return current;
+        }
+
+        return current.filter((item) => item !== dimension);
+      }
+
+      if (current.length >= 5) {
+        return current;
+      }
+
+      return [...current, dimension];
+    });
+  };
 
   const loadInsights = useCallback(async () => {
     setIsLoading(true);
@@ -60,9 +143,13 @@ export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
 
     try {
       const response = await fetchDenialInsights({
-        dimensions: [dimension],
+        dimensions,
+        ...(canShowEvidenceCalculation && showEvidenceCalculation
+          ? {
+              include_evidence_calculation: true,
+            }
+          : {}),
       });
-
       setResult(response);
     } catch (loadError) {
       setResult(null);
@@ -74,7 +161,7 @@ export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [dimension]);
+  }, [dimensions, canShowEvidenceCalculation, showEvidenceCalculation]);
 
   useEffect(() => {
     void loadInsights();
@@ -101,31 +188,72 @@ export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
               Review observed authorization decision patterns from historical
               decision snapshots. These associations do not establish payer
               policy or causation.
+              <span className="mt-1 block">
+                Evidence strength describes the amount, stability, separation,
+                and completeness of historical evidence. It does not represent
+                the probability of denial.
+              </span>
             </p>
           </div>
 
-          <label className="w-full space-y-2 md:w-64">
-            <span className="text-sm font-medium">Group by</span>
+          <div className="w-full md:max-w-2xl">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm font-medium">Group by</span>
 
-            <select
-              value={dimension}
-              onChange={(event) =>
-                setDimension(event.target.value as DenialInsightsDimension)
-              }
+              <span
+                className={cn(
+                  "text-xs",
+                  darkMode ? "text-gray-500" : "text-gray-500"
+                )}
+              >
+                {dimensions.length} of 5 selected
+              </span>
+            </div>
+
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {DIMENSION_OPTIONS.map((option) => {
+                const checked = dimensions.includes(option.value);
+                const disabled = !checked && dimensions.length >= 5;
+
+                return (
+                  <label
+                    key={option.value}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+                      checked
+                        ? darkMode
+                          ? "border-gray-600 bg-gray-800"
+                          : "border-gray-400 bg-gray-50"
+                        : darkMode
+                        ? "border-gray-800 bg-gray-950"
+                        : "border-gray-200 bg-white",
+                      disabled && "cursor-not-allowed opacity-50",
+                      !disabled && "cursor-pointer"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() => toggleDimension(option.value)}
+                    />
+
+                    <span>{option.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <p
               className={cn(
-                "w-full rounded-lg border px-3 py-2 text-sm outline-none",
-                darkMode
-                  ? "border-gray-700 bg-gray-950 text-gray-100"
-                  : "border-gray-300 bg-white text-gray-900"
+                "mt-2 text-xs",
+                darkMode ? "text-gray-500" : "text-gray-500"
               )}
             >
-              {DIMENSION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              Select up to five dimensions. At least one dimension must remain
+              selected.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -220,19 +348,40 @@ export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => void loadInsights()}
-                disabled={isLoading}
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-medium",
-                  darkMode
-                    ? "bg-gray-800 text-gray-200 hover:bg-gray-700"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              <div className="flex items-center gap-3">
+                {canShowEvidenceCalculation && (
+                  <label
+                    className={cn(
+                      "flex items-center gap-2 text-sm",
+                      darkMode ? "text-gray-300" : "text-gray-700"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showEvidenceCalculation}
+                      onChange={(event) =>
+                        setShowEvidenceCalculation(event.target.checked)
+                      }
+                    />
+
+                    <span>Show evidence calculation</span>
+                  </label>
                 )}
-              >
-                Refresh
-              </button>
+
+                <button
+                  type="button"
+                  onClick={() => void loadInsights()}
+                  disabled={isLoading}
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm font-medium",
+                    darkMode
+                      ? "bg-gray-800 text-gray-200 hover:bg-gray-700"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  )}
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
 
             {result.groups.length === 0 ? (
@@ -256,12 +405,26 @@ export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
                     )}
                   >
                     <tr>
-                      <th className="px-6 py-3 font-medium">Group</th>
+                      {dimensions.map((dimension) => {
+                        const option = DIMENSION_OPTIONS.find(
+                          (item) => item.value === dimension
+                        );
+
+                        return (
+                          <th key={dimension} className="px-6 py-3 font-medium">
+                            {option?.label ?? dimension}
+                          </th>
+                        );
+                      })}
                       <th className="px-6 py-3 font-medium">Decisions</th>
                       <th className="px-6 py-3 font-medium">Denied</th>
                       <th className="px-6 py-3 font-medium">Partial</th>
                       <th className="px-6 py-3 font-medium">Adverse</th>
                       <th className="px-6 py-3 font-medium">Sample</th>
+                      <th className="px-6 py-3 font-medium">
+                        Evidence Strength
+                      </th>
+                      <th className="px-6 py-3 font-medium">95% Interval</th>
                       <th className="px-6 py-3 font-medium">Comparison</th>
                     </tr>
                   </thead>
@@ -272,17 +435,26 @@ export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
 
                       return (
                         <tr
-                          key={`${dimension}-${
-                            group.dimensions[dimension] ?? index
-                          }`}
-                          className={cn(
-                            "border-b last:border-b-0",
-                            darkMode ? "border-gray-800" : "border-gray-200"
-                          )}
+                          key={dimensions
+                            .map(
+                              (dimension) =>
+                                `${dimension}:${
+                                  group.dimensions[dimension] ?? "Unknown"
+                                }`
+                            )
+                            .join("|")}
                         >
-                          <td className="px-6 py-4 font-medium">
-                            {group.dimensions[dimension] ?? "Unknown"}
-                          </td>
+                          {dimensions.map((dimension, dimensionIndex) => (
+                            <td
+                              key={dimension}
+                              className={cn(
+                                "px-6 py-4",
+                                dimensionIndex === 0 && "font-medium"
+                              )}
+                            >
+                              {group.dimensions[dimension] ?? "Unknown"}
+                            </td>
+                          ))}
 
                           <td className="px-6 py-4">{group.decision_count}</td>
 
@@ -300,6 +472,141 @@ export function DenialInsightsPage({ darkMode }: DenialInsightsPageProps) {
 
                           <td className="px-6 py-4">
                             {formatSampleState(group.sample_state)}
+                          </td>
+
+                          <td className="px-6 py-4 align-top">
+                            {evaluation?.evidence_strength ? (
+                              <div className="space-y-1">
+                                <div className="font-medium">
+                                  {evaluation.evidence_strength.level}
+                                </div>
+
+                                <div
+                                  className={cn(
+                                    "text-xs",
+                                    darkMode ? "text-gray-400" : "text-gray-500"
+                                  )}
+                                >
+                                  {evaluation.evidence_strength.score}/100
+                                </div>
+
+                                <div
+                                  className={cn(
+                                    "text-xs",
+                                    darkMode ? "text-gray-500" : "text-gray-500"
+                                  )}
+                                >
+                                  n={evaluation.evidence_strength.sample_size}
+                                  {" · "}
+                                  baseline n=
+                                  {
+                                    evaluation.evidence_strength
+                                      .baseline_sample_size
+                                  }
+                                </div>
+
+                                {showEvidenceCalculation &&
+                                  evaluation.evidence_strength.calculation && (
+                                    <div
+                                      className={cn(
+                                        "mt-3 space-y-1 rounded-lg border p-3 text-xs",
+                                        darkMode
+                                          ? "border-gray-700 bg-gray-950"
+                                          : "border-gray-200 bg-gray-50"
+                                      )}
+                                    >
+                                      <div>
+                                        Sample strength:{" "}
+                                        {formatPoints(
+                                          evaluation.evidence_strength
+                                            .calculation.sample_strength.points,
+                                          evaluation.evidence_strength
+                                            .calculation.sample_strength
+                                            .maximum_points
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        Baseline separation:{" "}
+                                        {formatPoints(
+                                          evaluation.evidence_strength
+                                            .calculation.baseline_separation
+                                            .points,
+                                          evaluation.evidence_strength
+                                            .calculation.baseline_separation
+                                            .maximum_points
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        Rate stability:{" "}
+                                        {formatPoints(
+                                          evaluation.evidence_strength
+                                            .calculation.rate_stability.points,
+                                          evaluation.evidence_strength
+                                            .calculation.rate_stability
+                                            .maximum_points
+                                        )}
+                                      </div>
+
+                                      <div>
+                                        Data completeness:{" "}
+                                        {formatPoints(
+                                          evaluation.evidence_strength
+                                            .calculation.data_completeness
+                                            .points,
+                                          evaluation.evidence_strength
+                                            .calculation.data_completeness
+                                            .maximum_points
+                                        )}
+                                      </div>
+
+                                      <div
+                                        className={cn(
+                                          "mt-2 border-t pt-2 font-medium",
+                                          darkMode
+                                            ? "border-gray-700"
+                                            : "border-gray-200"
+                                        )}
+                                      >
+                                        Final score:{" "}
+                                        {
+                                          evaluation.evidence_strength
+                                            .calculation.final_score
+                                        }
+                                        /100
+                                      </div>
+
+                                      <div>
+                                        Sample cap:{" "}
+                                        {
+                                          evaluation.evidence_strength
+                                            .calculation.sample_cap
+                                        }
+                                      </div>
+
+                                      <div>
+                                        Calculation version:{" "}
+                                        {
+                                          evaluation.evidence_strength
+                                            .calculation.version
+                                        }
+                                      </div>
+                                    </div>
+                                  )}
+                              </div>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+
+                          <td className="px-6 py-4 align-top">
+                            {evaluation?.evidence_strength
+                              ? formatInterval(
+                                  evaluation.evidence_strength
+                                    .wilson_95_interval
+                                )
+                              : "—"}
                           </td>
 
                           <td className="px-6 py-4">

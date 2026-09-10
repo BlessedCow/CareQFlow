@@ -88,4 +88,4 @@ carequeue-backend.cdx.json
 carequeue-frontend.cdx.json
 
 # Local Safety CLI project metadata
-backend/.safety-project.ini
+.safety-project.ini

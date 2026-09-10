@@ -15,6 +15,16 @@ DIMENSION_FIELDS = frozenset(
         "denial_reason_category",
         "denial_source",
         "source",
+        "days_at_current_loc",
+        "total_treatment_days",
+        "clinical_instrument",
+        "clinical_latest_score",
+        "clinical_score_age_days",
+        "clinical_score_change",
+        "clinical_score_trend",
+        "clinical_assessment_count",
+        "clinical_min_score",
+        "clinical_max_score",
     }
 )
 

@@ -22,6 +22,7 @@ BOOLEAN_FIELDS = {
 }
 
 OPTIONAL_AUTH_TEXT_FIELDS = {
+    "insurance_plan",
     "auth_start_date",
     "auth_end_date",
     "programming_days",
