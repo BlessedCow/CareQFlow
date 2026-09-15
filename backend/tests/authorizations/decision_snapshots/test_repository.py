@@ -239,7 +239,300 @@ def test_list_auth_decision_snapshots_is_chronological():
     snapshots = list_auth_decision_snapshots(auth["id"])
 
     assert snapshots is not None
-    assert [item["outcome"] for item in snapshots] == [
+
+    manual_snapshots = [
+        snapshot for snapshot in snapshots if snapshot["source"] == "manual"
+    ]
+
+    assert [item["outcome"] for item in manual_snapshots] == [
         "Approved",
         "Denied",
     ]
+
+
+def test_create_auth_automatically_creates_denied_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "PHP",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "Denied",
+            "insurance": "Example Health",
+            "requested_days": 5,
+            "approved_days": 0,
+            "denied_days": 5,
+        }
+    )
+
+    assert auth is not None
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+    assert len(snapshots) == 1
+    assert snapshots[0]["outcome"] == "Denied"
+    assert snapshots[0]["source"] == "automatic"
+
+
+def test_create_auth_automatically_creates_partial_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "PHP",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "Approved",
+            "insurance": "Example Health",
+            "requested_days": 5,
+            "approved_days": 2,
+            "denied_days": 3,
+        }
+    )
+
+    assert auth is not None
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+    assert len(snapshots) == 1
+    assert snapshots[0]["outcome"] == "Partial"
+
+
+def test_repeated_update_does_not_duplicate_automatic_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "PHP",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "In Progress",
+            "insurance": "Example Health",
+            "requested_days": 5,
+        }
+    )
+
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    first = update_auth(
+        auth["id"],
+        {
+            "status": "Denied",
+            "denied_days": 5,
+        },
+    )
+
+    assert first is not None
+
+    second = update_auth(
+        auth["id"],
+        {
+            "denial_reason_category": "Medical Necessity",
+        },
+    )
+
+    assert second is not None
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+    assert len(snapshots) == 1
+    assert snapshots[0]["outcome"] == "Denied"
+
+
+def test_nondecision_auth_does_not_create_automatic_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "PHP",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "In Progress",
+            "insurance": "Example Health",
+        }
+    )
+
+    assert auth is not None
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots == []
+
+
+def test_p2p_outcome_creates_automatic_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "Denied",
+            "insurance": "Example Health",
+            "requested_days": 5,
+            "denied_days": 5,
+        }
+    )
+
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    update_auth(
+        auth["id"],
+        {
+            "p2p_requested": True,
+            "p2p_scheduled_at": "2026-09-15T14:00:00+00:00",
+            "p2p_outcome": "Overturned",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+
+    p2p_snapshots = [item for item in snapshots if item["outcome"] == "P2P Overturned"]
+
+    assert len(p2p_snapshots) == 1
+    assert p2p_snapshots[0]["source"] == "automatic"
+
+
+def test_appeal_outcome_creates_automatic_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "Denied",
+            "insurance": "Example Health",
+            "requested_days": 5,
+            "denied_days": 5,
+        }
+    )
+
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    update_auth(
+        auth["id"],
+        {
+            "appeal_submitted": True,
+            "appeal_deadline": "2026-09-18",
+            "appeal_outcome": "Upheld",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+    assert any(
+        item["outcome"] == "Appeal Upheld" and item["source"] == "automatic"
+        for item in snapshots
+    )
+
+
+def test_retro_partial_outcome_creates_automatic_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "PHP",
+            "submission_methods": "Fax",
+            "auth_type": "Retro",
+            "status": "In Progress",
+            "insurance": "Example Health",
+            "requested_days": 10,
+        }
+    )
+
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    update_auth(
+        auth["id"],
+        {
+            "retro_requested": True,
+            "retro_deadline": "2026-09-20",
+            "retro_outcome": "Partially Approved",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+    assert any(
+        item["outcome"] == "Retro Partially Approved" and item["source"] == "automatic"
+        for item in snapshots
+    )
+
+
+def test_pending_follow_up_does_not_create_decision_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "In Progress",
+            "insurance": "Example Health",
+        }
+    )
+
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    update_auth(
+        auth["id"],
+        {
+            "p2p_requested": True,
+            "p2p_scheduled_at": "2026-09-15T14:00:00+00:00",
+            "p2p_outcome": "Pending",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots == []
+
+
+def test_follow_up_snapshot_helper_creates_p2p_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "Denied",
+            "insurance": "Example Health",
+            "requested_days": 5,
+            "denied_days": 5,
+        }
+    )
+
+    assert auth is not None
+
+    auth["p2p_outcome"] = "Overturned"
+    auth["p2p_scheduled_at"] = "2026-09-15T14:00:00+00:00"
+
+    from authstatus_api.authorizations.decision_snapshots import (
+        create_automatic_follow_up_decision_snapshots,
+    )
+
+    created = create_automatic_follow_up_decision_snapshots(auth)
+
+    assert len(created) == 1
+    assert created[0]["outcome"] == "P2P Overturned"
+    assert created[0]["source"] == "automatic"

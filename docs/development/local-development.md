@@ -699,13 +699,6 @@ Remove-Item `
     "backend\data\auth_tracker.sqlcipher.db"
 ```
 
-Plaintext example:
-
-```powershell
-Remove-Item `
-    "backend\data\auth_tracker.db"
-```
-
 Restart the backend to create a new empty database.
 
 This also removes local users stored in that database.

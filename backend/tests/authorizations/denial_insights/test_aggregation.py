@@ -388,3 +388,39 @@ def test_clinical_dimensions_preserve_exact_score():
         ("CIWA-Ar", "23.0"),
         ("CIWA-Ar", "24.0"),
     }
+
+
+def test_follow_up_outcomes_are_classified():
+    approved = classify_decision(
+        {
+            "outcome": "P2P Overturned",
+            "requested_days": 0,
+            "approved_days": 0,
+            "denied_days": 0,
+        }
+    )
+    denied = classify_decision(
+        {
+            "outcome": "Appeal Upheld",
+            "requested_days": 0,
+            "approved_days": 0,
+            "denied_days": 0,
+        }
+    )
+    partial = classify_decision(
+        {
+            "outcome": "Retro Partially Approved",
+            "requested_days": 0,
+            "approved_days": 0,
+            "denied_days": 0,
+        }
+    )
+
+    assert approved.approved is True
+    assert approved.denied is False
+
+    assert denied.denied is True
+    assert denied.adverse is True
+
+    assert partial.partial is True
+    assert partial.adverse is True

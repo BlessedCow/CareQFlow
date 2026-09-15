@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from authstatus_api.authorizations.decision_snapshots import (
+    create_automatic_auth_decision_snapshot,
+    create_automatic_follow_up_decision_snapshots,
+)
 from authstatus_api.authorizations.events import (
     create_auth_event,
     delete_auth_event,
@@ -521,7 +525,14 @@ def create_auth(payload: dict[str, Any]) -> dict[str, Any]:
 
     if created_auth is not None:
         create_auth_event(auth_id, initial_timeline_event_payload(created_auth))
-        return get_auth(auth_id)
+
+        final_auth = get_auth(auth_id)
+
+        if final_auth is not None:
+            create_automatic_auth_decision_snapshot(final_auth)
+            create_automatic_follow_up_decision_snapshots(final_auth)
+
+        return final_auth
 
     return None
 
@@ -573,7 +584,13 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
     )
 
     if not keys:
-        return get_auth(auth_id)
+        final_auth = get_auth(auth_id)
+
+        if final_auth is not None:
+            create_automatic_auth_decision_snapshot(final_auth)
+            create_automatic_follow_up_decision_snapshots(final_auth)
+
+        return final_auth
 
     assignments = update_assignments(keys)
     values = [prepared[key] for key in keys]
@@ -618,7 +635,13 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
     if _should_sync_retro_timeline_event(payload, updated_auth):
         _sync_retro_timeline_event(auth_id, updated_auth)
 
-    return get_auth(auth_id)
+    final_auth = get_auth(auth_id)
+
+    if final_auth is not None:
+        create_automatic_auth_decision_snapshot(final_auth)
+        create_automatic_follow_up_decision_snapshots(final_auth)
+
+    return final_auth
 
 
 def delete_auth(auth_id: int) -> bool:

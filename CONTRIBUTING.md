@@ -97,7 +97,6 @@ Do not submit:
 - CSRF tokens
 - Authentication cookies
 - SQLCipher databases
-- Plaintext SQLite databases containing sensitive information
 - Encrypted backup files
 - Restored database files
 - Production logs
@@ -367,7 +366,7 @@ When adding backend behavior:
 - Do not log request bodies containing sensitive data.
 - Keep audit metadata minimal and free of PHI or PII.
 - Add schema validation for new request and response fields.
-- Preserve SQLCipher and plaintext test compatibility where applicable.
+- Preserve SQLCipher test compatibility where applicable.
 - Use safe path validation for database, backup, restore, and intake paths.
 
 ## Frontend Guidelines

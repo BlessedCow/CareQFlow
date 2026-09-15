@@ -193,6 +193,199 @@ def _calculate_loc_context(
     return days_at_current_loc, total_days
 
 
+def _automatic_outcome(auth_record: dict[str, Any]) -> str | None:
+    status = str(auth_record.get("status") or "").strip()
+
+    requested_days = int(auth_record.get("requested_days") or 0)
+    approved_days = int(auth_record.get("approved_days") or 0)
+    denied_days = int(auth_record.get("denied_days") or 0)
+
+    if approved_days > 0 and denied_days > 0:
+        return "Partial"
+
+    if requested_days > 0 and 0 < approved_days < requested_days:
+        return "Partial"
+
+    if status == "Approved":
+        return "Approved"
+
+    if status == "Denied":
+        return "Denied"
+
+    return None
+
+
+def _follow_up_snapshot_outcome(
+    prefix: str,
+    outcome: Any,
+) -> str | None:
+    normalized = str(outcome or "").strip()
+
+    if not normalized:
+        return None
+
+    allowed_outcomes = {
+        "P2P": {
+            "Approved",
+            "Denied",
+            "Upheld",
+            "Overturned",
+        },
+        "Appeal": {
+            "Approved",
+            "Denied",
+            "Upheld",
+            "Overturned",
+        },
+        "Retro": {
+            "Approved",
+            "Denied",
+            "Partially Approved",
+        },
+    }
+
+    if normalized not in allowed_outcomes[prefix]:
+        return None
+
+    return f"{prefix} {normalized}"
+
+
+def create_automatic_follow_up_decision_snapshots(
+    auth_record: dict[str, Any],
+) -> list[dict[str, Any]]:
+    auth_id = int(auth_record["id"])
+
+    decision_at = str(auth_record.get("decision_at") or "").strip()
+
+    follow_up_decisions = (
+        (
+            "P2P",
+            auth_record.get("p2p_outcome"),
+            decision_at
+            or auth_record.get("p2p_scheduled_at")
+            or auth_record.get("p2p_deadline"),
+        ),
+        (
+            "Appeal",
+            auth_record.get("appeal_outcome"),
+            decision_at or auth_record.get("appeal_deadline"),
+        ),
+        (
+            "Retro",
+            auth_record.get("retro_outcome"),
+            decision_at or auth_record.get("retro_deadline"),
+        ),
+    )
+
+    created: list[dict[str, Any]] = []
+
+    for prefix, raw_outcome, raw_decision_at in follow_up_decisions:
+        outcome = _follow_up_snapshot_outcome(
+            prefix,
+            raw_outcome,
+        )
+
+        if outcome is None:
+            continue
+
+        decision_at = str(raw_decision_at or "").strip()
+
+        if not decision_at:
+            continue
+
+        init_db()
+
+        with get_conn() as conn:
+            existing = conn.execute(
+                """
+                SELECT id
+                FROM auth_decision_snapshots
+                WHERE
+                    auth_id = ?
+                    AND outcome = ?
+                    AND decision_at = ?
+                    AND source = 'automatic'
+                LIMIT 1
+                """,
+                (
+                    auth_id,
+                    outcome,
+                    decision_at,
+                ),
+            ).fetchone()
+
+        if existing is not None:
+            snapshot = get_auth_decision_snapshot(
+                auth_id,
+                int(existing["id"]),
+            )
+        else:
+            snapshot = create_auth_decision_snapshot(
+                auth_id,
+                {
+                    "outcome": outcome,
+                    "decision_at": decision_at,
+                    "source": "automatic",
+                },
+            )
+
+        if snapshot is not None:
+            created.append(snapshot)
+
+    return created
+
+
+def create_automatic_auth_decision_snapshot(
+    auth_record: dict[str, Any],
+) -> dict[str, Any] | None:
+    auth_id = int(auth_record["id"])
+    outcome = _automatic_outcome(auth_record)
+
+    if outcome is None:
+        return None
+
+    decision_at = str(auth_record.get("decision_at") or "").strip()
+
+    if not decision_at:
+        return None
+
+    init_db()
+
+    with get_conn() as conn:
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM auth_decision_snapshots
+            WHERE
+                auth_id = ?
+                AND outcome = ?
+                AND decision_at = ?
+                AND source = 'automatic'
+            LIMIT 1
+            """,
+            (
+                auth_id,
+                outcome,
+                decision_at,
+            ),
+        ).fetchone()
+
+    if existing is not None:
+        return get_auth_decision_snapshot(
+            auth_id,
+            int(existing["id"]),
+        )
+
+    return create_auth_decision_snapshot(
+        auth_id,
+        {
+            "outcome": outcome,
+            "decision_at": decision_at,
+            "source": "automatic",
+        },
+    )
+
+
 def create_auth_decision_snapshot(
     auth_id: int,
     payload: dict[str, Any],

@@ -440,9 +440,7 @@ Sensitive values should not appear in exception messages, audit metadata, or deb
 
 ## SQLCipher Database Encryption
 
-CareQFlow supports either SQLite or SQLCipher-backed storage.
-
-A production environment containing sensitive data should not use plaintext SQLite mode.
+CareQFlow supports SQLCipher-backed storage.
 
 Typical SQLCipher settings include:
 

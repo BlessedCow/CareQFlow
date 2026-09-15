@@ -369,7 +369,7 @@ Production configuration default database path:
 
 The installer installs SQLCipher development libraries and the application's Python requirements.
 
-Before using real sensitive data, validate that the deployed database is actually encrypted and cannot be read as ordinary plaintext SQLite.
+Before using real sensitive data, validate that the deployed database is actually encrypted and cannot be read as ordinary plaintext SQL.
 
 ## CareQFlow API Service
 

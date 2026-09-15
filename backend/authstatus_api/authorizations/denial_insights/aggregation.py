@@ -32,8 +32,11 @@ APPROVED_OUTCOMES = frozenset(
     {
         "approved",
         "peer to peer overturned",
+        "p2p approved",
         "p2p overturned",
+        "appeal approved",
         "appeal overturned",
+        "retro approved",
     }
 )
 
@@ -43,6 +46,7 @@ PARTIAL_OUTCOMES = frozenset(
         "partially approved",
         "partial approval",
         "modified loc",
+        "retro partially approved",
     }
 )
 
@@ -53,7 +57,11 @@ DENIED_OUTCOMES = frozenset(
         "administratively denied",
         "final upheld",
         "denial upheld",
+        "p2p denied",
+        "p2p upheld",
+        "appeal denied",
         "appeal upheld",
+        "retro denied",
     }
 )
 
