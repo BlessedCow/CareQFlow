@@ -206,6 +206,9 @@ def _automatic_outcome(auth_record: dict[str, Any]) -> str | None:
     if requested_days > 0 and 0 < approved_days < requested_days:
         return "Partial"
 
+    if denied_days > 0 and approved_days == 0:
+        return "Denied"
+
     if status == "Approved":
         return "Approved"
 
@@ -262,21 +265,21 @@ def create_automatic_follow_up_decision_snapshots(
             "P2P",
             "Peer Review",
             auth_record.get("p2p_outcome"),
-            decision_at
-            or auth_record.get("p2p_scheduled_at")
-            or auth_record.get("p2p_deadline"),
+            auth_record.get("p2p_scheduled_at")
+            or auth_record.get("p2p_deadline")
+            or decision_at,
         ),
         (
             "Appeal",
             "Appeal",
             auth_record.get("appeal_outcome"),
-            decision_at or auth_record.get("appeal_deadline"),
+            auth_record.get("appeal_deadline") or decision_at,
         ),
         (
             "Retro",
             "Retro Auth",
             auth_record.get("retro_outcome"),
-            decision_at or auth_record.get("retro_deadline"),
+            auth_record.get("retro_deadline") or decision_at,
         ),
     )
 

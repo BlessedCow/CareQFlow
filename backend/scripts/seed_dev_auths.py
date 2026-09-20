@@ -550,7 +550,7 @@ def build_records(
     *,
     seed: int | None = None,
 ) -> list[dict[str, Any]]:
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # nosec B311
     fake = Faker()
 
     if seed is not None:

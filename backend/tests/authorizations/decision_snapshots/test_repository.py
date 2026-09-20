@@ -403,7 +403,19 @@ def test_p2p_outcome_creates_automatic_snapshot():
     p2p_snapshots = [item for item in snapshots if item["outcome"] == "P2P Overturned"]
 
     assert len(p2p_snapshots) == 1
-    assert p2p_snapshots[0]["source"] == "automatic"
+
+    p2p_snapshot = p2p_snapshots[0]
+
+    assert p2p_snapshot["source"] == "automatic"
+    assert p2p_snapshot["decision_at"] == "2026-09-15T14:00:00+00:00"
+    assert p2p_snapshot["requested_days"] == 5
+    assert p2p_snapshot["approved_days"] == 0
+    assert p2p_snapshot["denied_days"] == 5
+
+    assert not any(
+        item["outcome"] == "Approved" and item["source"] == "automatic"
+        for item in snapshots
+    )
 
     events = list_auth_events(auth["id"])
 
@@ -411,7 +423,7 @@ def test_p2p_outcome_creates_automatic_snapshot():
 
     p2p_event = next(event for event in events if event["event_type"] == "Peer Review")
 
-    assert p2p_snapshots[0]["auth_event_id"] == p2p_event["id"]
+    assert p2p_snapshot["auth_event_id"] == p2p_event["id"]
 
 
 def test_appeal_outcome_creates_automatic_snapshot():
@@ -459,7 +471,10 @@ def test_appeal_outcome_creates_automatic_snapshot():
     appeal_snapshot = next(
         item for item in snapshots if item["outcome"] == "Appeal Upheld"
     )
-
+    assert appeal_snapshot["decision_at"] == "2026-09-18"
+    assert appeal_snapshot["requested_days"] == 5
+    assert appeal_snapshot["approved_days"] == 0
+    assert appeal_snapshot["denied_days"] == 5
     assert appeal_snapshot["auth_event_id"] == appeal_event["id"]
 
 
@@ -508,6 +523,8 @@ def test_retro_partial_outcome_creates_automatic_snapshot():
         item for item in snapshots if item["outcome"] == "Retro Partially Approved"
     )
 
+    assert retro_snapshot["decision_at"] == "2026-09-20"
+    assert retro_snapshot["requested_days"] == 10
     assert retro_snapshot["auth_event_id"] == retro_event["id"]
 
 
