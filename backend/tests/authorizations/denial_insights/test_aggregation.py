@@ -394,9 +394,9 @@ def test_follow_up_outcomes_are_classified():
     approved = classify_decision(
         {
             "outcome": "P2P Overturned",
-            "requested_days": 0,
+            "requested_days": 5,
             "approved_days": 0,
-            "denied_days": 0,
+            "denied_days": 5,
         }
     )
     denied = classify_decision(

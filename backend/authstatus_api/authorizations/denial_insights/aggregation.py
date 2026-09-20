@@ -109,17 +109,25 @@ def classify_decision(
     has_approved_days = approved_days > 0
     has_denied_days = denied_days > 0
 
-    partial = (
-        explicitly_partial
-        or (has_approved_days and has_denied_days)
-        or (requested_days > 0 and 0 < approved_days < requested_days)
-    )
+    if explicitly_partial:
+        approved = False
+        partial = True
+        denied = False
+    elif explicitly_denied:
+        approved = False
+        partial = False
+        denied = True
+    elif explicitly_approved:
+        approved = True
+        partial = False
+        denied = False
+    else:
+        partial = (has_approved_days and has_denied_days) or (
+            requested_days > 0 and 0 < approved_days < requested_days
+        )
 
-    denied = explicitly_denied or (
-        has_denied_days and not partial and approved_days == 0
-    )
-
-    approved = explicitly_approved or (approved_days > 0 and not partial and not denied)
+        denied = has_denied_days and not partial and approved_days == 0
+        approved = approved_days > 0 and not partial and not denied
 
     adverse = denied or partial
 
