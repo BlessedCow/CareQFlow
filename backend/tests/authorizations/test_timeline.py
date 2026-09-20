@@ -210,3 +210,68 @@ def test_terminal_snapshot_clears_review_due_date(
 
     assert snapshot["status"] == terminal_status
     assert snapshot["review_due_date"] is None
+
+
+@pytest.mark.parametrize("event_type", ["Peer Review", "Appeal", "Retro Auth"])
+@pytest.mark.parametrize("outcome", ["Pending", "Overturned", "Upheld"])
+def test_follow_up_deadline_does_not_replace_authorization_review(event_type, outcome):
+    original = {
+        "event_type": "Initial Authorization",
+        "outcome": "Denied",
+        "requested_days": 5,
+        "approved_days": 0,
+        "auth_start_date": "2026-09-01",
+        "auth_end_date": "2026-09-05",
+        "review_due_date": "2026-09-06",
+    }
+    follow_up = {
+        "event_type": event_type,
+        "outcome": outcome,
+        "requested_days": 0,
+        "approved_days": 0,
+        "auth_start_date": "",
+        "auth_end_date": "",
+        "review_due_date": "2026-09-10",
+    }
+    snapshot = current_auth_snapshot([original, follow_up])
+    for field in ("requested_days", "approved_days", "auth_start_date", "auth_end_date", "review_due_date"):
+        assert snapshot[field] == original[field]
+    if outcome == "Overturned":
+        assert snapshot["status"] == "Approved"
+
+
+@pytest.mark.parametrize("event_type", ["Peer Review", "Appeal", "Retro Auth"])
+def test_follow_up_with_explicit_authorization_values_remains_a_review(event_type):
+    event = {
+        "event_type": event_type,
+        "outcome": "Approved",
+        "requested_days": 5,
+        "approved_days": 3,
+        "auth_start_date": "2026-09-01",
+        "auth_end_date": "2026-09-03",
+        "review_due_date": "2026-09-04",
+    }
+    snapshot = current_auth_snapshot([event])
+    assert snapshot == {
+        key: event[key]
+        for key in (
+            "requested_days",
+            "approved_days",
+            "auth_start_date",
+            "auth_end_date",
+            "review_due_date",
+        )
+    } | {"status": "Approved"}
+
+
+def test_ordinary_review_can_set_only_a_review_due_date():
+    snapshot = current_auth_snapshot(
+        [
+            {
+                "event_type": "Payer Response",
+                "outcome": "Pending",
+                "review_due_date": "2026-09-04",
+            }
+        ]
+    )
+    assert snapshot["review_due_date"] == "2026-09-04"

@@ -99,6 +99,30 @@ def test_pattern_does_not_trigger_for_small_group_sample():
     assert result["reason"] == "Group sample size is below the configured minimum."
 
 
+def test_pattern_uses_classified_group_sample_size():
+    result = evaluate_denial_pattern(
+        {
+            "dimensions": {
+                "insurance": "Payer A",
+            },
+            "decision_count": 20,
+            "unclassified_count": 16,
+            "observed_denial_rate": 1.0,
+        },
+        {
+            "dimensions": {
+                "insurance": "Baseline",
+            },
+            "decision_count": 100,
+            "unclassified_count": 0,
+            "observed_denial_rate": 0.20,
+        },
+    )
+
+    assert result["triggered"] is False
+    assert result["reason"] == "Group sample size is below the configured minimum."
+
+
 def test_pattern_does_not_trigger_for_small_baseline_sample():
     result = evaluate_denial_pattern(
         _group(

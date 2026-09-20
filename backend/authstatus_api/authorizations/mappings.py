@@ -22,7 +22,13 @@ BOOLEAN_FIELDS = {
 }
 
 OPTIONAL_AUTH_TEXT_FIELDS = {
+    "insurance",
     "insurance_plan",
+    "portal_name",
+    "live_call_type",
+    "scheduled_call_at",
+    "los_requested",
+    "days_approved",
     "auth_start_date",
     "auth_end_date",
     "programming_days",

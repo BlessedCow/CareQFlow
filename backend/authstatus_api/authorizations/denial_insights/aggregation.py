@@ -81,6 +81,19 @@ def _normalize_text(value: Any) -> str:
     return " ".join(str(value).strip().lower().split())
 
 
+def _is_follow_up_outcome(outcome: Any) -> bool:
+    normalized = _normalize_text(outcome)
+
+    return normalized.startswith(
+        (
+            "p2p ",
+            "peer to peer ",
+            "appeal ",
+            "retro ",
+        )
+    )
+
+
 def _display_dimension_value(value: Any) -> str:
     if value is None:
         return "Unknown"
@@ -180,11 +193,13 @@ def summarize_decisions(
         ):
             unclassified_count += 1
 
-        requested_days += int(snapshot.get("requested_days") or 0)
-        approved_days += int(snapshot.get("approved_days") or 0)
-        denied_days += int(snapshot.get("denied_days") or 0)
+        if not _is_follow_up_outcome(snapshot.get("outcome")):
+            requested_days += int(snapshot.get("requested_days") or 0)
+            approved_days += int(snapshot.get("approved_days") or 0)
+            denied_days += int(snapshot.get("denied_days") or 0)
 
     decision_count = len(records)
+    classified_count = decision_count - unclassified_count
 
     return {
         "decision_count": decision_count,
@@ -195,15 +210,15 @@ def summarize_decisions(
         "unclassified_count": unclassified_count,
         "observed_denial_rate": _percentage(
             denied_count,
-            decision_count,
+            classified_count,
         ),
         "observed_partial_rate": _percentage(
             partial_count,
-            decision_count,
+            classified_count,
         ),
         "observed_adverse_rate": _percentage(
             adverse_count,
-            decision_count,
+            classified_count,
         ),
         "requested_days": requested_days,
         "approved_days": approved_days,
@@ -308,8 +323,16 @@ def add_sample_states(
 
     for group in groups:
         enriched = dict(group)
+
+        decision_count = int(group["decision_count"])
+        unclassified_count = int(group.get("unclassified_count") or 0)
+        classified_count = max(
+            decision_count - unclassified_count,
+            0,
+        )
+
         enriched["sample_state"] = sample_state(
-            int(group["decision_count"]),
+            classified_count,
             preliminary_minimum=preliminary_minimum,
             standard_minimum=standard_minimum,
         )

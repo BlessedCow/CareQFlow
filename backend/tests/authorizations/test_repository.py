@@ -680,3 +680,69 @@ def test_get_analytics_summary_counts_records():
         "no_pa_required": 1,
         "waiting_on_clinicals": 1,
     }
+
+
+@pytest.mark.parametrize(
+    ("prefix", "flag", "event_type", "outcome"),
+    [
+        ("p2p", "p2p_requested", "Peer Review", "Overturned"),
+        ("appeal", "appeal_submitted", "Appeal", "Overturned"),
+        ("retro", "retro_requested", "Retro Auth", "Approved"),
+    ],
+)
+def test_follow_up_lifecycle_preserves_authorization_values(
+    prefix, flag, event_type, outcome
+):
+    core = {
+        "requested_days": 5,
+        "approved_days": 0,
+        "denied_days": 5,
+        "auth_start_date": "2026-09-01",
+        "auth_end_date": "2026-09-05",
+        "review_due_date": "2026-09-06",
+    }
+    created = create_auth(make_payload() | core | {"status": "Denied"})
+    auth_id = created["id"]
+    for follow_up_outcome in ("Pending", outcome):
+        updated = update_auth(
+            auth_id,
+            {
+                flag: True,
+                f"{prefix}_deadline": "2026-09-10",
+                f"{prefix}_outcome": follow_up_outcome,
+            },
+        )
+        assert {key: updated[key] for key in core} == core
+    assert updated["status"] == "Approved"
+
+    note = create_auth_event(
+        auth_id,
+        {
+            "event_type": "Note",
+            "event_date": "2026-09-11",
+            "notes": "Follow-up recorded.",
+        },
+    )
+    stored = get_auth(auth_id)
+    assert {key: stored[key] for key in core} == core
+    delete_auth_event(auth_id, note["id"])
+    stored = get_auth(auth_id)
+    assert {key: stored[key] for key in core} == core
+    follow_up = next(
+        event
+        for event in list_auth_events(auth_id)
+        if event["event_type"] == event_type
+    )
+    assert follow_up["review_due_date"] == "2026-09-10"
+
+    cleared = update_auth(
+        auth_id,
+        {
+            flag: False,
+            f"{prefix}_deadline": "",
+            f"{prefix}_outcome": "",
+        },
+    )
+    assert {key: cleared[key] for key in core} == core
+    assert cleared["status"] == "Denied"
+    assert all(event["event_type"] != event_type for event in list_auth_events(auth_id))

@@ -132,3 +132,29 @@ def test_auth_event_row_to_dict_normalizes_nullable_dates():
     assert record["auth_start_date"] == ""
     assert record["auth_end_date"] == ""
     assert record["review_due_date"] == ""
+
+
+def test_all_optional_schema_text_fields_accept_database_nulls():
+    from authstatus_api.schemas import AuthBase, AuthRecord
+
+    optional_text = {
+        name: None
+        for name, field in AuthBase.model_fields.items()
+        if field.annotation is str and field.default == ""
+    }
+    record = auth_row_to_dict(
+        optional_text
+        | {
+            "id": 1,
+            "facility": "Synthetic Facility",
+            "client_name": "Synthetic Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Initial",
+            "status": "Pending",
+            "created_at": "2026-09-01T09:00:00",
+            "updated_at": "2026-09-01T09:00:00",
+        }
+    )
+    validated = AuthRecord.model_validate(record)
+    assert all(getattr(validated, name) == "" for name in optional_text)

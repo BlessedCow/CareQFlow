@@ -16,6 +16,8 @@ def configure_test_settings(tmp_path, monkeypatch):
         "AUTHSTATUS_DATABASE_PATH",
         str(tmp_path / "auth_tracker.db"),
     )
+    monkeypatch.setenv("AUTHSTATUS_APP_ENVIRONMENT", "test")
+    monkeypatch.setenv("AUTHSTATUS_SESSION_COOKIE_SECURE", "false")
     get_settings.cache_clear()
 
     yield

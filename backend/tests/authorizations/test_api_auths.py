@@ -6,10 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from authstatus_api.crypto import ENCRYPTED_TEXT_PREFIX, generate_encryption_key
+from authstatus_api.governance.repository import (
+    create_governance_attestation,
+    is_governance_attestation_current,
+)
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.routers import auths as auths_router
-from authstatus_api.security.users import create_user
+from authstatus_api.security.users import create_user, get_user_by_username
 from authstatus_api.settings import get_settings
 
 
@@ -17,6 +21,8 @@ from authstatus_api.settings import get_settings
 def configure_test_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTHSTATUS_ENCRYPTION_KEY", generate_encryption_key())
     monkeypatch.setenv("AUTHSTATUS_DATABASE_PATH", str(tmp_path / "auth_tracker.db"))
+    monkeypatch.setenv("AUTHSTATUS_APP_ENVIRONMENT", "test")
+    monkeypatch.setenv("AUTHSTATUS_SESSION_COOKIE_SECURE", "false")
     get_settings.cache_clear()
 
     yield
@@ -48,6 +54,18 @@ def auth_headers(client):
 
     assert csrf_token
 
+    if not is_governance_attestation_current():
+        user = get_user_by_username("ur@example.com")
+
+        assert user is not None
+
+        create_governance_attestation(
+            organization_name="Test Facility",
+            deployment_mode="self_hosted",
+            accepted_by_user_id=user["id"],
+            app_version=get_settings().app_version,
+        )
+
     return {
         "X-CSRF-Token": csrf_token,
     }
@@ -55,7 +73,10 @@ def auth_headers(client):
 
 @pytest.fixture
 def client():
-    with TestClient(create_app()) as test_client:
+    with TestClient(
+        create_app(),
+        client=("127.0.0.1", 50000),
+    ) as test_client:
         yield test_client
 
 
@@ -915,3 +936,44 @@ def test_analytics_summary_endpoint_counts_records(client, auth_headers):
         "no_pa_required": 1,
         "waiting_on_clinicals": 1,
     }
+
+
+def test_sparse_seeded_auths_serialize_with_nullable_database_text(
+    client, auth_headers
+):
+    from authstatus_api.authorizations.records import create_auth
+
+    created = create_auth(
+        {
+            "facility": "Synthetic Facility",
+            "client_name": "Synthetic Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Initial",
+            "status": "Denied",
+            "requested_days": 5,
+            "denied_days": 5,
+            "auth_start_date": "2026-09-01",
+        }
+    )
+    optional_fields = (
+        "insurance",
+        "portal_name",
+        "live_call_type",
+        "scheduled_call_at",
+        "los_requested",
+        "days_approved",
+    )
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM auths WHERE id = ?", (created["id"],)
+        ).fetchone()
+    assert all(row[field] is None for field in optional_fields)
+
+    for url in ("/api/auths", f"/api/auths/{created['id']}"):
+        response = client.get(url, headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        auth = data["auths"][0] if url == "/api/auths" else data
+        assert all(auth[field] == "" for field in optional_fields)
+        assert auth["requested_days"] == 5

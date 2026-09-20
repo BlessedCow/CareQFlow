@@ -97,6 +97,18 @@ def evaluate_denial_pattern(
     decision_count = int(group.get("decision_count") or 0)
     baseline_count = int(baseline.get("decision_count") or 0)
 
+    unclassified_count = int(group.get("unclassified_count") or 0)
+    baseline_unclassified_count = int(baseline.get("unclassified_count") or 0)
+
+    classified_count = max(
+        decision_count - unclassified_count,
+        0,
+    )
+    baseline_classified_count = max(
+        baseline_count - baseline_unclassified_count,
+        0,
+    )
+
     observed_rate = group.get("observed_denial_rate")
     baseline_rate = baseline.get("observed_denial_rate")
 
@@ -116,8 +128,10 @@ def evaluate_denial_pattern(
         baseline_rate,
     )
 
-    group_has_sample = decision_count >= active_thresholds.minimum_sample_size
-    baseline_has_sample = baseline_count >= active_thresholds.minimum_sample_size
+    group_has_sample = classified_count >= active_thresholds.minimum_sample_size
+    baseline_has_sample = (
+        baseline_classified_count >= active_thresholds.minimum_sample_size
+    )
 
     meets_rate_threshold = (
         observed_rate is not None

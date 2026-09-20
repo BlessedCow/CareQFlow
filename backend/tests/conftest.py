@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -21,6 +22,10 @@ def pytest_configure() -> None:
 def isolate_test_settings(monkeypatch, tmp_path):
     from authstatus_api import settings as settings_module
     from authstatus_api.settings import get_settings
+
+    for key in tuple(os.environ):
+        if key.startswith("AUTHSTATUS_"):
+            monkeypatch.delenv(key, raising=False)
 
     monkeypatch.setattr(settings_module, "ROOT_ENV_FILE", tmp_path / ".env")
     monkeypatch.setenv(

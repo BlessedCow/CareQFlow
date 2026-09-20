@@ -137,12 +137,19 @@ def latest_review_event(
     events: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     for event in reversed(events):
-        if (
+        has_authorization_values = (
             event.get("auth_start_date")
             or event.get("auth_end_date")
-            or event.get("review_due_date")
             or int(event.get("requested_days") or 0) > 0
             or int(event.get("approved_days") or 0) > 0
+        )
+        is_follow_up = normalize_event_label(event.get("event_type")) in {
+            "peer review",
+            "appeal",
+            "retro auth",
+        }
+        if has_authorization_values or (
+            event.get("review_due_date") and not is_follow_up
         ):
             return event
 

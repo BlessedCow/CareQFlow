@@ -251,6 +251,40 @@ def test_add_sample_states():
     ]
 
 
+def test_sample_state_uses_classified_decision_count():
+    groups = add_sample_states(
+        [
+            {
+                "decision_count": 20,
+                "unclassified_count": 16,
+                "dimensions": {
+                    "insurance": "Payer A",
+                },
+            },
+            {
+                "decision_count": 20,
+                "unclassified_count": 10,
+                "dimensions": {
+                    "insurance": "Payer B",
+                },
+            },
+            {
+                "decision_count": 25,
+                "unclassified_count": 5,
+                "dimensions": {
+                    "insurance": "Payer C",
+                },
+            },
+        ]
+    )
+
+    assert [group["sample_state"] for group in groups] == [
+        "insufficient",
+        "preliminary",
+        "standard",
+    ]
+
+
 def test_group_decisions_uses_exact_current_loc_day():
     groups = group_decisions(
         [
@@ -424,3 +458,52 @@ def test_follow_up_outcomes_are_classified():
 
     assert partial.partial is True
     assert partial.adverse is True
+
+
+def test_follow_up_decisions_do_not_duplicate_day_totals():
+    summary = summarize_decisions(
+        [
+            _snapshot(
+                outcome="Denied",
+                requested_days=5,
+                approved_days=0,
+                denied_days=5,
+            ),
+            _snapshot(
+                outcome="P2P Overturned",
+                requested_days=5,
+                approved_days=0,
+                denied_days=5,
+            ),
+        ]
+    )
+
+    assert summary["decision_count"] == 2
+    assert summary["approved_count"] == 1
+    assert summary["denied_count"] == 1
+
+    assert summary["requested_days"] == 5
+    assert summary["approved_days"] == 0
+    assert summary["denied_days"] == 5
+
+
+def test_unclassified_decisions_do_not_dilute_observed_rates():
+    summary = summarize_decisions(
+        [
+            _snapshot(
+                outcome="Denied",
+                requested_days=5,
+                denied_days=5,
+            ),
+            _snapshot(
+                outcome="Unknown Outcome",
+            ),
+        ]
+    )
+
+    assert summary["decision_count"] == 2
+    assert summary["unclassified_count"] == 1
+
+    assert summary["observed_denial_rate"] == 1.0
+    assert summary["observed_partial_rate"] == 0.0
+    assert summary["observed_adverse_rate"] == 1.0
