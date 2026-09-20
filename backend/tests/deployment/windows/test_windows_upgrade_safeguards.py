@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 WINDOWS_INSTALLER_WRAPPER = (
     PROJECT_ROOT / "deployment" / "windows" / "installer" / "invoke-install.ps1"
 )
+WINDOWS_BACKUP_RUNNER = PROJECT_ROOT / "deployment" / "windows" / "run-backup.ps1"
 
 
 def _read(path: Path) -> str:
@@ -169,16 +170,10 @@ def test_windows_existing_environment_migrates_legacy_cors_origin():
     migration_block = content.split(
         "$currentCorsOrigins = ConvertTo-Json",
         maxsplit=1,
-    )[1].split(
-        "$migratedEnvironmentLines +=",
-        maxsplit=1,
-    )[0]
+    )[1].split("$migratedEnvironmentLines +=", maxsplit=1,)[0]
 
     assert '["https://carequeue.local"]' in migration_block
-    assert (
-        '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"'
-        in migration_block
-    )
+    assert '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"' in migration_block
 
 
 def test_windows_existing_environment_preserves_custom_cors_origin():
@@ -187,14 +182,9 @@ def test_windows_existing_environment_preserves_custom_cors_origin():
     migration_block = content.split(
         "$currentCorsOrigins = ConvertTo-Json",
         maxsplit=1,
-    )[1].split(
-        "$migratedEnvironmentLines +=",
-        maxsplit=1,
-    )[0]
+    )[1].split("$migratedEnvironmentLines +=", maxsplit=1,)[0]
 
-    legacy_condition_index = migration_block.index(
-        '["https://carequeue.local"]'
-    )
+    legacy_condition_index = migration_block.index('["https://carequeue.local"]')
     replacement_index = migration_block.index(
         '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"'
     )
@@ -456,6 +446,31 @@ def test_windows_backup_task_installer_preserves_custom_task_name():
     assert "if ($TaskName -ne $legacyTaskName)" in content
 
 
+def test_windows_install_registers_encrypted_backup_task():
+    content = _read(WINDOWS_INSTALLER_WRAPPER)
+
+    assert '"install-backup-task.ps1"' in content
+    assert "Installing the CareQFlow encrypted backup task..." in content
+    assert "& powershell.exe" in content
+    assert "backupTaskInstallerExitCode" in content
+    assert "Get-ScheduledTask" in content
+    assert '"CareQFlow Encrypted Backup"' in content
+    assert "encrypted backup task verified successfully." in content
+
+
+def test_windows_upgrade_and_repair_register_encrypted_backup_task():
+    content = _read(WINDOWS_INSTALLER_WRAPPER)
+
+    assert '$Mode -eq "Upgrade"' in content
+    assert '$Mode -eq "Repair"' in content
+    assert "Ensuring the CareQFlow encrypted backup task is installed..." in content
+    assert "& powershell.exe" in content
+    assert "backupTaskInstallerExitCode" in content
+    assert "Get-ScheduledTask" in content
+    assert '"CareQFlow Encrypted Backup"' in content
+    assert "encrypted backup task verified successfully." in content
+
+
 def test_windows_backup_task_remover_uses_careqflow_task_name():
     content = _read(WINDOWS_BACKUP_TASK_REMOVER)
 
@@ -470,6 +485,48 @@ def test_windows_backup_task_remover_cleans_up_legacy_task():
     assert "foreach ($candidateTaskName in $taskNames)" in content
     assert "-TaskName $candidateTaskName" in content
     assert "Unregister-ScheduledTask" in content
+
+
+def test_windows_upgrade_and_repair_ensure_encrypted_backup_task():
+    content = _read(WINDOWS_INSTALLER_WRAPPER)
+
+    backup_message = "Ensuring the CareQFlow encrypted backup task is installed..."
+    backup_index = content.index(backup_message)
+
+    branch_context = content[max(0, backup_index - 1500) : backup_index + 1000]
+
+    assert '$Mode -eq "Upgrade"' in branch_context
+    assert '$Mode -eq "Repair"' in branch_context
+    assert '"install-backup-task.ps1"' in branch_context
+    assert "& powershell.exe" in branch_context
+    assert "-File $installBackupTaskScript" in branch_context
+    assert "backupTaskInstallerExitCode" in branch_context
+    assert "Get-ScheduledTask" in branch_context
+    assert '"CareQFlow Encrypted Backup"' in branch_context
+    assert "encrypted backup task verified successfully." in branch_context
+
+
+def test_windows_backup_runner_prefers_private_embedded_runtime():
+    content = _read(WINDOWS_BACKUP_RUNNER)
+
+    assert '"runtime\\python\\python.exe"' in content
+    assert '".venv\\Scripts\\python.exe"' in content
+
+    private_runtime_index = content.index('"runtime\\python\\python.exe"')
+    legacy_runtime_index = content.index('".venv\\Scripts\\python.exe"')
+
+    assert private_runtime_index < legacy_runtime_index
+
+
+def test_windows_backup_runner_falls_back_to_legacy_virtualenv_runtime():
+    content = _read(WINDOWS_BACKUP_RUNNER)
+
+    assert "$privatePythonExecutable" in content
+    assert "$legacyPythonExecutable" in content
+    assert "Test-Path" in content
+    assert "$pythonExecutable = $privatePythonExecutable" in content
+    assert "$pythonExecutable = $legacyPythonExecutable" in content
+    assert "CareQFlow Python executable was not found at either:" in content
 
 
 def test_windows_installer_supports_rollback_mode():

@@ -3738,6 +3738,10 @@ try {
             $installedDeploymentDirectory `
             "install-caddy-service.ps1"
 
+        $installBackupTaskScript = Join-Path `
+            $installedDeploymentDirectory `
+            "install-backup-task.ps1"
+
         $serviceDirectory = Join-Path `
             $InstallDirectory `
             "Service"
@@ -3756,20 +3760,122 @@ try {
             -ServiceDirectory $serviceDirectory `
             -DataDirectory $DataDirectory `
             -StartService
+        
+        "Installing the CareQFlow encrypted backup task..." |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
+
+        & powershell.exe `
+            -NoProfile `
+            -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File $installBackupTaskScript `
+            -InstallDirectory $InstallDirectory `
+            -BackupDirectory (
+                Join-Path $DataDirectory "Backups"
+            ) `
+            -EnvironmentFile (
+                Join-Path $DataDirectory "Config\carequeue.env"
+            ) `
+            2>&1 |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
+
+        $backupTaskInstallerExitCode = $LASTEXITCODE
+
+        if ($backupTaskInstallerExitCode -ne 0) {
+            throw (
+                "The CareQFlow encrypted backup task installer failed with exit code " +
+                "$backupTaskInstallerExitCode."
+            )
+        }
+
+        $registeredBackupTask = Get-ScheduledTask `
+            -TaskName "CareQFlow Encrypted Backup" `
+            -ErrorAction SilentlyContinue
+
+        if (-not $registeredBackupTask) {
+            throw (
+                "The CareQFlow encrypted backup task installer completed, but the " +
+                "scheduled task was not found afterward."
+            )
+        }
+
+        "CareQFlow encrypted backup task verified successfully." |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
     }
     if (
         $Mode -eq "Upgrade" `
             -or $Mode -eq "Repair"
     ) {
         Write-Output "Ensuring CareQFlow services are running..."
-
+    
         Start-Service `
             -Name "CareQueueApi" `
             -ErrorAction Stop
-
+    
         Start-Service `
             -Name "CareQueueCaddy" `
             -ErrorAction Stop
+    
+        $installedDeploymentDirectory = Join-Path `
+            $InstallDirectory `
+            "deployment\windows"
+    
+        $installBackupTaskScript = Join-Path `
+            $installedDeploymentDirectory `
+            "install-backup-task.ps1"
+    
+        "Ensuring the CareQFlow encrypted backup task is installed..." |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
+
+        & powershell.exe `
+            -NoProfile `
+            -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File $installBackupTaskScript `
+            -InstallDirectory $InstallDirectory `
+            -BackupDirectory (
+                Join-Path $DataDirectory "Backups"
+            ) `
+            -EnvironmentFile (
+                Join-Path $DataDirectory "Config\carequeue.env"
+            ) `
+            2>&1 |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
+
+        $backupTaskInstallerExitCode = $LASTEXITCODE
+
+        if ($backupTaskInstallerExitCode -ne 0) {
+            throw (
+                "The CareQFlow encrypted backup task installer failed with exit code " +
+                "$backupTaskInstallerExitCode."
+            )
+        }
+
+        $registeredBackupTask = Get-ScheduledTask `
+            -TaskName "CareQFlow Encrypted Backup" `
+            -ErrorAction SilentlyContinue
+
+        if (-not $registeredBackupTask) {
+            throw (
+                "The CareQFlow encrypted backup task installer completed, but the " +
+                "scheduled task was not found afterward."
+            )
+        }
+
+        "CareQFlow encrypted backup task verified successfully." |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
     }
 }
 catch {

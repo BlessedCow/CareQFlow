@@ -8,11 +8,38 @@ param(
 $ErrorActionPreference = "Stop"
 
 $backendDirectory = Join-Path $InstallDirectory "backend"
-$pythonExecutable = Join-Path $backendDirectory ".venv\Scripts\python.exe"
-$backupScript = Join-Path $backendDirectory "scripts\create_encrypted_backup.py"
 
-if (-not (Test-Path -LiteralPath $pythonExecutable -PathType Leaf)) {
-    throw "CareQFlow Python executable was not found at: $pythonExecutable"
+$privatePythonExecutable = Join-Path `
+    $InstallDirectory `
+    "runtime\python\python.exe"
+
+$legacyPythonExecutable = Join-Path `
+    $backendDirectory `
+    ".venv\Scripts\python.exe"
+
+$backupScript = Join-Path `
+    $backendDirectory `
+    "scripts\create_encrypted_backup.py"
+
+if (
+    Test-Path `
+        -LiteralPath $privatePythonExecutable `
+        -PathType Leaf
+) {
+    $pythonExecutable = $privatePythonExecutable
+}
+elseif (
+    Test-Path `
+        -LiteralPath $legacyPythonExecutable `
+        -PathType Leaf
+) {
+    $pythonExecutable = $legacyPythonExecutable
+}
+else {
+    throw (
+        "CareQFlow Python executable was not found at either: " +
+        "$privatePythonExecutable or $legacyPythonExecutable"
+    )
 }
 
 if (-not (Test-Path -LiteralPath $backupScript -PathType Leaf)) {
@@ -35,8 +62,8 @@ Get-Content -LiteralPath $EnvironmentFile | ForEach-Object {
 
     if (
         -not $line `
-        -or $line.StartsWith("#") `
-        -or -not $line.Contains("=")
+            -or $line.StartsWith("#") `
+            -or -not $line.Contains("=")
     ) {
         return
     }
