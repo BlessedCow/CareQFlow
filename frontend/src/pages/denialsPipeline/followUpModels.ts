@@ -251,7 +251,7 @@ export function getFollowUpItems(data: AuthRequest[]): FollowUpListItem[] {
     .flatMap((auth) => {
       const items: FollowUpListItem[] = [];
 
-      if (auth.status === "Denied" || auth.denialReasonCategory) {
+      if (auth.status === "Denied") {
         items.push({
           auth,
           type: "Denial",
