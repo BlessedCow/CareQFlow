@@ -8,7 +8,10 @@ from authstatus_api.authorizations.decision_snapshots import (
     get_auth_decision_snapshot,
     list_auth_decision_snapshots,
 )
-from authstatus_api.authorizations.events import create_auth_event
+from authstatus_api.authorizations.events import (
+    create_auth_event,
+    list_auth_events,
+)
 from authstatus_api.authorizations.loc_episodes import create_auth_loc_episode
 from authstatus_api.authorizations.records import create_auth
 from authstatus_api.crypto import generate_encryption_key
@@ -402,6 +405,14 @@ def test_p2p_outcome_creates_automatic_snapshot():
     assert len(p2p_snapshots) == 1
     assert p2p_snapshots[0]["source"] == "automatic"
 
+    events = list_auth_events(auth["id"])
+
+    assert events is not None
+
+    p2p_event = next(event for event in events if event["event_type"] == "Peer Review")
+
+    assert p2p_snapshots[0]["auth_event_id"] == p2p_event["id"]
+
 
 def test_appeal_outcome_creates_automatic_snapshot():
     auth = create_auth(
@@ -439,6 +450,18 @@ def test_appeal_outcome_creates_automatic_snapshot():
         for item in snapshots
     )
 
+    events = list_auth_events(auth["id"])
+
+    assert events is not None
+
+    appeal_event = next(event for event in events if event["event_type"] == "Appeal")
+
+    appeal_snapshot = next(
+        item for item in snapshots if item["outcome"] == "Appeal Upheld"
+    )
+
+    assert appeal_snapshot["auth_event_id"] == appeal_event["id"]
+
 
 def test_retro_partial_outcome_creates_automatic_snapshot():
     auth = create_auth(
@@ -474,6 +497,18 @@ def test_retro_partial_outcome_creates_automatic_snapshot():
         item["outcome"] == "Retro Partially Approved" and item["source"] == "automatic"
         for item in snapshots
     )
+
+    events = list_auth_events(auth["id"])
+
+    assert events is not None
+
+    retro_event = next(event for event in events if event["event_type"] == "Retro Auth")
+
+    retro_snapshot = next(
+        item for item in snapshots if item["outcome"] == "Retro Partially Approved"
+    )
+
+    assert retro_snapshot["auth_event_id"] == retro_event["id"]
 
 
 def test_pending_follow_up_does_not_create_decision_snapshot():

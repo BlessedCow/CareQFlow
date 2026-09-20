@@ -260,6 +260,7 @@ def create_automatic_follow_up_decision_snapshots(
     follow_up_decisions = (
         (
             "P2P",
+            "Peer Review",
             auth_record.get("p2p_outcome"),
             decision_at
             or auth_record.get("p2p_scheduled_at")
@@ -267,11 +268,13 @@ def create_automatic_follow_up_decision_snapshots(
         ),
         (
             "Appeal",
+            "Appeal",
             auth_record.get("appeal_outcome"),
             decision_at or auth_record.get("appeal_deadline"),
         ),
         (
             "Retro",
+            "Retro Auth",
             auth_record.get("retro_outcome"),
             decision_at or auth_record.get("retro_deadline"),
         ),
@@ -279,7 +282,7 @@ def create_automatic_follow_up_decision_snapshots(
 
     created: list[dict[str, Any]] = []
 
-    for prefix, raw_outcome, raw_decision_at in follow_up_decisions:
+    for prefix, event_type, raw_outcome, raw_decision_at in follow_up_decisions:
         outcome = _follow_up_snapshot_outcome(
             prefix,
             raw_outcome,
@@ -296,6 +299,24 @@ def create_automatic_follow_up_decision_snapshots(
         init_db()
 
         with get_conn() as conn:
+            event_row = conn.execute(
+                """
+                SELECT id
+                FROM auth_events
+                WHERE
+                    auth_id = ?
+                    AND event_type = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (
+                    auth_id,
+                    event_type,
+                ),
+            ).fetchone()
+
+            auth_event_id = int(event_row["id"]) if event_row is not None else None
+
             existing = conn.execute(
                 """
                 SELECT id
@@ -320,13 +341,18 @@ def create_automatic_follow_up_decision_snapshots(
                 int(existing["id"]),
             )
         else:
+            snapshot_payload: dict[str, Any] = {
+                "outcome": outcome,
+                "decision_at": decision_at,
+                "source": "automatic",
+            }
+
+            if auth_event_id is not None:
+                snapshot_payload["auth_event_id"] = auth_event_id
+
             snapshot = create_auth_decision_snapshot(
                 auth_id,
-                {
-                    "outcome": outcome,
-                    "decision_at": decision_at,
-                    "source": "automatic",
-                },
+                snapshot_payload,
             )
 
         if snapshot is not None:
