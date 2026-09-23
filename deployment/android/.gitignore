@@ -1,0 +1,11 @@
+# Android Studio / Gradle local files
+.gradle/
+local.properties
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Generated build output
+build/
+*/build/

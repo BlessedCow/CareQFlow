@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">CareQFlow</string>
+    <string name="reload">Reload</string>
+    <string name="retry">Retry</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="server_settings">Server settings</string>
+    <string name="server_settings_description">Enter the HTTPS address of the CareQFlow host. The default is https://careqflow.local/.</string>
+    <string name="server_url_hint">https://careqflow.local/</string>
+    <string name="invalid_server_url">Enter a valid HTTPS CareQFlow server URL.</string>
+    <string name="connection_error_title">Unable to connect to CareQFlow</string>
+    <string name="connection_error_default">Check that the CareQFlow host is running, reachable on this network, and using a trusted HTTPS certificate.</string>
+    <string name="connection_error_detail">Could not reach %1$s. Check that the CareQFlow host is running, reachable on this network, and using a trusted HTTPS certificate.</string>
+    <string name="tls_error_detail">The secure connection could not be verified. CareQFlow did not bypass the certificate error. Install the trusted CareQFlow certificate authority or correct the server certificate before retrying.</string>
+    <string name="blocked_navigation">CareQFlow blocked an unsupported link.</string>
+</resources>
