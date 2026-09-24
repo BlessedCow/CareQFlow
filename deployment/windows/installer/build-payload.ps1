@@ -673,7 +673,7 @@ $payloadMetadata = [ordered]@{
     created_utc    = [DateTime]::UtcNow.ToString("o")
     application    = [ordered]@{
         name            = "CareQueue"
-        backend_version = "0.5.0"
+        backend_version = "0.6.0"
     }
     runtime        = [ordered]@{
         python = $pythonVersion

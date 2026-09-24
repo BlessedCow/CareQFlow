@@ -86,7 +86,7 @@ def is_placeholder_secret(value: str) -> bool:
 
 class Settings(BaseSettings):
     app_name: str = "CareQFlow API"
-    app_version: str = "0.5.0"
+    app_version: str = "0.6.0"
     app_environment: str = Field(
         default="development",
         validation_alias="AUTHSTATUS_APP_ENVIRONMENT",
