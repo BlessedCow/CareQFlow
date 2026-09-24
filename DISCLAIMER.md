@@ -1,6 +1,6 @@
 # Disclaimer
 
-CareQFlow is a local-first workflow application for utilization review and authorization management. It supports authorization tracking, review dates, payer and facility workflows, timeline events, PDF-assisted intake, dashboards, user access controls, audit records, encrypted storage options, backups, and private packaged deployment.
+CareQFlow is a local-first workflow application for utilization review and authorization management. It supports authorization tracking, review dates, payer and facility workflows, timeline events, PDF-assisted intake, dashboards, user access controls, audit records, encrypted storage, backups, and private packaged deployment.
 
 This project is provided as software for administrative workflow support. It is not medical advice, legal advice, billing advice, clinical guidance, compliance guidance, or a substitute for verification with an authorized payer, provider, legal professional, compliance professional, or other responsible organization.
 

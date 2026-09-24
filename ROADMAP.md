@@ -1,6 +1,6 @@
 # Roadmap
 
-CareQFlow is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, controlled upgrades, and failed-upgrade rollback workflows are in place.
+CareQFlow is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, an Android client, controlled upgrades, and failed-upgrade rollback workflows are in place.
 
 The current focus is release hardening, deployment validation, upgrade safety, maintainability, broader testing, and operational maturity.
 
@@ -30,7 +30,7 @@ CareQFlow currently includes:
 - Admin-only governance acceptance
 - Append-only governance attestation history
 - Field-level encryption for selected sensitive values
-- SQLCipher database support
+- Required SQLCipher database encryption
 - Encrypted backups
 - Backup verification and retention controls
 - Staged restore and recovery workflows
@@ -42,6 +42,7 @@ CareQFlow currently includes:
 - Backend and frontend automated tests
 - Packaged Windows installation
 - Packaged Linux release archives
+- Native Android HTTPS client
 - Windows services for the API and HTTPS frontend
 - Linux systemd services for the API, HTTPS frontend, and scheduled backups
 - Private HTTPS through Caddy
@@ -50,6 +51,7 @@ CareQFlow currently includes:
 - Windows scheduled backup support
 - Linux systemd backup scheduling
 - Versioned release tooling for Windows and Linux artifacts
+- Android Gradle build and unit-test tooling
 - Failed-upgrade recovery records and verified pre-upgrade recovery assets
 - Assisted Windows and Linux rollback workflows with post-rollback validation
 - Version-based licensing with historical MIT releases and Business Source License 1.1 beginning with CareQFlow 0.5.0
@@ -155,6 +157,23 @@ The Linux deployment workflow includes:
 
 Linux deployment remains more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
 
+### Android client
+
+CareQFlow now includes a native Android client under `deployment/android/`.
+
+The Android client includes:
+
+- Kotlin/WebView application shell
+- Configurable CareQFlow HTTPS server URL
+- HTTPS-only server validation
+- TLS certificate-error refusal
+- Same-origin WebView navigation restrictions
+- Connection error and retry handling
+- Server settings UI
+- Android unit tests for server URL normalization and origin matching
+
+The Android application is intentionally a client rather than a separate CareQFlow server. Backend logic, SQLCipher storage, audit logging, backups, and authoritative application data remain on the CareQFlow host.
+
 ### Licensing transition
 
 CareQFlow `0.5.0` begins a new source-available licensing phase.
@@ -205,7 +224,7 @@ Recent security work includes:
 - Symlink rejection in sensitive file workflows
 - Centralized validated file reads
 - Field-level encryption
-- SQLCipher support
+- Required SQLCipher database encryption
 - Separately encrypted backups
 - Production log sanitization
 - Tamper-evident audit chaining
@@ -226,7 +245,7 @@ Recent security work includes:
 
 Packaged releases should continue to be validated on clean virtual machines that do not contain the development environment.
 
-The validation matrix should include supported Windows and Linux targets.
+The validation matrix should include supported Windows and Linux targets plus supported Android client environments.
 
 Windows validation should include:
 
@@ -263,6 +282,17 @@ Linux validation should include:
 - File ownership and permission review
 - Certificate trust behavior
 - Health and readiness validation
+
+Android validation should include:
+
+- Debug and release APK build validation
+- Unit tests
+- Install and launch on an Android emulator or equivalent test environment
+- Physical-device validation before release
+- Server settings behavior
+- HTTPS certificate trust behavior
+- Connection failure behavior
+- Same-origin navigation restrictions
 
 Release artifacts should be tested from the exact package intended for publication.
 
@@ -396,6 +426,24 @@ Accessibility review should include:
 Accessibility should be reviewed alongside each major frontend workflow.
 
 ## Later Work
+
+### Secure LAN hosting
+
+A future deployment milestone will allow one CareQFlow host to serve approved clients on the same private network while retaining a single authoritative backend and SQLCipher database.
+
+This work should include:
+
+- Private-network hostname resolution for `careqflow.local`
+- Trusted HTTPS for every approved client device
+- Caddy network binding and firewall rules
+- Loopback-only FastAPI behind Caddy
+- Same-origin frontend/API behavior
+- Authentication, CSRF, session, and audit validation from remote clients
+- Explicit restriction of database access to the CareQFlow host
+- Android client validation against the LAN-hosted instance
+- Documentation for certificate distribution, network exposure, and recovery
+
+The SQLCipher database must remain host-local rather than being placed on a network share.
 
 ### Operational monitoring
 

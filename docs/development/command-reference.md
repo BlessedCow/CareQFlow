@@ -311,7 +311,7 @@ git diff
 
 ## Build the Frontend for Packaging
 
-The packaged Windows and Linux release workflows use the production frontend build.
+The packaged Windows and Linux release workflows use the production frontend build. The Android client is built separately with Gradle and connects to the frontend served by a CareQFlow host.
 
 From the repository root:
 

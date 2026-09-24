@@ -51,6 +51,7 @@ Use it for:
 - Backup and recovery architecture
 - PDF intake architecture
 - Windows and Linux production services
+- Android client architecture
 - Current architectural limitations
 
 ### Security
@@ -200,6 +201,25 @@ Use it for:
 - Current Linux limitations
 
 CareQFlow includes a packaged Linux installation workflow for supported Debian-based systems. Linux deployment remains more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
+
+### Android
+
+See:
+
+```text
+../deployment/android/README.md
+```
+
+Use it for:
+
+- Android client architecture
+- Default CareQFlow server URL
+- HTTPS-only connection behavior
+- Private CA trust requirements
+- Gradle test and build commands
+- Android client scope and limitations
+
+The Android application is a client of a CareQFlow host. It does not run the Python backend or maintain a separate SQLCipher database.
 
 ## Operations
 

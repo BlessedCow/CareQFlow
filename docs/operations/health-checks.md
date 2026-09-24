@@ -431,7 +431,7 @@ Confirm:
 - Static assets load.
 - Requests to `/api` succeed through the same HTTPS origin.
 
-The packaged Linux deployment is designed around the private `careqflow.local` origin. A different hostname or broader network deployment requires separate Caddy, DNS, and certificate planning.
+The packaged Linux deployment is designed around the private `careqflow.local` origin. Android and other remote clients require trusted HTTPS access to the CareQFlow host. A different hostname or broader network deployment requires separate Caddy, DNS, firewall, and certificate planning.
 
 ## Local Development
 

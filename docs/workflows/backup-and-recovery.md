@@ -1,6 +1,6 @@
 # Upgrades, Repair, Rollback, and Uninstall
 
-This guide covers upgrading, repairing, rolling back failed supported upgrades, and uninstalling packaged CareQFlow installations on Windows and Linux.
+This guide covers upgrading, repairing, rolling back failed supported upgrades, and uninstalling packaged CareQFlow host installations on Windows and Linux. Android clients do not own the CareQFlow database or backup set.
 
 CareQFlow separates installed application files from production configuration and runtime data so packaged upgrades and repairs can replace application components without intentionally replacing the active database, encryption keys, backups, or other persistent data.
 

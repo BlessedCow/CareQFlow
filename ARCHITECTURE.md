@@ -1,6 +1,6 @@
 # Architecture
 
-CareQFlow is a local-first utilization review and authorization tracking application. It uses a React and TypeScript frontend, a FastAPI backend, and SQLite or SQLCipher-backed persistence.
+CareQFlow is a local-first utilization review and authorization tracking application. It uses a React and TypeScript frontend, a FastAPI backend, and SQLCipher-backed persistence.
 
 The application is organized around several separate concerns:
 
@@ -13,6 +13,7 @@ The application is organized around several separate concerns:
 - Encrypted storage, backups, and staged recovery
 - Tamper-evident audit records and operational logging
 - Packaged private Windows and Linux deployment through Caddy and operating-system services
+- Native Android client access to a CareQFlow host over HTTPS
 
 CareQFlow is intended for private or controlled deployment. Its technical controls are only one part of operating a system that may handle sensitive healthcare information.
 
@@ -38,7 +39,7 @@ Caddy
       Application services and repositories
           |
           v
-      SQLite or SQLCipher database
+      SQLCipher database
 ```
 
 The browser communicates only with the HTTPS application origin. The FastAPI server remains bound to the loopback interface and is not intended to be exposed directly.
@@ -71,7 +72,8 @@ CareQFlow/
 │   └── src/                # React application
 ├── deployment/
 │   ├── windows/            # Installer, services, Caddy, and scheduled backups
-│   └── linux/              # Release packaging, installer, Caddy, and systemd services
+│   ├── linux/              # Release packaging, installer, Caddy, and systemd services
+│   └── android/            # Native Android client for HTTPS access to a CareQFlow host
 ├── docs/                   # Longer workflow and operating documentation
 ├── README.md
 ├── ARCHITECTURE.md
@@ -321,8 +323,8 @@ backend/authstatus_api/persistence/
 
 It is responsible for:
 
-- Opening SQLite or SQLCipher connections
-- Applying the configured database mode
+- Opening SQLCipher connections
+- Applying the configured SQLCipher key
 - Resolving approved data paths
 - Initializing tables and indexes
 - Coordinating schema migrations
@@ -335,20 +337,13 @@ CareQFlow uses more than one encryption layer.
 
 ### Database encryption
 
-The database can run in either:
-
-```text
-sqlite
-sqlcipher
-```
-
-SQLCipher mode encrypts the database file at rest using the configured SQLCipher key.
+CareQFlow requires SQLCipher for application database storage. The database file is encrypted at rest using the configured SQLCipher key. Plain SQLite is not a supported CareQFlow runtime database mode.
 
 ### Field-level encryption
 
 Selected sensitive authorization fields are encrypted before they are written to the database. This uses a separate field-level encryption key.
 
-Field-level encryption is independent of SQLCipher. A deployment may use both:
+Field-level encryption is independent of SQLCipher. CareQFlow uses both layers:
 
 ```text
 Sensitive field
@@ -871,7 +866,7 @@ The packaged Linux deployment includes:
 
 ```text
 Caddyfile
-CareQueue-AdminSetup.sh
+CareQFlow-AdminSetup.sh
 install-production.sh
 uninstall-production.sh
 installer/build-payload.ps1
@@ -920,6 +915,19 @@ https://careqflow.local
 
 The Linux deployment is intended for administrators comfortable with Linux, systemd, package installation, certificate trust, and operating-system permissions.
 
+## Android Client
+
+Android client files are under:
+
+```text
+deployment/android/
+```
+
+The Android application is a native Kotlin/WebView client. It does not run FastAPI, SQLCipher, Caddy, or a second CareQFlow database on the device. Instead, it connects over HTTPS to an existing CareQFlow host and renders the frontend served by that host.
+
+The client enforces HTTPS, rejects TLS certificate errors, restricts in-app navigation to the configured CareQFlow origin, and allows an administrator or user to configure the approved CareQFlow server URL. When a CareQFlow host uses Caddy's internal certificate authority, the corresponding trusted root certificate must be installed on the approved Android device.
+
+This design keeps the host database, audit trail, backup workflow, authentication boundary, and backend logic centralized while allowing Android devices to participate as clients.
 
 ## Testing Structure
 

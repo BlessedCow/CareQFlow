@@ -287,8 +287,8 @@ Do not create a new folder for every small helper. Prefer practical grouping ove
 Clone the repository:
 
 ```bash
-git clone https://github.com/BlessedCow/CareQueue.git
-cd CareQueue
+git clone https://github.com/BlessedCow/CareQueue.git CareQFlow
+cd CareQFlow
 ```
 
 Use the root README and the local development guide for current setup instructions.
@@ -299,6 +299,7 @@ The development environment and packaged deployment workflows are separate:
 - The packaged Windows installer installs service-managed runtime files under the Windows installation directory and stores persistent operational data under `C:\ProgramData\CareQueue`.
 - The packaged Linux release installs application files under `/opt/carequeue` and keeps configuration, data, and logs under restricted system paths.
 - Windows and Linux build, installation, upgrade, and validation details belong in their respective deployment guides.
+- Android client build, test, and HTTPS connection details belong in `deployment/android/README.md`.
 
 ### Backend
 

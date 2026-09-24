@@ -56,7 +56,7 @@ CareQFlow includes several layers of application security:
 - Versioned organization governance attestation before protected application access
 - Append-only governance attestation history
 - Field-level encryption for selected sensitive values
-- SQLCipher support for encrypted database storage
+- SQLCipher database encryption for database storage
 - Separately encrypted database backups
 - Tamper-evident audit chaining and integrity verification
 - Production log sanitization intended to keep credentials, tokens, and sensitive field values out of logs
@@ -70,12 +70,13 @@ These controls reduce risk, but they do not replace a complete security or compl
 
 CareQFlow uses:
 
-- **Backend:** Python, FastAPI, Pydantic, SQLite, and SQLCipher
+- **Backend:** Python, FastAPI, Pydantic, and SQLCipher
 - **Frontend:** React, TypeScript, Vite, and Tailwind CSS
 - **Authentication:** Secure cookie sessions, CSRF protection, Argon2id, and TOTP MFA
 - **Testing:** Pytest, Vitest, Testing Library, Ruff, Bandit, and dependency audits
 - **Windows deployment:** WinSW services and Caddy for private HTTPS
 - **Linux deployment:** systemd services, Caddy, and versioned release archives
+- **Android client:** Native Kotlin/WebView client for secure HTTPS access to a CareQFlow host
 
 ## Project Layout
 
@@ -91,7 +92,8 @@ CareQFlow/
 │   └── src/                # React application
 ├── deployment/
 │   ├── windows/            # Production installer, services, Caddy, and backup tasks
-│   └── linux/              # Release packaging, installer, Caddy, and systemd services
+│   ├── linux/              # Release packaging, installer, Caddy, and systemd services
+│   └── android/            # Native Android client for secure HTTPS access to a CareQFlow host
 ├── docs/                   # Longer workflow and operating documentation
 ├── ARCHITECTURE.md
 ├── SECURITY.md
@@ -101,13 +103,15 @@ CareQFlow/
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a technical description of how these pieces work together.
 
+The Android deployment is a client application, not a standalone CareQFlow server. It connects to an existing CareQFlow host over HTTPS and does not run the Python backend or maintain a separate SQLCipher database.
+
 ## Local Development
 
 ### Requirements
 
 - Python 3.11 or newer
 - Node.js and npm
-- A SQLCipher-compatible Python package when using SQLCipher mode
+- The SQLCipher Python dependency from `backend/requirements.txt`
 
 PowerShell examples in this README assume Windows development. Packaged production deployment is available for Windows and supported Debian-based Linux systems.
 
@@ -369,13 +373,14 @@ Use synthetic data in tests, screenshots, examples, and public documentation.
 - [LICENSE](LICENSE) contains the authoritative version-based licensing notice.
 - [docs/deployment/windows.md](docs/deployment/windows.md) covers packaged Windows deployment.
 - [docs/deployment/linux.md](docs/deployment/linux.md) covers packaged Linux deployment.
+- [deployment/android/README.md](deployment/android/README.md) covers the Android client.
 - [docs/administration/users-and-security.md](docs/administration/users-and-security.md) covers accounts, MFA, sessions, and governance.
 - [docs/administration/audit-log.md](docs/administration/audit-log.md) covers audit events and integrity verification.
 - [docs/workflows/backup-and-recovery.md](docs/workflows/backup-and-recovery.md) covers backup scheduling, restoration, and recovery.
 
 ## Status
 
-CareQFlow is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage options, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, packaged Windows and Linux deployment, controlled upgrades, and failed-upgrade rollback workflows are implemented.
+CareQFlow is under active development. The core authorization workflow, role-based authentication, TOTP MFA, remembered-device MFA, single-session enforcement, inactivity timeout controls, governance attestation, encrypted storage, encrypted backups, PDF-assisted intake, audit integrity verification, frontend testing, packaged Windows and Linux deployment, the Android client, controlled upgrades, and failed-upgrade rollback workflows are implemented.
 
 Current roadmap priorities include production smoke-test tooling, stronger cross-release migration and recovery validation, broader end-to-end browser testing, accessibility work, release-signing and artifact-trust improvements, and continued operational hardening.
 

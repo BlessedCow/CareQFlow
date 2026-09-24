@@ -353,7 +353,7 @@ Have a clean local copy of the CareQFlow repository.
 Example:
 
 ```text
-G:\CareQueue
+G:\CareQFlow
 ```
 
 Review the working tree before building a release package:
@@ -381,7 +381,7 @@ The payload builder needs a Windows embedded Python ZIP archive.
 Example:
 
 ```text
-G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip
+G:\CareQFlow\local_installer_assets\python-3.14.6-embed-amd64.zip
 ```
 
 This archive is used to create the private packaged runtime under:
@@ -462,7 +462,7 @@ From the repository root:
 
 ```powershell
 .\deployment\windows\installer\build-payload.ps1 `
-    -EmbeddedPythonArchive "G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip"
+    -EmbeddedPythonArchive "G:\CareQFlow\local_installer_assets\python-3.14.6-embed-amd64.zip"
 ```
 
 The default output directory is:
@@ -479,7 +479,7 @@ To force vendor downloads again:
 
 ```powershell
 .\deployment\windows\installer\build-payload.ps1 `
-    -EmbeddedPythonArchive "G:\CareQueue\local_installer_assets\python-3.14.6-embed-amd64.zip" `
+    -EmbeddedPythonArchive "G:\CareQFlow\local_installer_assets\python-3.14.6-embed-amd64.zip" `
     -ForceVendorDownload
 ```
 
@@ -510,7 +510,7 @@ Run the compiled installer:
 If PowerShell requires an explicit invocation path:
 
 ```powershell
-& "G:\CareQueue\build\windows\installer\CareQFlow-Setup-0.5.0.exe"
+& "G:\CareQFlow\build\windows\installer\CareQFlow-Setup-0.5.0.exe"
 ```
 
 The installer requires administrator elevation because it installs services and writes to protected directories.
@@ -1288,7 +1288,7 @@ Before using CareQFlow with sensitive information, confirm:
 - The Caddy root certificate is trusted only on approved systems.
 - The production environment file is restricted.
 - Runtime directories are restricted.
-- SQLCipher mode is enabled.
+- The deployed SQLCipher database has been verified as encrypted.
 - Production encryption keys are backed up securely.
 - Backup keys are stored separately from backups.
 - Encrypted backup procedures are configured and tested.

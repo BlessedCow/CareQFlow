@@ -2,7 +2,7 @@
 
 CareQFlow is a local-first healthcare workflow application intended for private development, testing, and controlled deployment.
 
-It includes authentication, role-based authorization, TOTP multi-factor authentication, remembered-device MFA, single-session enforcement, inactivity-based session controls, CSRF protection, versioned governance attestation, encrypted storage options, encrypted backups, audit logging, log sanitization, isolated PDF extraction, private HTTPS deployment, browser security headers, dependency checks, and backup scheduling support.
+It includes authentication, role-based authorization, TOTP multi-factor authentication, remembered-device MFA, single-session enforcement, inactivity-based session controls, CSRF protection, versioned governance attestation, encrypted storage, encrypted backups, audit logging, log sanitization, isolated PDF extraction, private HTTPS deployment, browser security headers, dependency checks, and backup scheduling support.
 
 Those controls do not make CareQFlow HIPAA compliant by themselves. Any organization using CareQFlow with protected health information remains responsible for its own administrative, physical, technical, contractual, legal, and operational safeguards.
 
@@ -63,7 +63,7 @@ Do not commit, publish, upload, or share:
 - Session or CSRF tokens
 - Authentication cookies
 - Service-account credentials
-- SQLite or SQLCipher database files
+- SQLCipher database files
 - Encrypted backup files
 - Restored database files
 - Real intake PDFs
@@ -161,7 +161,7 @@ CareQFlow currently includes:
 - Append-only governance attestation history
 - Audit logging for governance acceptance
 - Field-level encryption for selected sensitive values
-- Optional SQLCipher database encryption
+- Required SQLCipher database encryption
 - Separately encrypted database backups
 - Backup verification and retention controls
 - Safe database, backup, restore, and recovery path validation
@@ -708,6 +708,23 @@ On Linux, packaged deployment uses the dedicated `carequeue` service account and
 The built-in configurations are for private or restricted-network use. They are not public internet deployment templates.
 
 A public deployment would require separate review of DNS, publicly trusted certificates, firewall rules, service accounts, remote access, monitoring, patching, incident response, and the Caddy/hostname configuration.
+### Android client security
+
+The Android application is a client of an existing CareQFlow host. It does not contain the CareQFlow backend or maintain a separate application database.
+
+The Android client:
+
+- Requires HTTPS server URLs.
+- Disables cleartext HTTP traffic.
+- Cancels WebView TLS certificate errors rather than bypassing them.
+- Restricts in-app navigation to the configured CareQFlow origin.
+- Sends unrelated HTTPS links to an external browser rather than loading them inside the CareQFlow WebView.
+- Does not enable third-party cookies.
+- Does not enable WebView file access or content access.
+- Allows system and explicitly user-installed certificate authorities so approved devices can trust a CareQFlow host using Caddy's internal CA.
+
+Installing a private CareQFlow CA on a client device is a security-sensitive administrative action. Only the intended CareQFlow CA should be trusted, and certificate distribution should occur through an approved process. The Android client must not be modified to ignore certificate errors as a workaround for trust configuration problems.
+
 
 ## Service Accounts and Permissions
 

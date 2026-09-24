@@ -242,7 +242,7 @@ Security assumptions:
 
 ### Installer and service-management boundary
 
-Windows and Linux installers perform privileged operations including directory creation, configuration, service installation, certificate trust changes, upgrade actions, and permission changes.
+Windows and Linux installers perform privileged operations including directory creation, configuration, service installation, certificate trust changes, upgrade actions, and permission changes. The Android client is not a server deployment and does not receive direct database access; it depends on HTTPS trust and the CareQFlow host security boundary.
 
 Security assumptions:
 

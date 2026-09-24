@@ -19,7 +19,7 @@ Their purposes are different:
 
 - `AUTHSTATUS_ENCRYPTION_KEY` is the current field-level encryption key. It protects selected sensitive authorization fields, authorization event notes, stored MFA secrets, and encrypted authorization documents.
 - `AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY` is a temporary field-level key used only during a controlled field-key rotation window so data encrypted with the prior key can still be read and migrated to the new current key.
-- `AUTHSTATUS_SQLCIPHER_KEY` opens the SQLCipher database when production database encryption is enabled.
+- `AUTHSTATUS_SQLCIPHER_KEY` opens the required SQLCipher database.
 - `AUTHSTATUS_BACKUP_ENCRYPTION_KEY` encrypts and decrypts CareQFlow `.db.enc` backup files.
 
 These keys are not interchangeable. Production validation requires configured encryption roles to use different key values.
@@ -132,7 +132,7 @@ Before changing the production configuration:
 
 1. Confirm that a current, verified encrypted backup can be created.
 2. Confirm that the matching backup key is recoverable.
-3. Confirm that the current SQLCipher key is recoverable when SQLCipher is enabled.
+3. Confirm that the current SQLCipher key is recoverable.
 4. Confirm that the existing field key is recoverable.
 5. Generate a new independent Fernet key for the new field key.
 6. Schedule the change during an approved maintenance window.
@@ -260,7 +260,7 @@ If the script reports that field rotation completed successfully but audit recor
 
 ## SQLCipher Key Lifecycle
 
-`AUTHSTATUS_SQLCIPHER_KEY` protects the database file itself when CareQFlow is configured for SQLCipher.
+`AUTHSTATUS_SQLCIPHER_KEY` protects the CareQFlow SQLCipher database file itself.
 
 The SQLCipher key must be available before CareQFlow opens the database. Losing the key can make the active database and any SQLCipher database snapshots unreadable even when other CareQFlow keys are still available.
 

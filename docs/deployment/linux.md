@@ -1259,7 +1259,7 @@ Before using real sensitive data, confirm:
 - The deployment hostname resolves only where intended.
 - The production environment file remains restricted.
 - Production encryption keys are independent and recoverable through an approved key-custody process.
-- SQLCipher mode is enabled and the deployed database has been verified as encrypted.
+- The deployed SQLCipher database has been verified as encrypted.
 - Runtime, backup, recovery, and log directories are not broadly readable.
 - Automatic encrypted backups are enabled.
 - Recent backup files exist and are nonempty.

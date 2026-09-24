@@ -61,8 +61,8 @@ PowerShell examples in this guide assume Windows development. Equivalent tooling
 ## Clone the Repository
 
 ```powershell
-git clone https://github.com/BlessedCow/CareQueue.git
-Set-Location CareQueue
+git clone https://github.com/BlessedCow/CareQueue.git CareQFlow
+Set-Location CareQFlow
 ```
 
 Review the checkout:
@@ -172,7 +172,7 @@ Copy-Item `
 The development `.env` belongs at:
 
 ```text
-CareQueue\.env
+CareQFlow\.env
 ```
 
 It must remain uncommitted.
@@ -212,7 +212,7 @@ Do not reuse one key across protection layers.
 
 ## Recommended Development Configuration
 
-A SQLCipher development configuration resembles:
+The required SQLCipher development configuration resembles:
 
 ```env
 AUTHSTATUS_APP_ENVIRONMENT=development
@@ -739,7 +739,7 @@ Do not delete `package-lock.json` as a first troubleshooting step.
 Confirm:
 
 ```text
-CareQueue\.env
+CareQFlow\.env
 ```
 
 exists at the repository root.

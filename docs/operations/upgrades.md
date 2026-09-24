@@ -72,7 +72,7 @@ A normal uninstall is not secure data destruction.
 CareQFlow tracks three separate version values:
 
 ```text
-CareQFlow application version: 0.3.0
+CareQFlow application version: X.Y.Z
 Governance attestation version: 1
 Governance document revision: governance-attestation-v1
 ```
@@ -204,10 +204,10 @@ Do not package or deploy:
 Use the repository release-version helper to update controlled application and installer version declarations:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.3.0
+.\deployment\bump-version.ps1 -Version "X.Y.Z"
 ```
 
-Replace `0.3.0` with the intended release version.
+Replace `X.Y.Z` with the intended release version.
 
 The version helper intentionally does not rewrite arbitrary matching version strings in tests, dependency versions, documentation examples, or historical governance fixtures.
 
@@ -225,7 +225,7 @@ The packaged Windows installer is the normal Windows upgrade path.
 A versioned release has a filename such as:
 
 ```text
-CareQueue-Setup-0.3.0.exe
+CareQFlow-Setup-X.Y.Z.exe
 ```
 
 The lower-level installer engine is:
@@ -408,10 +408,10 @@ Compile the Inno Setup installer:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQueue `0.3.0`, the resulting artifact is:
+The resulting artifact uses the current CareQFlow version:
 
 ```text
-build\windows\installer\CareQueue-Setup-0.3.0.exe
+build\windows\installer\CareQFlow-Setup-<version>.exe
 ```
 
 Validate the release package:
@@ -425,7 +425,7 @@ Validate the release package:
 Launch the versioned installer:
 
 ```powershell
-.\build\windows\installer\CareQueue-Setup-0.3.0.exe
+.\build\windows\installer\CareQFlow-Setup-<version>.exe
 ```
 
 When an existing installation is detected, select:
@@ -558,7 +558,7 @@ CareQFlow includes a packaged Linux release workflow for supported Debian-based 
 The release archive has a filename such as:
 
 ```text
-CareQueue-Linux-Setup-0.3.0.tar.gz
+CareQFlow-Linux-Setup-X.Y.Z.tar.gz
 ```
 
 The packaged entry point is:
@@ -705,7 +705,7 @@ npm --prefix frontend run build
 Build the Linux release archive:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.3.0
+.\deployment\linux\installer\build-payload.ps1 -Version <version>
 ```
 
 After the repository version has already been bumped, the default version can be used:
@@ -714,10 +714,10 @@ After the repository version has already been bumped, the default version can be
 .\deployment\linux\installer\build-payload.ps1
 ```
 
-For CareQueue `0.3.0`, the resulting artifact is:
+The resulting artifact uses the current CareQFlow version:
 
 ```text
-build\linux\installer\CareQueue-Linux-Setup-0.3.0.tar.gz
+build\linux\installer\CareQFlow-Linux-Setup-<version>.tar.gz
 ```
 
 The build script reports the package path, size, and SHA256 value.
@@ -727,10 +727,10 @@ The build script reports the package path, size, and SHA256 value.
 On the target Linux system:
 
 ```bash
-mkdir carequeue-installer
-tar -xzf CareQueue-Linux-Setup-0.3.0.tar.gz \
-  -C carequeue-installer
-cd carequeue-installer
+mkdir careqflow-installer
+tar -xzf CareQFlow-Linux-Setup-<version>.tar.gz \
+  -C careqflow-installer
+cd careqflow-installer
 ```
 
 Use a newly extracted, reviewed release package for upgrade and repair operations.
