@@ -15,6 +15,8 @@ from authstatus_api.audit.chain import (
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 
+MAX_AUDIT_USER_AGENT_LENGTH = 512
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
@@ -31,7 +33,7 @@ def _user_agent(request: Request | None) -> str:
     if request is None:
         return ""
 
-    return request.headers.get("user-agent", "")
+    return request.headers.get("user-agent", "")[:MAX_AUDIT_USER_AGENT_LENGTH]
 
 
 def _safe_metadata(metadata: dict[str, Any] | None) -> str:

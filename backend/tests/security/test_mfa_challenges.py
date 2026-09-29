@@ -6,9 +6,11 @@ import pytest
 
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.security.mfa_challenges import (
+    MAX_MFA_CHALLENGE_FAILED_ATTEMPTS,
     create_mfa_login_challenge,
     get_active_mfa_login_challenge_by_token,
     hash_mfa_challenge_token,
+    record_failed_mfa_login_attempt,
 )
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
@@ -65,3 +67,37 @@ def test_mfa_challenge_can_be_retrieved_by_raw_token():
     assert challenge["id"] == created["challenge"]["id"]
     assert challenge["token_hash"] == hash_mfa_challenge_token(created["token"])
     assert challenge["token_hash"] != created["token"]
+
+
+def test_failed_mfa_attempts_invalidate_challenge_at_limit():
+    user = create_user(
+        "mfa-challenge@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    created = create_mfa_login_challenge(user["id"])
+    token = created["token"]
+
+    for _ in range(MAX_MFA_CHALLENGE_FAILED_ATTEMPTS - 1):
+        assert record_failed_mfa_login_attempt(token) is True
+        assert get_active_mfa_login_challenge_by_token(token) is not None
+
+    assert record_failed_mfa_login_attempt(token) is True
+    assert get_active_mfa_login_challenge_by_token(token) is None
+
+
+def test_failed_mfa_attempt_cannot_modify_consumed_challenge():
+    user = create_user(
+        "mfa-challenge@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    created = create_mfa_login_challenge(user["id"])
+    token = created["token"]
+
+    for _ in range(MAX_MFA_CHALLENGE_FAILED_ATTEMPTS):
+        assert record_failed_mfa_login_attempt(token) is True
+
+    assert record_failed_mfa_login_attempt(token) is False

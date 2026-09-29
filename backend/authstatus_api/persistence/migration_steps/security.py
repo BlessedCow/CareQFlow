@@ -60,3 +60,16 @@ def add_authentication_and_session_columns(conn: Any) -> None:
     for column_name, definition in session_column_definitions:
         if column_name not in session_columns:
             conn.execute(f"ALTER TABLE sessions ADD COLUMN {column_name} {definition}")
+
+
+def add_mfa_challenge_failed_attempts_column(conn: Any) -> None:
+    columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(mfa_login_challenges)").fetchall()
+    }
+
+    if "failed_attempts" not in columns:
+        conn.execute("""
+            ALTER TABLE mfa_login_challenges
+            ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0
+            """)

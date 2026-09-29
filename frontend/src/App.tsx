@@ -332,6 +332,7 @@ function App() {
     handleStartLocChangeAuthorization,
     handleAuthSaved,
     handleAuthDeleted,
+    clearAuthorizationSelection,
   } = useAuthorizationSelection({
     resetNewAuthForm,
     loadAuthIntoForm,
@@ -449,10 +450,10 @@ function App() {
     setGovernanceStatus(null);
     setGovernanceError(null);
     setAuthRequests([]);
-    clearAuthEvents();
-    handleCancelAuthForm();
+    setSelectedDenialFollowUpAuthId(null);
+    clearAuthorizationSelection();
     setActivePage("dashboard");
-  }, [clearAuthEvents, handleCancelAuthForm]);
+  }, [clearAuthorizationSelection]);
 
   useEffect(() => {
     return subscribeToSessionLogout(() => {
@@ -605,6 +606,8 @@ function App() {
           onAccepted={(attestation) => {
             setGovernanceStatus({
               required_version: governanceStatus.required_version,
+              required_document_revision:
+                governanceStatus.required_document_revision,
               current: true,
               attestation,
             });

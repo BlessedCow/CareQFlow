@@ -53,6 +53,7 @@ def initialize_security_tables(conn: Any) -> None:
             created_at TEXT NOT NULL,
             expires_at TEXT NOT NULL,
             consumed_at TEXT,
+            failed_attempts INTEGER NOT NULL DEFAULT 0,
             ip_address TEXT,
             user_agent TEXT,
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE

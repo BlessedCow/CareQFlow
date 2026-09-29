@@ -225,6 +225,37 @@ def test_encrypt_text_does_not_double_encrypt(monkeypatch):
     assert crypto.encrypt_text(encrypted) == encrypted
 
 
+def test_encrypt_text_does_not_double_encrypt_previous_key_value(monkeypatch):
+    current_key = crypto.generate_encryption_key()
+    previous_key = crypto.generate_encryption_key()
+
+    previous_fernet = Fernet(previous_key.encode("utf-8"))
+    token = previous_fernet.encrypt(b"ABC123").decode("utf-8")
+    encrypted = f"{crypto.ENCRYPTED_TEXT_PREFIX}{token}"
+
+    monkeypatch.setenv("AUTHSTATUS_ENCRYPTION_KEY", current_key)
+    monkeypatch.setenv(
+        "AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
+        previous_key,
+    )
+
+    assert crypto.encrypt_text(encrypted) == encrypted
+    assert crypto.decrypt_text(encrypted) == "ABC123"
+
+
+def test_encrypt_text_encrypts_untrusted_enc_prefix(monkeypatch):
+    key = crypto.generate_encryption_key()
+    monkeypatch.setenv("AUTHSTATUS_ENCRYPTION_KEY", key)
+
+    plaintext = "enc:not-valid-ciphertext"
+
+    encrypted = crypto.encrypt_text(plaintext)
+
+    assert encrypted != plaintext
+    assert encrypted.startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+    assert crypto.decrypt_text(encrypted) == plaintext
+
+
 def test_decrypt_text_returns_plaintext_values(monkeypatch):
     key = crypto.generate_encryption_key()
     monkeypatch.setenv("AUTHSTATUS_ENCRYPTION_KEY", key)

@@ -24,6 +24,7 @@ from authstatus_api.persistence.migration_steps.governance_revision import (
 )
 from authstatus_api.persistence.migration_steps.security import (
     add_authentication_and_session_columns,
+    add_mfa_challenge_failed_attempts_column,
     add_walkthrough_columns,
 )
 
@@ -175,6 +176,10 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         migration_id="0011_authorization_decision_snapshots",
         apply=create_authorization_decision_snapshots_table,
+    ),
+    Migration(
+        migration_id="0012_security_mfa_challenge_failed_attempts",
+        apply=add_mfa_challenge_failed_attempts_column,
     ),
 )
 

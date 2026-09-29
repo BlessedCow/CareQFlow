@@ -101,6 +101,35 @@ def test_create_auth_stores_selected_fields_encrypted():
     assert row["loc"] == "RTC"
 
 
+def test_create_auth_encrypts_literal_enc_prefixed_sensitive_value():
+    payload = make_payload()
+    payload["client_name"] = "enc:not-valid-ciphertext"
+
+    created = create_auth(payload)
+
+    assert created["client_name"] == "enc:not-valid-ciphertext"
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT client_name FROM auths WHERE id = ?",
+            (created["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["client_name"] != "enc:not-valid-ciphertext"
+    assert row["client_name"].startswith(crypto.ENCRYPTED_TEXT_PREFIX)
+
+    fetched = get_auth(created["id"])
+
+    assert fetched is not None
+    assert fetched["client_name"] == "enc:not-valid-ciphertext"
+
+    records = list_auths()
+
+    assert len(records) == 1
+    assert records[0]["client_name"] == "enc:not-valid-ciphertext"
+
+
 def test_list_auths_returns_decrypted_records():
     create_auth(make_payload())
 

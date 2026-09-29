@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState } from "react";
 
-import type { AuthEvent } from '../api/authEvents';
-import type { AuthRequest } from '../types/auth';
-import type { NewAuthFormState } from './useAuthorizationForm';
+import type { AuthEvent } from "../api/authEvents";
+import type { AuthRequest } from "../types/auth";
+import type { NewAuthFormState } from "./useAuthorizationForm";
 
 interface UseAuthorizationSelectionArgs {
   resetNewAuthForm: () => void;
@@ -76,8 +76,13 @@ export function useAuthorizationSelection({
     clearAuthEvents();
   };
 
-  const handleAuthDeleted = (deletedAuthId: string, authEvents: AuthEvent[]) => {
-    setViewingAuth((currentAuth) => (currentAuth?.id === deletedAuthId ? null : currentAuth));
+  const handleAuthDeleted = (
+    deletedAuthId: string,
+    authEvents: AuthEvent[]
+  ) => {
+    setViewingAuth((currentAuth) =>
+      currentAuth?.id === deletedAuthId ? null : currentAuth
+    );
 
     if (editingAuthId === deletedAuthId) {
       setEditingAuthId(null);
@@ -88,6 +93,15 @@ export function useAuthorizationSelection({
     if (authEvents.length > 0) {
       clearAuthEvents();
     }
+  };
+
+  const clearAuthorizationSelection = () => {
+    setShowAddAuthForm(false);
+    setViewingAuth(null);
+    setEditingAuthId(null);
+    resetNewAuthForm();
+    resetTimelineEventForm();
+    clearAuthEvents();
   };
 
   return {
@@ -105,5 +119,6 @@ export function useAuthorizationSelection({
     handleStartLocChangeAuthorization,
     handleAuthSaved,
     handleAuthDeleted,
+    clearAuthorizationSelection
   };
 }

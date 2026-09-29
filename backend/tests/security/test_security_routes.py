@@ -325,9 +325,9 @@ def test_login_temporarily_locks_account_after_repeated_failures(client):
         },
     )
 
-    assert response.status_code == 423
+    assert response.status_code == 401
     assert response.json() == {
-        "detail": "Account is temporarily locked. Try again later.",
+        "detail": "Invalid username or password.",
     }
 
 
@@ -351,7 +351,7 @@ def test_locked_login_writes_audit_event(client):
         },
     )
 
-    assert response.status_code == 423
+    assert response.status_code == 401
 
     with get_conn() as conn:
         row = conn.execute("""
@@ -376,6 +376,82 @@ def test_login_rejects_unknown_user(client):
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid username or password."}
+
+
+def test_locked_and_unknown_accounts_return_same_login_response(client):
+    create_user(
+        "locked@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    for _ in range(5):
+        response = client.post(
+            "/api/security/login",
+            json={
+                "username": "locked@example.com",
+                "password": "wrong password",
+            },
+        )
+
+        assert response.status_code == 401
+
+    locked_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "locked@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    unknown_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "missing@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert locked_response.status_code == unknown_response.status_code == 401
+    assert (
+        locked_response.json()
+        == unknown_response.json()
+        == {
+            "detail": "Invalid username or password.",
+        }
+    )
+
+
+def test_failed_login_bounds_attacker_controlled_audit_fields(client):
+    username = f"{'A' * 400}@example.com"
+    user_agent = "pytest-agent-" + ("X" * 2000)
+
+    response = client.post(
+        "/api/security/login",
+        json={
+            "username": username,
+            "password": "wrong password",
+        },
+        headers={
+            "User-Agent": user_agent,
+        },
+    )
+
+    assert response.status_code == 401
+
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT username, metadata, user_agent
+            FROM audit_events
+            WHERE action = 'security.login_failed'
+            """).fetchone()
+
+    assert row is not None
+    assert len(row["username"]) == 254
+    assert row["username"] == username.lower()[:254]
+    assert row["metadata"] == "{}"
+    assert len(row["user_agent"]) == 512
+    assert row["user_agent"] == user_agent[:512]
 
 
 def test_me_returns_current_user(client):
@@ -823,6 +899,55 @@ def test_failed_mfa_enrollment_attempts_are_audited(client):
         "security.mfa_enrollment_password_failed",
         "security.mfa_enrollment_verification_failed",
     ]
+
+
+def test_mfa_login_challenge_is_invalidated_after_failed_attempt_limit(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+    secret = pyotp.random_base32()
+
+    assert store_user_mfa_secret(user["id"], secret) is True
+    assert enable_user_mfa(user["id"]) is True
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": user["username"],
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+    assert login_response.json()["mfa_required"] is True
+
+    challenge_token = login_response.json()["mfa_challenge_token"]
+
+    for _ in range(5):
+        response = client.post(
+            "/api/security/login/mfa/verify",
+            json={
+                "challenge_token": challenge_token,
+                "code": "000000",
+            },
+        )
+
+        assert response.status_code == 401
+
+    valid_code_response = client.post(
+        "/api/security/login/mfa/verify",
+        json={
+            "challenge_token": challenge_token,
+            "code": pyotp.TOTP(secret).now(),
+        },
+    )
+
+    assert valid_code_response.status_code == 401
+    assert valid_code_response.json() == {
+        "detail": "Invalid or expired MFA challenge.",
+    }
 
 
 def test_login_sets_httponly_session_cookie(client):

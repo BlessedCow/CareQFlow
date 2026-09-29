@@ -75,7 +75,18 @@ def encrypt_text(value: str | None) -> str:
         return ""
 
     if clean_value.startswith(ENCRYPTED_TEXT_PREFIX):
-        return clean_value
+        token = clean_value.removeprefix(ENCRYPTED_TEXT_PREFIX).encode("utf-8")
+        fernets = (get_fernet(), get_previous_fernet())
+
+        for fernet in fernets:
+            if fernet is None:
+                continue
+
+            try:
+                fernet.decrypt(token)
+                return clean_value
+            except InvalidToken:
+                continue
 
     token = get_fernet().encrypt(clean_value.encode("utf-8")).decode("utf-8")
     return f"{ENCRYPTED_TEXT_PREFIX}{token}"

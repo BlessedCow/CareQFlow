@@ -157,6 +157,50 @@ def test_create_auth_endpoint_stores_selected_fields_encrypted(client, auth_head
     assert row["insurance_plan"] == "Gold PPO 250"
 
 
+def test_create_auth_endpoint_accepts_literal_enc_prefixed_sensitive_value(
+    client,
+    auth_headers,
+):
+    payload = make_payload()
+    payload["client_name"] = "enc:not-valid-ciphertext"
+
+    create_response = client.post(
+        "/api/auths",
+        json=payload,
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+    assert create_response.json()["client_name"] == "enc:not-valid-ciphertext"
+
+    with get_conn() as conn:
+        row = conn.execute("SELECT client_name FROM auths WHERE id = 1").fetchone()
+
+    assert row is not None
+    assert row["client_name"] != "enc:not-valid-ciphertext"
+    assert row["client_name"].startswith(ENCRYPTED_TEXT_PREFIX)
+
+    get_response = client.get(
+        "/api/auths/1",
+        headers=auth_headers,
+    )
+
+    assert get_response.status_code == 200
+    assert get_response.json()["client_name"] == "enc:not-valid-ciphertext"
+
+    list_response = client.get(
+        "/api/auths",
+        headers=auth_headers,
+    )
+
+    assert list_response.status_code == 200
+
+    records = list_response.json()["auths"]
+
+    assert len(records) == 1
+    assert records[0]["client_name"] == "enc:not-valid-ciphertext"
+
+
 def test_list_auths_endpoint_returns_decrypted_records(client, auth_headers):
     create_response = client.post(
         "/api/auths", json=make_payload(), headers=auth_headers

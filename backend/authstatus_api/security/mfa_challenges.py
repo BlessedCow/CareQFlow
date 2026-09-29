@@ -18,6 +18,7 @@ from authstatus_api.settings import get_settings
 
 MFA_CHALLENGE_TOKEN_BYTES = 32
 DEFAULT_MFA_CHALLENGE_MINUTES = 5
+MAX_MFA_CHALLENGE_FAILED_ATTEMPTS = 5
 
 _MFA_CHALLENGE_HMAC_INFO = b"carequeue:mfa-challenge-token:v1"
 
@@ -133,10 +134,12 @@ def get_active_mfa_login_challenge_by_token(
             FROM mfa_login_challenges
             WHERE token_hash = ?
               AND consumed_at IS NULL
+              AND failed_attempts < ?
               AND expires_at > ?
             """,
             (
                 token_hash,
+                MAX_MFA_CHALLENGE_FAILED_ATTEMPTS,
                 now,
             ),
         ).fetchone()
@@ -145,6 +148,38 @@ def get_active_mfa_login_challenge_by_token(
         return None
 
     return dict(row)
+
+
+def record_failed_mfa_login_attempt(token: str) -> bool:
+    init_db()
+
+    token_hash = hash_mfa_challenge_token(token)
+    now = format_datetime(utc_now())
+
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE mfa_login_challenges
+            SET
+                failed_attempts = failed_attempts + 1,
+                consumed_at = CASE
+                    WHEN failed_attempts + 1 >= ?
+                    THEN ?
+                    ELSE consumed_at
+                END
+            WHERE token_hash = ?
+              AND consumed_at IS NULL
+              AND expires_at > ?
+            """,
+            (
+                MAX_MFA_CHALLENGE_FAILED_ATTEMPTS,
+                now,
+                token_hash,
+                now,
+            ),
+        )
+
+    return cursor.rowcount > 0
 
 
 def consume_mfa_login_challenge(token: str) -> bool:

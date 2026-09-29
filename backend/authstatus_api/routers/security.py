@@ -38,6 +38,7 @@ from authstatus_api.security.mfa_challenges import (
     consume_mfa_login_challenge,
     create_mfa_login_challenge,
     get_active_mfa_login_challenge_by_token,
+    record_failed_mfa_login_attempt,
 )
 from authstatus_api.security.monitoring import get_security_monitoring_summary
 from authstatus_api.security.password_hashing import verify_password
@@ -121,6 +122,13 @@ def _client_ip(request: Request) -> str:
         return ""
 
     return request.client.host
+
+
+MAX_AUDIT_LOGIN_USERNAME_LENGTH = 254
+
+
+def _audit_login_username(username: str) -> str:
+    return username.strip().lower()[:MAX_AUDIT_LOGIN_USERNAME_LENGTH]
 
 
 def _is_loopback_client(request: Request) -> bool:
@@ -808,26 +816,28 @@ def login(
     try:
         user = authenticate_user(payload.username, payload.password)
     except UserLockedError:
+        audit_username = _audit_login_username(payload.username)
+
         record_audit_event(
             action="security.login_locked",
             resource_type="security",
-            metadata={"username": payload.username.strip().lower()},
             request=request,
-            username=payload.username.strip().lower(),
+            username=audit_username,
         )
 
         raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail="Account is temporarily locked. Try again later.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password.",
         ) from None
 
     if user is None:
+        audit_username = _audit_login_username(payload.username)
+
         record_audit_event(
             action="security.login_failed",
             resource_type="security",
-            metadata={"username": payload.username.strip().lower()},
             request=request,
-            username=payload.username.strip().lower(),
+            username=audit_username,
         )
 
         raise HTTPException(
@@ -999,6 +1009,8 @@ def verify_mfa_login(
     secret = get_user_mfa_secret(user["id"])
 
     if secret is None or not verify_totp_code(secret, payload.code):
+        record_failed_mfa_login_attempt(payload.challenge_token)
+
         record_audit_event(
             action="security.login_mfa_failed",
             resource_type="mfa_login_challenge",
