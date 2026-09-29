@@ -13,6 +13,13 @@ param(
     [ValidatePattern("^https://")]
     [string]$ApplicationOrigin,
 
+    [ValidateSet(
+        "LocalOnly",
+        "SecureLan"
+    )]
+
+    [string]$NetworkMode,
+
     [string]$PayloadDirectory,
 
     [string]$InstallDirectory = "C:\Program Files\CareQueue",
@@ -93,6 +100,111 @@ function Test-Administrator {
     return $currentPrincipal.IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator
     )
+}
+
+function Test-CareQFlowPrivateLanIPv4Address {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Address
+    )
+
+    $parsedAddress = $null
+
+    if (
+        -not [Net.IPAddress]::TryParse(
+            $Address,
+            [ref]$parsedAddress
+        )
+    ) {
+        return $false
+    }
+
+    if (
+        $parsedAddress.AddressFamily -ne
+        [Net.Sockets.AddressFamily]::InterNetwork
+    ) {
+        return $false
+    }
+
+    $bytes = $parsedAddress.GetAddressBytes()
+
+    if ($bytes[0] -eq 10) {
+        return $true
+    }
+
+    if (
+        $bytes[0] -eq 172 `
+            -and $bytes[1] -ge 16 `
+            -and $bytes[1] -le 31
+    ) {
+        return $true
+    }
+
+    if (
+        $bytes[0] -eq 192 `
+            -and $bytes[1] -eq 168
+    ) {
+        return $true
+    }
+
+    return $false
+}
+
+
+function Assert-CareQFlowNetworkOrigin {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            "LocalOnly",
+            "SecureLan"
+        )]
+        [string]$NetworkMode,
+
+        [Parameter(Mandatory)]
+        [string]$ApplicationOrigin
+    )
+
+    if ($NetworkMode -ne "SecureLan") {
+        return
+    }
+
+    try {
+        $applicationUri = [Uri]$ApplicationOrigin
+    }
+    catch {
+        throw (
+            "Secure LAN application origin is not a valid URI: " +
+            $ApplicationOrigin
+        )
+    }
+
+    if (
+        -not $applicationUri.IsAbsoluteUri `
+            -or $applicationUri.Scheme -ne "https" `
+            -or -not $applicationUri.Host `
+            -or $applicationUri.UserInfo `
+            -or $applicationUri.AbsolutePath -ne "/" `
+            -or $applicationUri.Query `
+            -or $applicationUri.Fragment `
+            -or $applicationUri.Port -ne 443
+    ) {
+        throw (
+            "Secure LAN requires an HTTPS origin using the " +
+            "default HTTPS port with no path, query, or fragment."
+        )
+    }
+
+    if (
+        -not (
+            Test-CareQFlowPrivateLanIPv4Address `
+                -Address $applicationUri.Host
+        )
+    ) {
+        throw (
+            "Secure LAN requires a private IPv4 address in " +
+            "10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16."
+        )
+    }
 }
 
 function Set-CareQueueLocalHostname {
@@ -374,6 +486,64 @@ function Get-CareQueueInstalledVersion {
     }
 
     return $version
+}
+
+
+function Get-CareQueueInstalledNetworkMode {
+    param(
+        [Parameter(Mandatory)]
+        [string]$InstallStatePath
+    )
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $InstallStatePath `
+                -PathType Leaf
+        )
+    ) {
+        return "LocalOnly"
+    }
+
+    try {
+        $installState = Get-Content `
+            -LiteralPath $InstallStatePath `
+            -Raw `
+            -ErrorAction Stop |
+        ConvertFrom-Json `
+            -ErrorAction Stop
+    }
+    catch {
+        throw (
+            "The CareQFlow installation state could not be read: " +
+            $_.Exception.Message
+        )
+    }
+
+    if (
+        $null -eq $installState.network_mode `
+            -or [string]::IsNullOrWhiteSpace(
+            [string]$installState.network_mode
+        )
+    ) {
+        return "LocalOnly"
+    }
+
+    $installedNetworkMode = [string]$installState.network_mode
+
+    if (
+        $installedNetworkMode -notin @(
+            "LocalOnly",
+            "SecureLan"
+        )
+    ) {
+        throw (
+            "The installed CareQFlow network mode is invalid: " +
+            $installedNetworkMode
+        )
+    }
+
+    return $installedNetworkMode
 }
 
 function Assert-CareQueueUpgradeVersion {
@@ -2940,6 +3110,22 @@ catch {
 $careQueueIsInstalled = Test-CareQueueInstallation `
     -InstallDirectory $InstallDirectory
 
+$resolvedNetworkMode = $NetworkMode
+
+if ([string]::IsNullOrWhiteSpace($resolvedNetworkMode)) {
+    if ($careQueueIsInstalled) {
+        $resolvedNetworkMode = Get-CareQueueInstalledNetworkMode `
+            -InstallStatePath $installStatePath
+    }
+    else {
+        $resolvedNetworkMode = "LocalOnly"
+    }
+}
+
+Assert-CareQFlowNetworkOrigin `
+    -NetworkMode $resolvedNetworkMode `
+    -ApplicationOrigin $ApplicationOrigin
+
 $modeValidationMessage = $null
 
 switch ($Mode) {
@@ -3664,6 +3850,8 @@ $installerArguments = @(
     $productionInstallerPath,
     "-ApplicationOrigin",
     $ApplicationOrigin,
+    "-NetworkMode",
+    $resolvedNetworkMode,
     "-SourceDirectory",
     $PayloadDirectory,
     "-InstallDirectory",
@@ -3702,6 +3890,7 @@ $logHeader = @(
     "Install directory: $InstallDirectory"
     "Data directory: $DataDirectory"
     "Application origin: $ApplicationOrigin"
+    "Network mode: $resolvedNetworkMode"
     ""
 )
 
@@ -3773,11 +3962,11 @@ try {
             -File $installBackupTaskScript `
             -InstallDirectory $InstallDirectory `
             -BackupDirectory (
-                Join-Path $DataDirectory "Backups"
-            ) `
+            Join-Path $DataDirectory "Backups"
+        ) `
             -EnvironmentFile (
-                Join-Path $DataDirectory "Config\carequeue.env"
-            ) `
+            Join-Path $DataDirectory "Config\carequeue.env"
+        ) `
             2>&1 |
         Tee-Object `
             -FilePath $logPath `
@@ -3842,11 +4031,11 @@ try {
             -File $installBackupTaskScript `
             -InstallDirectory $InstallDirectory `
             -BackupDirectory (
-                Join-Path $DataDirectory "Backups"
-            ) `
+            Join-Path $DataDirectory "Backups"
+        ) `
             -EnvironmentFile (
-                Join-Path $DataDirectory "Config\carequeue.env"
-            ) `
+            Join-Path $DataDirectory "Config\carequeue.env"
+        ) `
             2>&1 |
         Tee-Object `
             -FilePath $logPath `

@@ -1,5 +1,5 @@
 #define MyAppName "CareQFlow"
-#define MyAppVersion "0.6.0"
+#define MyAppVersion "0.7.0"
 #define MyAppPublisher "CareQFlow"
 #define MyAppURL "https://github.com/BlessedCow/CareQueue"
 #define MyAppExeName "CareQFlow-Setup.exe"
@@ -65,12 +65,17 @@ const
   CareQueueApplicationOrigin = 'https://careqflow.local';
   CareQueueInstallDirectory = 'C:\Program Files\CareQueue';
   CareQueueDataDirectory = 'C:\ProgramData\CareQueue';
+  CareQueueInstallStatePath =
+    'C:\ProgramData\CareQueue\Config\install-state.json';
   CareQueueUpgradeRecoveryDirectory =
     'C:\ProgramData\CareQueue\Recovery\Upgrades';
 var
   OperationModePage: TInputOptionWizardPage;
+  NetworkModePage: TInputOptionWizardPage;
   SelectedOperationMode: String;
+  SelectedNetworkMode: String;
   RollbackOperationAvailable: Boolean;
+  LanAddressPage: TInputQueryWizardPage;
 
 function CareQueueIsInstalled(): Boolean;
 begin
@@ -91,6 +96,156 @@ begin
       AddBackslash(CareQueueInstallDirectory) +
       'vendor\caddy\caddy.exe'
     );
+end;
+
+function GetInstalledNetworkMode(): String;
+var
+  InstallStateContent: AnsiString;
+  StateText: String;
+begin
+  Result := 'LocalOnly';
+
+  if not FileExists(CareQueueInstallStatePath) then
+    exit;
+
+  if not LoadStringFromFile(
+    CareQueueInstallStatePath,
+    InstallStateContent
+  ) then
+    exit;
+
+  StateText := String(InstallStateContent);
+
+  if (
+    Pos(
+      '"network_mode": "SecureLan"',
+      StateText
+    ) > 0
+  ) or (
+    Pos(
+      '"network_mode":"SecureLan"',
+      StateText
+    ) > 0
+  ) then
+    Result := 'SecureLan';
+end;
+
+function ExtractJsonStringValue(
+  const JsonText: String;
+  const Key: String
+): String;
+var
+  KeyMarker: String;
+  RemainingText: String;
+  ValueText: String;
+  KeyPosition: Integer;
+  ColonPosition: Integer;
+  FirstQuotePosition: Integer;
+  SecondQuotePosition: Integer;
+begin
+  Result := '';
+  KeyMarker := '"' + Key + '"';
+  KeyPosition := Pos(KeyMarker, JsonText);
+
+  if KeyPosition = 0 then
+    exit;
+
+  RemainingText :=
+    Copy(
+      JsonText,
+      KeyPosition + Length(KeyMarker),
+      Length(JsonText)
+    );
+
+  ColonPosition := Pos(':', RemainingText);
+
+  if ColonPosition = 0 then
+    exit;
+
+  ValueText :=
+    Copy(
+      RemainingText,
+      ColonPosition + 1,
+      Length(RemainingText)
+    );
+
+  FirstQuotePosition := Pos('"', ValueText);
+
+  if FirstQuotePosition = 0 then
+    exit;
+
+  ValueText :=
+    Copy(
+      ValueText,
+      FirstQuotePosition + 1,
+      Length(ValueText)
+    );
+
+  SecondQuotePosition := Pos('"', ValueText);
+
+  if SecondQuotePosition = 0 then
+    exit;
+
+  Result :=
+    Copy(
+      ValueText,
+      1,
+      SecondQuotePosition - 1
+    );
+end;
+
+function GetInstalledApplicationOrigin(): String;
+var
+  InstallStateContent: AnsiString;
+  InstalledOrigin: String;
+begin
+  Result := CareQueueApplicationOrigin;
+
+  if not FileExists(CareQueueInstallStatePath) then
+    exit;
+
+  if not LoadStringFromFile(
+    CareQueueInstallStatePath,
+    InstallStateContent
+  ) then
+    exit;
+
+  InstalledOrigin :=
+    ExtractJsonStringValue(
+      String(InstallStateContent),
+      'application_origin'
+    );
+
+  if InstalledOrigin <> '' then
+    Result := InstalledOrigin;
+end;
+
+function GetInstalledLanAddress(): String;
+var
+  InstalledOrigin: String;
+begin
+  Result := '';
+  InstalledOrigin := GetInstalledApplicationOrigin();
+
+  if Pos('https://', InstalledOrigin) <> 1 then
+    exit;
+
+  Result :=
+    Copy(
+      InstalledOrigin,
+      Length('https://') + 1,
+      Length(InstalledOrigin)
+    );
+
+  while (
+    Length(Result) > 0
+  ) and (
+    Result[Length(Result)] = '/'
+  ) do
+    Delete(Result, Length(Result), 1);
+
+  if Pos('/', Result) > 0 then
+    Result := '';
 end;
 
 function CareQueueHasFailedUpgradeRecovery(): Boolean;
@@ -149,6 +304,68 @@ begin
     Result := 'Upgrade'
   else
     Result := 'Install';
+end;
+
+function GetNetworkMode(): String;
+begin
+  if SelectedNetworkMode <> '' then
+  begin
+    Result := SelectedNetworkMode;
+    exit;
+  end;
+
+  if CareQueueIsInstalled() then
+    Result := GetInstalledNetworkMode()
+  else
+    Result := 'LocalOnly';
+end;
+
+
+function GetApplicationOrigin(): String;
+var
+  LanAddress: String;
+begin
+  if GetNetworkMode() <> 'SecureLan' then
+  begin
+    Result := CareQueueApplicationOrigin;
+    exit;
+  end;
+
+  LanAddress := '';
+
+  if LanAddressPage <> nil then
+    LanAddress := Trim(LanAddressPage.Values[0]);
+
+  if LanAddress <> '' then
+  begin
+    Result :=
+      'https://' +
+      LanAddress;
+    exit;
+  end;
+
+  if CareQueueIsInstalled() then
+  begin
+    Result := GetInstalledApplicationOrigin();
+    exit;
+  end;
+
+  Result := CareQueueApplicationOrigin;
+end;
+
+
+procedure SetSelectedNetworkMode();
+begin
+  if NetworkModePage = nil then
+  begin
+    SelectedNetworkMode := GetNetworkMode();
+    exit;
+  end;
+
+  if NetworkModePage.Values[1] then
+    SelectedNetworkMode := 'SecureLan'
+  else
+    SelectedNetworkMode := 'LocalOnly';
 end;
 
 function QuoteArgument(const Value: String): String;
@@ -256,7 +473,7 @@ begin
     NewLine +
     'CareQFlow will be installed as Windows services and made available at:' +
     NewLine +
-    CareQueueApplicationOrigin;
+    GetApplicationOrigin();
 end;
 
 procedure SetSelectedOperationMode();
@@ -299,7 +516,7 @@ begin
     ' -Mode ' +
     OperationMode +
     ' -ApplicationOrigin ' +
-    QuoteArgument(CareQueueApplicationOrigin) +
+    QuoteArgument(GetApplicationOrigin()) +
     ' -PayloadDirectory ' +
     QuoteArgument(
       ExpandConstant('{tmp}\CareQueuePayload')
@@ -308,6 +525,17 @@ begin
     QuoteArgument(CareQueueInstallDirectory) +
     ' -DataDirectory ' +
     QuoteArgument(CareQueueDataDirectory);
+      if (
+        OperationMode <> 'Uninstall'
+      ) and (
+        OperationMode <> 'Rollback'
+      ) then
+      begin
+        Result :=
+          Result +
+          ' -NetworkMode ' +
+          QuoteArgument(GetNetworkMode());
+      end;
 end;
 
 procedure RunCareQueueInstaller();
@@ -373,7 +601,73 @@ begin
 
   if (OperationModePage <> nil) and
      (CurPageID = OperationModePage.ID) then
+  begin
     SetSelectedOperationMode();
+    exit;
+  end;
+
+  if (NetworkModePage <> nil) and
+     (CurPageID = NetworkModePage.ID) then
+  begin
+    SetSelectedNetworkMode();
+
+    if SelectedNetworkMode = 'SecureLan' then
+    begin
+      Result :=
+        MsgBox(
+          'Secure LAN access allows devices on the same ' +
+          'Windows Private network and local subnet to reach ' +
+          'CareQFlow over HTTPS.' +
+          Chr(13) + Chr(10) +
+          Chr(13) + Chr(10) +
+          'CareQFlow will not be opened on Public Windows ' +
+          'networks, and the backend API remains bound to ' +
+          'localhost.' +
+          Chr(13) + Chr(10) +
+          Chr(13) + Chr(10) +
+          'Do not use router port forwarding to expose ' +
+          'CareQFlow directly to the public internet.' +
+          Chr(13) + Chr(10) +
+          Chr(13) + Chr(10) +
+          'Enable Secure LAN access?',
+          mbConfirmation,
+          MB_YESNO
+        ) = IDYES;
+    end;
+  end;
+
+  if (LanAddressPage <> nil) and
+     (CurPageID = LanAddressPage.ID) then
+  begin
+    if Trim(LanAddressPage.Values[0]) = '' then
+    begin
+      MsgBox(
+        'Enter the private IPv4 address assigned to this ' +
+        'CareQFlow host.',
+        mbError,
+        MB_OK
+      );
+
+      Result := False;
+      exit;
+    end;
+
+    if Pos(
+      '://',
+      LanAddressPage.Values[0]
+    ) > 0 then
+    begin
+      MsgBox(
+        'Enter only the IPv4 address, such as 192.168.1.50. ' +
+        'Do not include https:// or a port.',
+        mbError,
+        MB_OK
+      );
+
+      Result := False;
+      exit;
+    end;
+  end;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -430,6 +724,33 @@ begin
   Result := False;
   OperationMode := GetOperationMode();
 
+  if (
+    NetworkModePage <> nil
+  ) and (
+    PageID = NetworkModePage.ID
+  ) then
+  begin
+    Result :=
+      (OperationMode = 'Rollback') or
+      (OperationMode = 'Uninstall');
+
+    exit;
+  end;
+
+  if (
+    LanAddressPage <> nil
+  ) and (
+    PageID = LanAddressPage.ID
+  ) then
+  begin
+    Result :=
+      (OperationMode = 'Rollback') or
+      (OperationMode = 'Uninstall') or
+      (GetNetworkMode() <> 'SecureLan');
+
+    exit;
+  end;
+
   if PageID = wpSelectDir then
     Result := True
   else if PageID = wpSelectProgramGroup then
@@ -444,8 +765,11 @@ begin
 end;
 
 procedure InitializeWizard();
+var
+  NetworkModeAfterPageId: Integer;
 begin
   SelectedOperationMode := '';
+  SelectedNetworkMode := '';
   RollbackOperationAvailable :=
     CareQueueHasFailedUpgradeRecovery();
 
@@ -492,6 +816,7 @@ begin
     );
 
     OperationModePage.Values[0] := True;
+    NetworkModeAfterPageId := OperationModePage.ID;
   end
   else
   begin
@@ -499,9 +824,60 @@ begin
       'This setup will install CareQFlow.' +
       Chr(13) + Chr(10) +
       Chr(13) + Chr(10) +
-      'CareQFlow will be installed as two Windows services and ' +
-      'will be available at:' +
+      'CareQFlow will be installed as two Windows services.' +
       Chr(13) + Chr(10) +
-      'https://careqflow.local';
+      'You can keep access local to this computer or enable ' +
+      'Secure LAN access for trusted devices.';
+
+    NetworkModeAfterPageId := wpWelcome;
   end;
+
+  NetworkModePage :=
+    CreateInputOptionPage(
+      NetworkModeAfterPageId,
+      'Choose CareQFlow network access',
+      'Select which devices can reach this CareQFlow installation.',
+      'Local only is the safest default. Secure LAN should only ' +
+      'be enabled on a trusted Windows Private network.',
+      True,
+      False
+    );
+
+  NetworkModePage.Add(
+    'Local only - use CareQFlow on this computer'
+  );
+
+  NetworkModePage.Add(
+    'Secure LAN - allow devices on the local private network'
+  );
+
+  if (
+    CareQueueIsInstalled()
+  ) and (
+    GetInstalledNetworkMode() = 'SecureLan'
+  ) then
+    NetworkModePage.Values[1] := True
+  else
+    NetworkModePage.Values[0] := True;
+
+  LanAddressPage :=
+    CreateInputQueryPage(
+      NetworkModePage.ID,
+      'Configure Secure LAN address',
+      'Enter the private IPv4 address of this CareQFlow host.',
+      'Use a stable private address assigned to this computer. ' +
+      'A DHCP reservation or static address is recommended.'
+    );
+
+  LanAddressPage.Add(
+    'Private IPv4 address:',
+    False
+  );
+
+  if (
+    CareQueueIsInstalled()
+  ) and (
+    GetInstalledNetworkMode() = 'SecureLan'
+  ) then
+    LanAddressPage.Values[0] := GetInstalledLanAddress();
 end;

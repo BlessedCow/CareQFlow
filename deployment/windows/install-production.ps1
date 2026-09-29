@@ -24,6 +24,13 @@ param(
 
     [string]$VendorAssetDirectory,
 
+    [ValidateSet(
+        "LocalOnly",
+        "SecureLan"
+    )]
+
+    [string]$NetworkMode = "LocalOnly",
+
     [switch]$Force,
 
     [switch]$SkipPermissionHardening
@@ -253,7 +260,8 @@ $requiredSourcePaths = @(
     "deployment\windows\CareQueueApi.xml",
     "deployment\windows\Caddyfile",
     "deployment\windows\install-api-service.ps1",
-    "deployment\windows\remove-api-service.ps1"
+    "deployment\windows\remove-api-service.ps1",
+    "deployment\windows\networking\Set-CareQFlowNetworkAccess.ps1"
 )
 
 foreach ($relativePath in $requiredSourcePaths) {
@@ -1181,6 +1189,10 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         $installedVendorDirectory `
         "caddy"
 
+    $installedCaddyExecutable = Join-Path `
+        $installedCaddyDirectory `
+        "caddy.exe"
+
     $installedServiceDirectory = Join-Path `
         $InstallDirectory `
         "Service"
@@ -1310,10 +1322,6 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
 
     if ($resolvedVendorAssetDirectory) {
         Write-Host "Validating the installed vendor binaries..."
-
-        $installedCaddyExecutable = Join-Path `
-            $installedCaddyDirectory `
-            "caddy.exe"
 
         $installedApiServiceExecutable = Join-Path `
             $installedServiceDirectory `
@@ -1571,6 +1579,40 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         Pop-Location
     }
 
+    $networkAccessScript = Join-Path `
+        $installedDeploymentDirectory `
+        "windows\networking\Set-CareQFlowNetworkAccess.ps1"
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $networkAccessScript `
+                -PathType Leaf
+        )
+    ) {
+        throw (
+            "The installed CareQFlow network access script was not found: " +
+            $networkAccessScript
+        )
+    }
+
+    Write-Host "Configuring CareQFlow network access: $NetworkMode..."
+
+    & powershell.exe `
+        -NoProfile `
+        -NonInteractive `
+        -ExecutionPolicy Bypass `
+        -File $networkAccessScript `
+        -NetworkMode $NetworkMode `
+        -CaddyExecutable $installedCaddyExecutable
+
+    if ($LASTEXITCODE -ne 0) {
+        throw (
+            "CareQFlow network access configuration failed. " +
+            "Exit code: $LASTEXITCODE"
+        )
+    }
+
     Write-Host "Writing CareQFlow installation state..."
 
     $installationState = [ordered]@{
@@ -1578,6 +1620,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         installed_version  = $ReleaseVersion
         package_platform   = "windows"
         application_origin = $normalizedApplicationOrigin
+        network_mode       = $NetworkMode
         install_directory  = $InstallDirectory
         data_directory     = $DataDirectory
     }
