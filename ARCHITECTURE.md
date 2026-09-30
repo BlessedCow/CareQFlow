@@ -842,7 +842,7 @@ Uninstall removes Windows services and installed application files while preserv
 
 ### Private HTTPS and Secure LAN
 
-Windows deployment supports two network modes: `LocalOnly` and `SecureLan`.
+Packaged Windows and Linux deployment support two network modes: `LocalOnly` and `SecureLan`.
 
 Local-only installations use:
 
@@ -852,11 +852,11 @@ https://careqflow.local
 
 with the hostname mapped to loopback on the CareQFlow host.
 
-Secure LAN installations retain `https://careqflow.local` while also exposing Caddy on an administrator-selected RFC1918 IPv4 HTTPS origin for approved clients on the same Windows Private network and local subnet. FastAPI remains bound to `127.0.0.1:8000`, and the SQLCipher database remains host-local.
+Secure LAN installations retain `https://careqflow.local` while also exposing Caddy on an administrator-selected RFC1918 IPv4 HTTPS origin for approved clients on the same trusted private network. FastAPI remains bound to `127.0.0.1:8000`, and the SQLCipher database remains host-local.
 
-The Secure LAN firewall rule permits inbound TCP 443 only on the Windows Private profile from `LocalSubnet`. The backend API port is not opened directly to the network.
+On Windows, the Secure LAN firewall rule permits inbound TCP 443 only on the Windows Private profile from `LocalSubnet`. On Linux, CareQFlow requires an active UFW or firewalld firewall and installs a managed TCP 443 allow rule scoped to the selected local subnet. Neither platform opens the backend API port directly to the network.
 
-Secure LAN client onboarding exports the public Caddy root certificate, certificate fingerprint information, and a Windows trust-installation script. The client installer can also map `careqflow.local` to the administrator-selected server address, so enrolled Windows clients can use the friendly hostname without maintaining a second CareQFlow backend or database.
+Secure LAN client onboarding exports the public Caddy root certificate and certificate fingerprint information. Windows and Linux include platform-specific trust-installation scripts that can also map `careqflow.local` to the administrator-selected server address, so enrolled clients can use the friendly hostname without maintaining a second CareQFlow backend or database.
 
 The Caddy root certificate must be trusted only on approved client systems or managed through an appropriate organizational certificate process. A stable private server address, such as one maintained with a DHCP reservation or appropriately managed static configuration, is recommended.
 
@@ -879,6 +879,9 @@ install-production.sh
 uninstall-production.sh
 installer/build-payload.ps1
 installer/invoke-install.sh
+networking/Export-CareQFlowClientTrust.sh
+networking/Install-CareQFlowClientTrust.sh
+networking/Set-CareQFlowNetworkAccess.sh
 systemd/carequeue-api.service
 systemd/carequeue-backup.service
 systemd/carequeue-backup.timer
@@ -901,7 +904,7 @@ The installer supports:
 
 The production layout separates application files from configuration, data, logs, and recovery assets.
 
-The CareQFlow installer creates a dedicated `carequeue` service identity, installs the backend runtime and prebuilt frontend, preserves existing production configuration during Upgrade or Repair, installs systemd units, configures Caddy, enables encrypted backup scheduling, establishes private HTTPS trust, starts the services, and performs post-install health checks.
+The CareQFlow installer creates a dedicated `carequeue` service identity, installs the backend runtime and prebuilt frontend, preserves existing production configuration during Upgrade or Repair, installs systemd units, configures Caddy, applies Local Only or Secure LAN network access, enables encrypted backup scheduling, establishes private HTTPS trust, starts the services, and performs post-install health checks.
 
 Upgrade preserves a verified pre-upgrade encrypted database backup, a checksummed archive of the previous application, version metadata, and a durable recovery record before application replacement.
 
@@ -920,6 +923,8 @@ The default packaged private origin is:
 ```text
 https://careqflow.local
 ```
+
+Secure LAN adds an administrator-selected RFC1918 IPv4 HTTPS origin, keeps FastAPI loopback-only, manages a subnet-scoped TCP 443 UFW or firewalld rule, and generates a Linux client trust package with independent SHA-256 fingerprint verification. A stable private server address is recommended for long-lived deployments.
 
 The Linux deployment is intended for administrators comfortable with Linux, systemd, package installation, certificate trust, and operating-system permissions.
 

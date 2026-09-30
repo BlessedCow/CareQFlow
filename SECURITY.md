@@ -682,15 +682,15 @@ Caddy serves the built frontend and proxies `/api` through HTTPS.
 
 The Caddy configuration also applies browser security headers, including Content Security Policy, frame denial, content-type sniffing protection, referrer policy, permissions policy, and HSTS.
 
-The packaged private deployment uses Caddy's internal certificate authority. Windows installations may run in local-only mode or Secure LAN mode.
+The packaged private deployment uses Caddy's internal certificate authority. Packaged Windows and Linux installations may run in local-only mode or Secure LAN mode.
 
-Local-only Windows installations use:
+Local-only installations use:
 
 ```text
 https://careqflow.local
 ```
 
-Secure LAN installations retain that friendly hostname and also use an administrator-selected private IPv4 HTTPS origin for approved clients on the same Windows Private network and local subnet. The selected address is deployment-specific and is not hardcoded.
+Secure LAN installations retain that friendly hostname and also use an administrator-selected RFC1918 IPv4 HTTPS origin for approved clients on the same trusted private network. The selected address is deployment-specific and is not hardcoded.
 
 Security assumptions for this deployment include:
 
@@ -703,13 +703,16 @@ Security assumptions for this deployment include:
 - Services run under approved restricted accounts.
 - Firewall and network policy prevent unintended exposure.
 - Windows Secure LAN access is limited to inbound TCP 443 on the Private profile from `LocalSubnet`.
+- Linux Secure LAN requires an active UFW or firewalld firewall and installs a TCP 443 rule scoped to the selected local subnet.
+- CareQFlow does not automatically enable a disabled Linux firewall because doing so could disrupt unrelated administrative services.
 - FastAPI remains loopback-only and TCP 8000 is not opened to LAN clients.
+- Secure LAN deployments should use a stable private server address so stored origins, certificate identities, firewall state, and client hostname mappings do not become stale.
 - The SQLCipher database remains local to the CareQFlow host rather than being placed on a network share.
 - Client certificate onboarding requires independent SHA-256 fingerprint verification before trust is installed.
 
 On Windows, runtime data is stored under `C:\ProgramData\CareQueue`.
 
-On Linux, packaged deployment uses the dedicated `carequeue` service account and stores production configuration, data, and logs under restricted system paths documented in `docs/deployment/linux.md`.
+On Linux, packaged deployment uses the dedicated `carequeue` service account and stores production configuration, data, and logs under restricted system paths documented in `docs/deployment/linux.md`. The configuration directory permits only the service-group traversal needed for Caddy to read its root-owned configuration; managed network state remains root-owned. Secure LAN onboarding exports only the public CA material and verifies the expected SHA-256 certificate fingerprint before installing client trust.
 
 The built-in configurations are for private or restricted-network use. They are not public internet deployment templates.
 

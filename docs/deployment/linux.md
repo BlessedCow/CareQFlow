@@ -19,6 +19,10 @@ deployment/linux/
 ├── installer/
 │   ├── build-payload.ps1
 │   └── invoke-install.sh
+├── networking/
+│   ├── Export-CareQFlowClientTrust.sh
+│   ├── Install-CareQFlowClientTrust.sh
+│   └── Set-CareQFlowNetworkAccess.sh
 └── systemd/
     ├── carequeue-api.service
     ├── carequeue-backup.service
@@ -50,19 +54,30 @@ Implemented Linux deployment capabilities include:
 - Automatic Caddy installation when it is not already available
 - Same-origin HTTPS through Caddy
 - Local `careqflow.local` hostname configuration
+- Local Only and Secure LAN network modes
+- Secure LAN access through an administrator-selected RFC1918 private IPv4 address
+- Dual HTTPS access through `careqflow.local` and the selected private IPv4 address in Secure LAN mode
+- UFW and firewalld integration for subnet-scoped TCP 443 access
+- Preservation of the loopback-only FastAPI listener in both network modes
 - Caddy internal certificate-authority trust setup on the Linux host
+- Secure LAN client trust-package generation
+- SHA-256 certificate fingerprint verification during client onboarding
+- Linux client certificate trust installation through `update-ca-certificates` or `update-ca-trust`
+- Client `careqflow.local` hostname mapping to the selected CareQFlow server address
 - Automatic service enablement and startup
 - HTTPS frontend, liveness, and readiness validation after installation
 - Interactive first-Admin setup on new installations
 - Uninstall support while preserving production configuration, runtime data, and logs
 
-The Linux installer is intended for an administrator comfortable with Linux, systemd, package installation, filesystem permissions, and certificate trust.
+The Linux installer is intended for an administrator comfortable with Linux, systemd, package installation, filesystem permissions, firewall configuration, and certificate trust.
 
 Current limitations include:
 
 - Linux support is currently limited to Ubuntu and Debian.
-- The packaged Caddy configuration is designed around the private `careqflow.local` deployment model.
-- Trusting the Caddy internal CA on the server does not automatically distribute trust to other client devices.
+- Secure LAN currently requires an active UFW or firewalld firewall. CareQFlow does not automatically enable a disabled host firewall.
+- Secure LAN requires an administrator-selected RFC1918 private IPv4 address on port 443.
+- The selected Secure LAN address should remain stable. A DHCP reservation or appropriately managed static address is recommended for long-lived deployments.
+- The generated client trust package must still be transferred to each approved client through an appropriate trusted process.
 - Public DNS and publicly trusted certificate deployment require separate planning and configuration.
 - Production disaster-recovery activation still requires operator review and validation.
 - The exact target distribution and operating-system version should be validated before introducing sensitive production data.
@@ -131,6 +146,7 @@ Runtime data:
 ├── caddy/
 │   ├── config/
 │   └── data/
+├── ClientTrust/
 ├── data/
 ├── recovery/
 └── restores/
@@ -142,8 +158,13 @@ Configuration:
 /etc/carequeue/
 ├── carequeue.env
 ├── Caddyfile
-└── install-state.env
+├── install-state.env
+└── network-access.env
 ```
+
+In Secure LAN mode, `network-access.env` records the installer-managed firewall state needed for later repair, network-mode changes, and uninstall cleanup.
+
+The configuration directory permits the `carequeue` service group to traverse the directory without making its contents generally listable. The Caddyfile is readable by the `carequeue` service account, while networking state remains root-owned.
 
 Logs:
 
@@ -183,7 +204,7 @@ Then build the Linux release archive:
 A specific version may also be supplied:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.7.0
 ```
 
 The package is written under:
@@ -192,10 +213,10 @@ The package is written under:
 build/linux/installer/
 ```
 
-For CareQFlow v0.5.0, the expected release filename is:
+For CareQFlow v0.7.0, the expected release filename is:
 
 ```text
-CareQFlow-Linux-Setup-0.5.0.tar.gz
+CareQFlow-Linux-Setup-0.7.0.tar.gz
 ```
 
 The build script validates required payload sources, requires an existing production frontend build, stages the production files, normalizes Linux deployment text files to LF line endings, and creates the compressed tar archive.
@@ -209,7 +230,7 @@ For example:
 ```bash
 mkdir carequeue-installer
 
-tar -xzf CareQFlow-Linux-Setup-0.5.0.tar.gz \
+tar -xzf CareQFlow-Linux-Setup-0.7.0.tar.gz \
   -C carequeue-installer
 
 cd carequeue-installer
@@ -250,48 +271,134 @@ A new installation performs the following high-level sequence:
 
 1. Requires root privileges.
 2. Validates the requested installer mode.
-3. Creates an installer log.
-4. Validates the application origin.
-5. Validates the Linux distribution.
-6. Installs required operating-system packages.
-7. Creates or reuses the `carequeue` service account and group.
-8. Creates the application, data, configuration, and log directories.
-9. Installs the CareQFlow backend, prebuilt frontend, and Linux deployment files.
-10. Recreates the production Python virtual environment.
-11. Installs backend Python requirements.
-12. Validates that the backend imports successfully.
-13. Creates the production environment file on a new installation or preserves and migrates it on upgrade or repair.
-14. Installs CareQFlow systemd units.
-15. Installs Caddy if needed.
-16. Disables the distribution's default Caddy service so CareQFlow can use its dedicated Caddy unit.
-17. Installs and validates the CareQFlow Caddy configuration.
-18. Ensures the local `careqflow.local` hosts entry exists.
-19. Enables and starts the CareQFlow API, Caddy, and backup timer.
-20. Trusts the CareQFlow Caddy internal root certificate on the Linux host.
-21. Validates the HTTPS frontend, liveness endpoint, and readiness endpoint.
-22. On a new installation, launches the interactive first-Admin setup utility.
+3. Resolves the requested or previously installed network mode.
+4. Validates the application origin and Secure LAN private IPv4 address when applicable.
+5. Creates an installer log.
+6. Validates the CareQFlow release metadata.
+7. Validates the Linux distribution.
+8. Installs required operating-system packages.
+9. Creates or reuses the `carequeue` service account and group.
+10. Creates the application, data, configuration, and log directories.
+11. Installs the CareQFlow backend, prebuilt frontend, and Linux deployment files.
+12. Recreates the production Python virtual environment.
+13. Installs backend Python requirements.
+14. Validates that the backend imports successfully.
+15. Creates the production environment file on a new installation or preserves and migrates it on upgrade or repair.
+16. Persists the selected network mode and application origin.
+17. Installs CareQFlow systemd units.
+18. Installs Caddy if needed.
+19. Disables the distribution's default Caddy service so CareQFlow can use its dedicated Caddy unit.
+20. Installs and validates the CareQFlow Caddy configuration.
+21. Ensures the server-local `careqflow.local` hosts entry exists.
+22. Configures or removes the installer-managed Secure LAN firewall rule.
+23. Enables and starts the CareQFlow API, Caddy, and backup timer.
+24. Trusts the CareQFlow Caddy internal root certificate on the Linux host.
+25. In Secure LAN mode, creates the client trust and onboarding package.
+26. Validates the HTTPS frontend, liveness endpoint, and readiness endpoint.
+27. In Secure LAN mode, validates both the selected private IPv4 origin and local `careqflow.local` origin.
+28. On a new installation, launches the interactive first-Admin setup utility.
 
 If a required step fails, the installer stops with an error rather than continuing as though installation succeeded.
 
-## Application Origin
+## Network Access Modes and Application Origin
 
-The installer defaults to:
+CareQFlow supports two Linux network modes:
+
+```text
+LocalOnly
+SecureLan
+```
+
+### Local Only
+
+Local Only is the default.
+
+The application origin is:
 
 ```text
 https://careqflow.local
 ```
 
-The installer validates that `APPLICATION_ORIGIN` is an absolute HTTPS origin containing only a hostname and optional port.
+The CareQFlow server maps `careqflow.local` to loopback for local browser access.
 
-The packaged `deployment/linux/Caddyfile` is currently configured specifically for:
+A normal local-only installation is:
 
-```text
-careqflow.local
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh install
 ```
 
-and uses Caddy's internal certificate authority.
+The FastAPI backend remains bound to:
 
-Because the packaged Caddyfile and local hosts-entry management are currently centered on `careqflow.local`, use of a different application origin requires a reviewed Caddy and hostname configuration change. Do not assume that setting `APPLICATION_ORIGIN` alone completely reconfigures the packaged HTTPS deployment.
+```text
+127.0.0.1:8000
+```
+
+### Secure LAN
+
+Secure LAN allows approved devices on the same trusted private network to reach the CareQFlow server through Caddy over HTTPS.
+
+Secure LAN requires an explicit RFC1918 private IPv4 HTTPS origin. For example:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh install \
+  --network-mode SecureLan \
+  --application-origin https://192.168.1.25
+```
+
+The selected address must:
+
+- Use HTTPS
+- Use an IPv4 address
+- Be within `10.0.0.0/8`, `172.16.0.0/12`, or `192.168.0.0/16`
+- Use port 443 or the default HTTPS port
+- Be assigned to a local network interface on the CareQFlow server
+
+The address is administrator-selected and is not hardcoded by CareQFlow.
+
+In Secure LAN mode:
+
+- Caddy serves both `https://careqflow.local` and the selected private IPv4 origin.
+- FastAPI remains bound only to `127.0.0.1:8000`.
+- TCP 8000 is not opened to client devices.
+- CareQFlow requires an active supported host firewall.
+- UFW or firewalld is configured to allow TCP 443 from the server's selected local subnet.
+- CareQFlow records its managed firewall state for later cleanup.
+- A client trust package is generated for onboarding approved devices.
+
+CareQFlow intentionally does not automatically enable an inactive firewall. Enabling or changing the host firewall can affect unrelated services such as SSH and remains an administrator decision.
+
+Do not use router port forwarding to expose a Secure LAN CareQFlow installation directly to the public internet.
+
+For long-lived Secure LAN deployments, use a stable private server address. A DHCP reservation or appropriately managed static address is recommended because changing the address can invalidate saved application-origin settings, firewall state, client hostname mappings, and the expected HTTPS server identity.
+
+### Upgrade and Repair Behavior
+
+Upgrade and repair preserve the installed network mode and application origin when no replacement network options are supplied.
+
+For example:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair
+```
+
+preserves an existing Secure LAN configuration.
+
+To explicitly change an existing installation to Secure LAN:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair \
+  --network-mode SecureLan \
+  --application-origin https://192.168.1.25
+```
+
+To return an installation to Local Only:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair \
+  --network-mode LocalOnly
+```
+
+Legacy installations without stored network-mode metadata are treated as Local Only.
 
 ## Production Environment File
 
@@ -463,22 +570,24 @@ sudo journalctl \
 
 ## Caddy Configuration
 
-The packaged Caddyfile is:
-
-```text
-deployment/linux/Caddyfile
-```
-
-The installer copies it to:
+The installer writes the active configuration to:
 
 ```text
 /etc/carequeue/Caddyfile
 ```
 
-The current configuration:
+The installed configuration always serves:
 
-- Serves `https://careqflow.local`
-- Uses `tls internal`
+```text
+https://careqflow.local
+```
+
+In Secure LAN mode, the installer also adds the administrator-selected private IPv4 HTTPS origin.
+
+The resulting Caddy configuration:
+
+- Uses Caddy's internal certificate authority
+- Provides certificates for the configured CareQFlow HTTPS identities
 - Enables `zstd` and `gzip`
 - Adds security response headers
 - Removes the `Server` response header
@@ -486,31 +595,84 @@ The current configuration:
 - Serves the frontend from `/opt/carequeue/frontend/dist`
 - Uses `/index.html` as the SPA fallback
 
-The installer validates the Caddyfile before starting CareQFlow services.
+The installer validates the generated Caddy configuration before starting CareQFlow services.
+
+The installed Caddyfile is owned by `root:carequeue` with mode `0640`, allowing the CareQFlow Caddy service to read it without making it world-readable.
 
 ## Local Hostname
 
-For the default private deployment, the installer ensures `/etc/hosts` contains:
+The CareQFlow server maintains:
 
 ```text
 127.0.0.1 careqflow.local # CareQFlow
 ```
 
-This makes `careqflow.local` resolvable on the Linux server itself.
+in its local `/etc/hosts` file.
 
-This hosts entry does not automatically make `careqflow.local` resolvable from other computers. Client devices need an approved DNS, hosts-file, or other name-resolution strategy if users will access CareQFlow from another machine.
+This preserves friendly local access at:
+
+```text
+https://careqflow.local
+```
+
+In Secure LAN mode, approved client devices can also use `careqflow.local` after running the generated client trust installer. The client installer maps `careqflow.local` to the administrator-selected private server address.
 
 ## Certificate Trust
 
-The packaged Caddy configuration uses Caddy's internal CA.
+CareQFlow uses Caddy's internal certificate authority for its private HTTPS deployment.
 
-After starting the CareQFlow Caddy service, the installer runs Caddy's trust operation using the CareQFlow Caddy data and configuration directories. This establishes trust on the Linux installation host.
+The Linux installation host trusts the CareQFlow Caddy root certificate during installation.
 
-For other client devices, the internal CA root certificate must be distributed and trusted through an approved process before browsers on those devices will trust the CareQFlow certificate.
+In Secure LAN mode, CareQFlow additionally creates:
 
-Do not bypass browser certificate warnings or disable certificate validation.
+```text
+/var/lib/carequeue/ClientTrust/
+```
 
-For a deployment using public DNS or an organization-managed PKI, review and replace the packaged private certificate model rather than weakening TLS validation.
+containing:
+
+```text
+CareQFlow-Root-CA.crt
+Install-CareQFlowClientTrust.sh
+CLIENT-ONBOARDING.txt
+SHA256SUMS.txt
+```
+
+The export contains the public CA certificate only. The exporter checks the package for private-key material and refuses to produce a package containing private keys.
+
+`CLIENT-ONBOARDING.txt` contains the selected server origin and the SHA-256 certificate fingerprint needed to verify the CA before trust installation.
+
+Transfer this package to an approved client through an appropriate trusted process.
+
+On a supported Linux client, follow the generated onboarding instructions. The command is structured like:
+
+```bash
+sudo bash ./Install-CareQFlowClientTrust.sh \
+  --certificate ./CareQFlow-Root-CA.crt \
+  --expected-fingerprint "<SHA-256 fingerprint>" \
+  --application-origin "https://192.168.1.25"
+```
+
+The client installer:
+
+- Requires root privileges
+- Validates the selected RFC1918 HTTPS origin
+- Rejects certificates containing private-key material
+- Requires a valid X.509 CA certificate
+- Checks current certificate validity
+- Verifies that the certificate is self-consistent as a root CA
+- Requires an exact SHA-256 fingerprint match
+- Installs the root certificate through `update-ca-certificates` or `update-ca-trust`
+- Adds or updates the client's `/etc/hosts` mapping for `careqflow.local`
+
+After successful onboarding, both of these can be used when applicable:
+
+```text
+https://careqflow.local
+https://<selected-private-ip>
+```
+
+Do not bypass browser certificate warnings or disable TLS certificate validation.
 
 ## Health Checks
 
@@ -739,19 +901,58 @@ The installer uses restrictive ownership and permissions for production configur
 
 ## Firewall and Network Exposure
 
-The API should remain loopback-only:
+The FastAPI backend remains loopback-only in both network modes:
 
 ```text
 127.0.0.1:8000
 ```
 
-Review listening sockets:
+Secure LAN mode requires an active supported host firewall.
+
+CareQFlow supports:
+
+```text
+UFW
+firewalld
+```
+
+For UFW, CareQFlow adds an inbound rule equivalent to:
+
+```text
+TCP 443 from the selected local subnet
+```
+
+For firewalld, CareQFlow adds an equivalent permanent rich rule to the applicable zone.
+
+CareQFlow does not open TCP 8000.
+
+The firewall configuration is recorded in:
+
+```text
+/etc/carequeue/network-access.env
+```
+
+so a later repair, network-mode change, or uninstall can remove the previously managed rule.
+
+Review listening sockets with:
 
 ```bash
 sudo ss -lntp
 ```
 
-Only the approved HTTPS service should be exposed to CareQFlow users.
+For a Secure LAN deployment, also review the active firewall configuration.
+
+UFW:
+
+```bash
+sudo ufw status verbose
+```
+
+firewalld:
+
+```bash
+sudo firewall-cmd --list-all
+```
 
 Do not expose:
 
@@ -760,8 +961,9 @@ Do not expose:
 - Backup storage
 - Recovery storage
 - Administrative services beyond what the environment requires
+- CareQFlow through public router port forwarding
 
-Apply firewall rules through the operating system's approved firewall tooling.
+CareQFlow does not automatically enable a disabled firewall. Configure the host firewall carefully so unrelated administration services are not unintentionally disrupted.
 
 ## Logs
 
@@ -860,17 +1062,34 @@ Do not delete the preserved recovery record, pre-upgrade database backup, or app
 
 ## Repair
 
-Use repair mode when an existing installation needs the packaged application and deployment components reapplied without intentionally replacing production data or secrets.
-
-Run:
+Repair an existing installation with:
 
 ```bash
 sudo bash deployment/linux/installer/invoke-install.sh repair
 ```
 
-Repair mode requires an existing installation and preserves the existing production configuration and runtime data.
+Repair mode requires an existing installation and preserves production configuration and runtime data.
 
-After repair, confirm service health, HTTPS access, login, governance state, and a representative application workflow.
+When no network options are supplied, repair preserves the installed network mode and application origin.
+
+To explicitly configure Secure LAN during repair:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair \
+  --network-mode SecureLan \
+  --application-origin https://192.168.1.25
+```
+
+To return the installation to Local Only:
+
+```bash
+sudo bash deployment/linux/installer/invoke-install.sh repair \
+  --network-mode LocalOnly
+```
+
+Repair reapplies the expected Caddy configuration, managed firewall state, systemd services, and other packaged deployment components.
+
+After repair, confirm service health, HTTPS access, firewall state, login, governance state, and a representative application workflow.
 
 ## Uninstall
 
@@ -1172,17 +1391,27 @@ If direct health succeeds but HTTPS fails, inspect the CareQFlow Caddy service a
 
 ### Browser does not trust the certificate
 
-The installer trusts the Caddy internal root CA on the Linux server, not automatically on every client device.
+For a Secure LAN client, confirm that the generated client trust package was transferred from the intended CareQFlow server and that the supplied SHA-256 fingerprint was independently verified.
 
-Confirm that the CareQFlow internal root certificate has been distributed and trusted on the browser's device through an approved process.
+Run the command from `CLIENT-ONBOARDING.txt` on the approved client.
 
-Do not bypass the certificate warning.
+Confirm that the root certificate was installed through the operating system trust store.
 
-### `careqflow.local` does not resolve from another computer
+Do not bypass the certificate warning or disable certificate validation.
 
-The installer adds `careqflow.local` only to the Linux server's `/etc/hosts` file.
+### `careqflow.local` does not resolve from a Secure LAN client
 
-Configure approved name resolution for each client or through your private DNS environment.
+Confirm that the generated Linux client trust installer completed successfully.
+
+On the client, review:
+
+```bash
+grep careqflow.local /etc/hosts
+```
+
+The expected mapping uses the selected private CareQFlow server address.
+
+Also confirm that the server address has not changed since the client was onboarded. If the server uses DHCP, a DHCP reservation or appropriately managed static address is recommended.
 
 ### Frontend loads but routes return 404
 
@@ -1254,6 +1483,12 @@ Before using real sensitive data, confirm:
 
 - The target operating system and version have been validated.
 - The API binds only to loopback.
+- The selected Secure LAN address is stable when Secure LAN is enabled.
+- An active UFW or firewalld firewall protects the Secure LAN host.
+- Only TCP 443 is permitted by the CareQFlow-managed LAN rule.
+- TCP 8000 is not reachable from client devices.
+- The client trust package contains no private key material.
+- Certificate fingerprints are verified before client trust installation.
 - The CareQFlow Caddy service is the intended user-facing HTTP service.
 - HTTPS is valid and trusted on every approved client device.
 - The deployment hostname resolves only where intended.
@@ -1286,7 +1521,8 @@ The primary remaining Linux deployment work includes:
 - Additional automated release-package smoke testing
 - Expanded disaster-recovery activation testing and documentation
 - Validation of reboot, interrupted-upgrade, rollback-interruption, and service-failure scenarios across supported systems
-- Continued hardening and documentation of private certificate distribution and lifecycle management
+- Continued hardening and lifecycle testing of Secure LAN certificate distribution, renewal, and client re-onboarding
+- Broader validation of UFW and firewalld behavior across supported operating-system versions
 - Better support for deployments that use an application hostname other than the packaged `careqflow.local` model
 
 The packaged Linux installation path should still be validated on the exact target environment before introducing sensitive production data.

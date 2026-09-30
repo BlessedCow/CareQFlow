@@ -75,7 +75,7 @@ CareQFlow uses:
 - **Authentication:** Secure cookie sessions, CSRF protection, Argon2id, and TOTP MFA
 - **Testing:** Pytest, Vitest, Testing Library, Ruff, Bandit, and dependency audits
 - **Windows deployment:** WinSW services and Caddy for private HTTPS
-- **Linux deployment:** systemd services, Caddy, and versioned release archives
+- **Linux deployment:** systemd services, Caddy, versioned release archives, and optional Secure LAN client access
 - **Android client:** Native Kotlin/WebView client for secure HTTPS access to a CareQFlow host
 
 ## Project Layout
@@ -261,15 +261,20 @@ The packaged Linux workflow supports:
 - Production Python environment and frontend installation
 - Protected production configuration and encryption-key setup
 - CareQFlow API and Caddy systemd services
-- Private HTTPS through `careqflow.local`
+- Local Only and Secure LAN network modes
+- Private HTTPS through `careqflow.local` and an administrator-selected RFC1918 address in Secure LAN mode
+- Loopback-only FastAPI behind Caddy
+- UFW and firewalld integration for subnet-scoped TCP 443 access
 - Caddy internal certificate trust setup
+- Secure LAN client trust-package export with SHA-256 fingerprint verification
+- Linux client CA installation and `careqflow.local` hostname onboarding
 - Encrypted backup service and timer
 - First-time Admin setup
 - Post-install frontend, liveness, and readiness validation
-- Preservation of production configuration and runtime data during upgrade and repair
+- Preservation of production configuration, network mode, application origin, and runtime data during upgrade and repair
 - Pre-upgrade recovery records and rollback support for failed upgrades
 
-The Linux deployment is more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use.
+The Linux deployment is more administrator-oriented than the Windows installer and should be validated on the exact target operating-system version before sensitive production use. Secure LAN requires an active supported host firewall and a stable private server address; CareQFlow does not automatically enable a disabled firewall.
 
 See [docs/deployment/linux.md](docs/deployment/linux.md) for installation and operational details.
 

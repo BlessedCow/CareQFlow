@@ -1,6 +1,6 @@
 # Roadmap
 
-CareQFlow is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, Windows Secure LAN hosting and client onboarding, an Android client, controlled upgrades, and failed-upgrade rollback workflows are in place.
+CareQFlow is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, Windows and Linux Secure LAN hosting and client onboarding, an Android client, controlled upgrades, and failed-upgrade rollback workflows are in place.
 
 The current focus is release hardening, deployment validation, upgrade safety, maintainability, broader testing, and operational maturity.
 
@@ -46,6 +46,7 @@ CareQFlow currently includes:
 - Windows services for the API and HTTPS frontend
 - Linux systemd services for the API, HTTPS frontend, and scheduled backups
 - Private HTTPS through Caddy
+- Windows and Linux Secure LAN hosting with loopback-only FastAPI
 - Installer modes for Install, Upgrade, Repair, Rollback, and Uninstall
 - First-time Admin setup for packaged Windows and Linux deployments
 - Windows scheduled backup support
@@ -146,9 +147,15 @@ The Linux deployment workflow includes:
 - CareQFlow API systemd service
 - CareQFlow Caddy systemd service
 - Encrypted backup service and timer
+- Local Only and Secure LAN network modes
 - Private `careqflow.local` HTTPS deployment
+- Administrator-selected RFC1918 IPv4 HTTPS origin in Secure LAN mode
+- Loopback-only FastAPI behind Caddy
+- UFW and firewalld Secure LAN rule management for TCP 443
 - Caddy internal certificate trust setup
-- Post-install frontend and API health validation
+- Secure LAN client trust-package generation and fingerprint verification
+- Linux client CA trust and `careqflow.local` hostname onboarding
+- Post-install frontend and API health validation across local and Secure LAN origins
 - First-time Admin setup
 - Verified pre-upgrade database and application recovery assets
 - Durable failed-upgrade recovery records
@@ -429,14 +436,16 @@ Accessibility should be reviewed alongside each major frontend workflow.
 
 ### Secure LAN follow-up
 
-Windows Secure LAN hosting and Windows client onboarding are implemented. One CareQFlow host can serve approved clients on the same trusted private network while retaining a single authoritative backend and SQLCipher database.
+Windows and Linux Secure LAN hosting and client onboarding are implemented. One CareQFlow host can serve approved clients on the same trusted private network while retaining a single authoritative backend and SQLCipher database.
 
 Implemented controls include:
 
 - Administrator-selected private IPv4 HTTPS origin
-- `careqflow.local` access on the host and enrolled Windows clients
+- `careqflow.local` access on the host and enrolled Windows or Linux clients
 - Trusted HTTPS client onboarding with independent certificate fingerprint verification
 - Caddy network access on TCP 443 with Windows Private-profile and `LocalSubnet` firewall restrictions
+- Linux UFW or firewalld rules scoped to the selected local subnet
+- Linux client trust-package export and operating-system CA installation
 - Loopback-only FastAPI behind Caddy
 - Host-local SQLCipher database storage
 - Client onboarding that does not install a second CareQFlow backend or database
@@ -531,7 +540,8 @@ The packaged Linux workflow is now implemented, but additional Linux maturity wo
 - Reboot, interrupted-upgrade, and interrupted-rollback testing
 - More detailed package smoke testing
 - Log rotation review
-- Certificate lifecycle guidance
+- Secure LAN certificate lifecycle, renewal, and client re-onboarding guidance
+- Broader UFW and firewalld behavior validation across supported operating-system versions
 - Disaster-recovery activation testing
 - More explicit hardening verification
 - Additional installation troubleshooting documentation
