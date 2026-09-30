@@ -245,6 +245,14 @@ $normalizedApplicationOrigin = (
     )
 ).TrimEnd("/")
 
+$localApplicationOrigin = "https://careqflow.local"
+
+$applicationOrigins = @(
+    $localApplicationOrigin
+    $normalizedApplicationOrigin
+) |
+Select-Object -Unique
+
 $resolvedSourceDirectory = (
     Resolve-Path -LiteralPath $SourceDirectory
 ).Path
@@ -262,6 +270,7 @@ $requiredSourcePaths = @(
     "deployment\windows\install-api-service.ps1",
     "deployment\windows\remove-api-service.ps1",
     "deployment\windows\networking\Set-CareQFlowNetworkAccess.ps1"
+    "deployment\windows\networking\Export-CareQFlowClientTrust.ps1"
 )
 
 foreach ($relativePath in $requiredSourcePaths) {
@@ -969,11 +978,19 @@ try {
         )
     }
 
-    $caddyHostname = $applicationUri.Authority
-
+    $caddySiteAddresses = @(
+        "careqflow.local"
+        $applicationUri.Authority
+    ) |
+    Select-Object -Unique
+    
+    $caddySiteAddressText = (
+        $caddySiteAddresses -join ", "
+    )
+    
     $caddyConfiguration = $caddyConfiguration.Replace(
         "careqflow.example.com",
-        $caddyHostname
+        $caddySiteAddressText
     )
 
     Set-Content `
@@ -1057,6 +1074,10 @@ try {
         )
     
         $currentCorsOrigins = ConvertTo-Json `
+            -InputObject $applicationOrigins `
+            -Compress
+    
+        $singleApplicationOriginCors = ConvertTo-Json `
             -InputObject @($normalizedApplicationOrigin) `
             -Compress
     
@@ -1074,6 +1095,14 @@ try {
                     $_ -eq (
                         'AUTHSTATUS_CORS_ORIGINS=' +
                         '["https://carequeue.local"]'
+                    ) `
+                        -or $_ -eq (
+                        'AUTHSTATUS_CORS_ORIGINS=' +
+                        '["https://careqflow.local"]'
+                    ) `
+                        -or $_ -eq (
+                        'AUTHSTATUS_CORS_ORIGINS=' +
+                        $singleApplicationOriginCors
                     )
                 ) {
                     "AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"
@@ -1110,7 +1139,7 @@ try {
         }
 
         $corsOrigins = ConvertTo-Json `
-            -InputObject @($normalizedApplicationOrigin) `
+            -InputObject $applicationOrigins `
             -Compress
 
         $environmentContent = @"

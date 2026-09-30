@@ -2581,6 +2581,13 @@ function Assert-PostInstallationHealth {
         [Parameter(Mandatory)]
         [string]$ApplicationOrigin,
 
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            "LocalOnly",
+            "SecureLan"
+        )]
+        [string]$NetworkMode,
+
         [ValidateRange(1, 60)]
         [int]$MaximumAttempts = 30,
 
@@ -2742,7 +2749,6 @@ function Assert-PostInstallationHealth {
         throw (
             "Post-installation validation failed because the CareQFlow " +
             "hostname '$applicationHostname' could not be resolved. " +
-            "Expected a local loopback mapping for CareQFlow. " +
             "Error: $($_.Exception.Message)"
         )
     }
@@ -2754,28 +2760,60 @@ function Assert-PostInstallationHealth {
         )
     }
     
-    $loopbackResolved = $false
+    if ($NetworkMode -eq "LocalOnly") {
+        $loopbackResolved = $false
     
-    foreach ($resolvedAddress in $resolvedAddresses) {
-        if ([System.Net.IPAddress]::IsLoopback($resolvedAddress)) {
-            $loopbackResolved = $true
-            break
+        foreach ($resolvedAddress in $resolvedAddresses) {
+            if ([System.Net.IPAddress]::IsLoopback($resolvedAddress)) {
+                $loopbackResolved = $true
+                break
+            }
+        }
+    
+        if (-not $loopbackResolved) {
+            $resolvedAddressText = (
+                $resolvedAddresses |
+                ForEach-Object {
+                    $_.IPAddressToString
+                }
+            ) -join ", "
+    
+            throw (
+                "Post-installation validation failed because the CareQFlow " +
+                "hostname '$applicationHostname' did not resolve to a local " +
+                "loopback address. Resolved addresses: $resolvedAddressText"
+            )
         }
     }
+    else {
+        if (
+            -not (
+                Test-CareQFlowPrivateLanIPv4Address `
+                    -Address $applicationHostname
+            )
+        ) {
+            throw (
+                "Post-installation validation failed because Secure LAN " +
+                "requires a private IPv4 application origin."
+            )
+        }
     
-    if (-not $loopbackResolved) {
-        $resolvedAddressText = (
-            $resolvedAddresses |
-            ForEach-Object {
-                $_.IPAddressToString
-            }
-        ) -join ", "
+        $localLanAddress = Get-NetIPAddress `
+            -AddressFamily IPv4 `
+            -IPAddress $applicationHostname `
+            -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.AddressState -eq "Preferred"
+        } |
+        Select-Object -First 1
     
-        throw (
-            "Post-installation validation failed because the CareQFlow " +
-            "hostname '$applicationHostname' did not resolve to a local " +
-            "loopback address. Resolved addresses: $resolvedAddressText"
-        )
+        if (-not $localLanAddress) {
+            throw (
+                "Post-installation validation failed because the Secure LAN " +
+                "address '$applicationHostname' is not assigned to this " +
+                "CareQFlow host."
+            )
+        }
     }
 
     $validationEndpoints = @(
@@ -3093,7 +3131,7 @@ if (
 
 try {
     Set-CareQueueLocalHostname `
-        -ApplicationOrigin $ApplicationOrigin
+        -ApplicationOrigin "https://careqflow.local"
 }
 catch {
     Write-InstallerResult `
@@ -3618,7 +3656,8 @@ if ($Mode -eq "Rollback") {
         Assert-PostInstallationHealth `
             -InstallDirectory $InstallDirectory `
             -DataDirectory $DataDirectory `
-            -ApplicationOrigin $ApplicationOrigin
+            -ApplicationOrigin $ApplicationOrigin `
+            -NetworkMode $resolvedNetworkMode
 
         Restore-CareQueueRollbackInstallStateVersion `
             -InstallStatePath $installStatePath `
@@ -4115,7 +4154,55 @@ try {
     Assert-PostInstallationHealth `
         -InstallDirectory $InstallDirectory `
         -DataDirectory $DataDirectory `
-        -ApplicationOrigin $ApplicationOrigin
+        -ApplicationOrigin $ApplicationOrigin `
+        -NetworkMode $resolvedNetworkMode
+
+    if (
+        $resolvedNetworkMode -eq "SecureLan" `
+            -and $Mode -in @(
+            "Install",
+            "Upgrade",
+            "Repair"
+        )
+    ) {
+        $clientTrustExportScript = Join-Path `
+            $InstallDirectory `
+            "deployment\windows\networking\Export-CareQFlowClientTrust.ps1"
+        
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $clientTrustExportScript `
+                    -PathType Leaf
+            )
+        ) {
+            throw (
+                "The CareQFlow client trust export script was not found: " +
+                $clientTrustExportScript
+            )
+        }
+        
+        "Preparing CareQFlow Secure LAN client trust material..." |
+        Tee-Object `
+            -FilePath $logPath `
+            -Append
+
+        try {
+            & $clientTrustExportScript `
+                -DataDirectory $DataDirectory `
+                -ApplicationOrigin $ApplicationOrigin `
+                *>&1 |
+            Tee-Object `
+                -FilePath $logPath `
+                -Append
+        }
+        catch {
+            throw (
+                "CareQFlow Secure LAN client trust export failed. " +
+                "Error: $($_.Exception.Message)"
+            )
+        }
+    }
 
     "Post-installation validation completed successfully." |
     Tee-Object `

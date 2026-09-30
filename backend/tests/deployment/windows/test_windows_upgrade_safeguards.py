@@ -173,6 +173,19 @@ def test_windows_existing_environment_migrates_legacy_cors_origin():
     )[1].split("$migratedEnvironmentLines +=", maxsplit=1,)[0]
 
     assert '["https://carequeue.local"]' in migration_block
+    assert '["https://careqflow.local"]' in migration_block
+    assert '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"' in migration_block
+
+
+def test_windows_existing_environment_migrates_careqflow_local_cors_origin():
+    content = _read(WINDOWS_PRODUCTION_INSTALLER)
+
+    migration_block = content.split(
+        "$currentCorsOrigins = ConvertTo-Json",
+        maxsplit=1,
+    )[1].split("$migratedEnvironmentLines +=", maxsplit=1,)[0]
+
+    assert '["https://careqflow.local"]' in migration_block
     assert '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"' in migration_block
 
 
@@ -1362,3 +1375,11 @@ def test_windows_hostname_migration_preserves_unmanaged_legacy_mappings():
 
     assert "'^\\s*127\\.0\\.0\\.1\\s+carequeue\\.local'" in function
     assert "'\\s+#\\s*CareQueue\\s*$'" in function
+
+
+def test_windows_secure_lan_single_origin_is_migrated_to_combined_origins():
+    content = _read(WINDOWS_PRODUCTION_INSTALLER)
+
+    assert "$singleApplicationOriginCors" in content
+    assert "$applicationOrigins" in content
+    assert '"AUTHSTATUS_CORS_ORIGINS=$currentCorsOrigins"' in content

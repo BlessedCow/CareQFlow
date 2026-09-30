@@ -183,7 +183,7 @@ Confirm new password
 A successful change:
 
 1. Verifies the current password.
-2. Confirms the new password differs from the current password.
+2. Confirms the new password is different from the current password.
 3. Stores the new Argon2id hash.
 4. Clears the required-password-change state.
 5. Revokes active sessions for the account.
@@ -814,7 +814,7 @@ Confirm:
 
 - The temporary password is correct.
 - New password and confirmation match.
-- The new password differs from the temporary password.
+- The new password is different from the temporary password.
 - The account remains active.
 - The session has not expired.
 

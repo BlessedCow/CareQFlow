@@ -252,6 +252,19 @@ def test_registered_migrations_apply_registered_registry(conn):
         """)
 
     conn.execute("""
+        CREATE TABLE mfa_login_challenges (
+            id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            consumed_at TEXT,
+            ip_address TEXT,
+            user_agent TEXT
+        )
+        """)
+
+    conn.execute("""
         CREATE TABLE auths (
             id INTEGER PRIMARY KEY,
             facility TEXT NOT NULL,
@@ -308,6 +321,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0009_authorization_loc_episodes",
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
+        "0012_security_mfa_challenge_failed_attempts",
     ]
     assert get_applied_migration_ids(conn) == {
         "0001_security_walkthrough_columns",
@@ -321,6 +335,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0009_authorization_loc_episodes",
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
+        "0012_security_mfa_challenge_failed_attempts",
     }
 
     governance_triggers = {row["name"] for row in conn.execute("""
@@ -707,6 +722,7 @@ def test_init_db_applies_registered_migrations_in_order(
         "0009_authorization_loc_episodes",
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
+        "0012_security_mfa_challenge_failed_attempts",
     ]
 
     assert user_row is not None
@@ -977,6 +993,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
         "0009_authorization_loc_episodes",
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
+        "0012_security_mfa_challenge_failed_attempts",
     ]
 
     assert user_row is not None

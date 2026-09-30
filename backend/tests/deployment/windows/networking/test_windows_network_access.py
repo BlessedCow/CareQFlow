@@ -188,3 +188,55 @@ def test_secure_lan_origin_validation_uses_resolved_network_mode():
     assert "Assert-CareQFlowNetworkOrigin" in content
     assert "-NetworkMode $resolvedNetworkMode" in content
     assert "-ApplicationOrigin $ApplicationOrigin" in content
+
+
+def test_post_install_health_preserves_local_only_loopback_validation():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    assert 'if ($NetworkMode -eq "LocalOnly") {' in content
+    assert "[System.Net.IPAddress]::IsLoopback" in content
+    assert "did not resolve to a local " in content
+    assert '"loopback address. Resolved addresses: $resolvedAddressText"' in content
+
+
+def test_post_install_health_secure_lan_requires_private_local_address():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    assert "Test-CareQFlowPrivateLanIPv4Address" in content
+    assert "-IPAddress $applicationHostname" in content
+    assert '$_.AddressState -eq "Preferred"' in content
+    assert "is not assigned to this " in content
+    assert '"CareQFlow host."' in content
+
+
+def test_post_install_health_receives_resolved_network_mode():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    assert content.count("-NetworkMode $resolvedNetworkMode") >= 2
+
+
+def test_secure_lan_preserves_local_careqflow_origin():
+    content = WINDOWS_PRODUCTION_INSTALLER.read_text(encoding="utf-8")
+
+    assert '$localApplicationOrigin = "https://careqflow.local"' in content
+    assert "$applicationOrigins = @(" in content
+    assert "$normalizedApplicationOrigin" in content
+
+
+def test_caddy_configuration_accepts_local_and_selected_origin():
+    content = WINDOWS_PRODUCTION_INSTALLER.read_text(encoding="utf-8")
+
+    assert "$caddySiteAddresses = @(" in content
+    assert '"careqflow.local"' in content
+    assert "$applicationUri.Authority" in content
+    assert '$caddySiteAddresses -join ", "' in content
+
+
+def test_installer_always_registers_local_careqflow_hostname():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    assert (
+        "Set-CareQueueLocalHostname `\n"
+        '        -ApplicationOrigin "https://careqflow.local"'
+        in content.replace("\r\n", "\n")
+    )
