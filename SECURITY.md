@@ -682,13 +682,15 @@ Caddy serves the built frontend and proxies `/api` through HTTPS.
 
 The Caddy configuration also applies browser security headers, including Content Security Policy, frame denial, content-type sniffing protection, referrer policy, permissions policy, and HSTS.
 
-The packaged private deployment uses:
+The packaged private deployment uses Caddy's internal certificate authority. Windows installations may run in local-only mode or Secure LAN mode.
+
+Local-only Windows installations use:
 
 ```text
 https://careqflow.local
 ```
 
-with Caddy's internal certificate authority.
+Secure LAN installations retain that friendly hostname and also use an administrator-selected private IPv4 HTTPS origin for approved clients on the same Windows Private network and local subnet. The selected address is deployment-specific and is not hardcoded.
 
 Security assumptions for this deployment include:
 
@@ -700,6 +702,10 @@ Security assumptions for this deployment include:
 - The production environment file is not readable by ordinary users.
 - Services run under approved restricted accounts.
 - Firewall and network policy prevent unintended exposure.
+- Windows Secure LAN access is limited to inbound TCP 443 on the Private profile from `LocalSubnet`.
+- FastAPI remains loopback-only and TCP 8000 is not opened to LAN clients.
+- The SQLCipher database remains local to the CareQFlow host rather than being placed on a network share.
+- Client certificate onboarding requires independent SHA-256 fingerprint verification before trust is installed.
 
 On Windows, runtime data is stored under `C:\ProgramData\CareQueue`.
 

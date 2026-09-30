@@ -3,6 +3,8 @@
 set -Eeuo pipefail
 
 APPLICATION_ORIGIN="${APPLICATION_ORIGIN:-https://careqflow.local}"
+NETWORK_MODE="${NETWORK_MODE:-LocalOnly}"
+LOCAL_APPLICATION_ORIGIN="https://careqflow.local"
 
 INSTALL_DIRECTORY="${INSTALL_DIRECTORY:-/opt/carequeue}"
 DATA_DIRECTORY="${DATA_DIRECTORY:-/var/lib/carequeue}"
@@ -22,6 +24,9 @@ SOURCE_DIRECTORY="$(
     pwd
 )"
 
+NETWORK_ACCESS_SCRIPT="${SOURCE_DIRECTORY}/deployment/linux/networking/Set-CareQFlowNetworkAccess.sh"
+CLIENT_TRUST_EXPORT_SCRIPT="${SOURCE_DIRECTORY}/deployment/linux/networking/Export-CareQFlowClientTrust.sh"
+
 RELEASE_METADATA_FILE="${SOURCE_DIRECTORY}/carequeue-release.env"
 RELEASE_METADATA_SCHEMA=""
 RELEASE_APP_VERSION=""
@@ -35,6 +40,75 @@ fail() {
 require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         fail "CareQFlow installation must be run as root."
+    fi
+}
+
+validate_network_mode() {
+    case "${NETWORK_MODE}" in
+        LocalOnly|SecureLan)
+            ;;
+        *)
+            fail \
+                "Network mode must be LocalOnly or SecureLan. " \
+                "Received: ${NETWORK_MODE}"
+            ;;
+    esac
+}
+
+validate_secure_lan_origin() {
+    if [[ "${NETWORK_MODE}" != "SecureLan" ]]; then
+        return
+    fi
+
+    if ! python3 - "${APPLICATION_ORIGIN}" <<'PY'
+import ipaddress
+import sys
+from urllib.parse import urlsplit
+
+origin = sys.argv[1].strip()
+
+try:
+    parsed = urlsplit(origin)
+    port = parsed.port
+except ValueError:
+    raise SystemExit(1)
+
+if parsed.scheme.lower() != "https":
+    raise SystemExit(1)
+
+if not parsed.hostname:
+    raise SystemExit(1)
+
+if parsed.username is not None or parsed.password is not None:
+    raise SystemExit(1)
+
+if parsed.path not in {"", "/"}:
+    raise SystemExit(1)
+
+if parsed.query or parsed.fragment:
+    raise SystemExit(1)
+
+if port not in {None, 443}:
+    raise SystemExit(1)
+
+try:
+    address = ipaddress.IPv4Address(parsed.hostname)
+except ipaddress.AddressValueError:
+    raise SystemExit(1)
+
+private_networks = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+)
+
+if not any(address in network for network in private_networks):
+    raise SystemExit(1)
+PY
+    then
+        fail \
+            "SecureLan requires an HTTPS origin using a private " \
+            "RFC1918 IPv4 address on port 443."
     fi
 }
 
@@ -394,6 +468,42 @@ print(
 PY
 }
 
+read_install_state_value() {
+    local key="$1"
+    local state_file
+
+    state_file="${CONFIG_DIRECTORY}/install-state.env"
+
+    if [[ ! -f "${state_file}" ]]; then
+        return
+    fi
+
+    awk \
+        -F= \
+        -v requested_key="${key}" \
+        '$1 == requested_key {
+            sub(/^[^=]*=/, "", $0)
+            print $0
+            exit
+        }' \
+        "${state_file}"
+}
+
+build_cors_origins() {
+    if [[ "${NETWORK_MODE}" == "SecureLan" ]]; then
+        printf \
+            '["%s","%s"]\n' \
+            "${LOCAL_APPLICATION_ORIGIN}" \
+            "${APPLICATION_ORIGIN%/}"
+
+        return
+    fi
+
+    printf \
+        '["%s"]\n' \
+        "${LOCAL_APPLICATION_ORIGIN}"
+}
+
 create_environment_file() {
     umask 0077
 
@@ -405,12 +515,31 @@ create_environment_file() {
     local backup_encryption_key
     local sqlcipher_key
     local cors_origins
+    local previous_application_origin
+    local previous_managed_cors_origins
 
     environment_file="${CONFIG_DIRECTORY}/carequeue.env"
 
     database_path="${DATA_DIRECTORY}/data/auth_tracker.sqlcipher.db"
     backup_directory="${DATA_DIRECTORY}/backups"
     restore_directory="${DATA_DIRECTORY}/restores"
+    cors_origins="$(build_cors_origins)"
+
+    previous_application_origin="$(
+        read_install_state_value \
+            "CAREQUEUE_APPLICATION_ORIGIN"
+    )"
+
+    previous_managed_cors_origins=""
+
+    if [[ -n "${previous_application_origin}" ]]; then
+        previous_managed_cors_origins="$(
+            printf \
+                '["%s","%s"]' \
+                "${LOCAL_APPLICATION_ORIGIN}" \
+                "${previous_application_origin%/}"
+        )"
+    fi
 
     if [[ -f "${environment_file}" ]]; then
         printf '%s\n' \
@@ -421,7 +550,8 @@ create_environment_file() {
         migrated_environment_file="${environment_file}.tmp"
 
         awk \
-            -v application_origin="${APPLICATION_ORIGIN}" \
+            -v current_cors="${cors_origins}" \
+            -v previous_cors="${previous_managed_cors_origins}" \
             '
             /^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=/ {
                 next
@@ -433,7 +563,15 @@ create_environment_file() {
                 next
             }
             $0 == "AUTHSTATUS_CORS_ORIGINS=[\"https://carequeue.local\"]" {
-                printf "AUTHSTATUS_CORS_ORIGINS=[\"%s\"]\n", application_origin
+                printf "AUTHSTATUS_CORS_ORIGINS=%s\n", current_cors
+                next
+            }
+            $0 == "AUTHSTATUS_CORS_ORIGINS=[\"https://careqflow.local\"]" {
+                printf "AUTHSTATUS_CORS_ORIGINS=%s\n", current_cors
+                next
+            }
+            previous_cors != "" && $0 == "AUTHSTATUS_CORS_ORIGINS=" previous_cors {
+                printf "AUTHSTATUS_CORS_ORIGINS=%s\n", current_cors
                 next
             }
             {
@@ -467,8 +605,6 @@ create_environment_file() {
     if [[ "${field_encryption_key}" == "${backup_encryption_key}" ]]; then
         fail "Generated encryption keys must be independent."
     fi
-
-    cors_origins="[\"${APPLICATION_ORIGIN}\"]"
 
     cat > "${environment_file}" <<EOF
 AUTHSTATUS_APP_ENVIRONMENT=production
@@ -506,6 +642,7 @@ CAREQUEUE_PACKAGE_PLATFORM=${RELEASE_PACKAGE_PLATFORM}
 CAREQUEUE_INSTALL_DIRECTORY=${INSTALL_DIRECTORY}
 CAREQUEUE_DATA_DIRECTORY=${DATA_DIRECTORY}
 CAREQUEUE_CONFIG_DIRECTORY=${CONFIG_DIRECTORY}
+CAREQUEUE_NETWORK_MODE=${NETWORK_MODE}
 CAREQUEUE_APPLICATION_ORIGIN=${APPLICATION_ORIGIN}
 CAREQUEUE_HOSTS_ENTRY_MANAGED=true
 EOF
@@ -614,12 +751,58 @@ disable_default_caddy_service() {
 install_caddy_configuration() {
     printf 'Installing CareQFlow Caddy configuration...\n'
 
+    local caddy_site_addresses
+    local application_authority
+
+    caddy_site_addresses="careqflow.local"
+
+    if [[ "${NETWORK_MODE}" == "SecureLan" ]]; then
+        application_authority="${APPLICATION_ORIGIN#https://}"
+        application_authority="${application_authority%/}"
+
+        caddy_site_addresses="${caddy_site_addresses}, ${application_authority}"
+    fi
+
+    chown root:carequeue "${CONFIG_DIRECTORY}"
+    chmod 0710 "${CONFIG_DIRECTORY}"
+
     install \
         -o root \
-        -g root \
-        -m 0644 \
+        -g carequeue \
+        -m 0640 \
         "${SOURCE_DIRECTORY}/deployment/linux/Caddyfile" \
         "${CONFIG_DIRECTORY}/Caddyfile"
+
+    python3 \
+        - "${CONFIG_DIRECTORY}/Caddyfile" \
+        "${caddy_site_addresses}" <<'PY'
+from pathlib import Path
+import sys
+
+config_path = Path(sys.argv[1])
+site_addresses = sys.argv[2]
+
+content = config_path.read_text(encoding="utf-8")
+
+expected = "careqflow.local {"
+
+if expected not in content:
+    raise SystemExit(
+        "CareQFlow Caddy configuration does not contain "
+        "the expected site address."
+    )
+
+content = content.replace(
+    expected,
+    f"{site_addresses} {{",
+    1,
+)
+
+config_path.write_text(
+    content,
+    encoding="utf-8",
+)
+PY
 
     caddy validate \
         --config "${CONFIG_DIRECTORY}/Caddyfile" \
@@ -659,6 +842,22 @@ configure_local_hostname() {
 
     printf '\n127.0.0.1 careqflow.local # CareQFlow\n' \
         >> "${hosts_file}"
+}
+
+configure_network_access() {
+    printf 'Configuring CareQFlow network access...\n'
+
+    if [[ ! -f "${NETWORK_ACCESS_SCRIPT}" ]]; then
+        fail \
+            "CareQFlow network access script was not found: " \
+            "${NETWORK_ACCESS_SCRIPT}"
+    fi
+
+    bash \
+        "${NETWORK_ACCESS_SCRIPT}" \
+        --network-mode "${NETWORK_MODE}" \
+        --application-origin "${APPLICATION_ORIGIN}" \
+        --config-directory "${CONFIG_DIRECTORY}"
 }
 
 start_services() {
@@ -703,6 +902,35 @@ trust_caddy_root_certificate() {
     done
 
     fail "Unable to trust the CareQFlow Caddy root certificate."
+}
+
+export_client_trust() {
+    local client_trust_directory
+
+    client_trust_directory="${DATA_DIRECTORY}/ClientTrust"
+
+    if [[ "${NETWORK_MODE}" != "SecureLan" ]]; then
+        rm -rf "${client_trust_directory}"
+
+        printf '%s\n' \
+            "CareQFlow Secure LAN client trust export is disabled."
+
+        return
+    fi
+
+    printf 'Preparing CareQFlow Secure LAN client trust package...\n'
+
+    if [[ ! -f "${CLIENT_TRUST_EXPORT_SCRIPT}" ]]; then
+        fail \
+            "CareQFlow client trust export script was not found: " \
+            "${CLIENT_TRUST_EXPORT_SCRIPT}"
+    fi
+
+    bash \
+        "${CLIENT_TRUST_EXPORT_SCRIPT}" \
+        --data-directory "${DATA_DIRECTORY}" \
+        --output-directory "${client_trust_directory}" \
+        --application-origin "${APPLICATION_ORIGIN}"
 }
 
 validate_services() {
@@ -773,8 +1001,10 @@ validate_post_installation_health() {
     printf 'Running CareQFlow post installation validation...\n'
 
     local application_origin
+    local local_application_origin
 
     application_origin="${APPLICATION_ORIGIN%/}"
+    local_application_origin="${LOCAL_APPLICATION_ORIGIN%/}"
 
     validate_services
 
@@ -789,6 +1019,20 @@ validate_post_installation_health() {
     validate_http_endpoint \
         "API readiness health check" \
         "${application_origin}/api/health/ready"
+
+    if [[ "${NETWORK_MODE}" == "SecureLan" ]]; then
+        validate_http_endpoint \
+            "Local HTTPS frontend" \
+            "${local_application_origin}/"
+
+        validate_http_endpoint \
+            "Local API live health check" \
+            "${local_application_origin}/api/health/live"
+
+        validate_http_endpoint \
+            "Local API readiness health check" \
+            "${local_application_origin}/api/health/ready"
+    fi
 
     printf 'CareQFlow post installation validation completed successfully.\n'
 }
@@ -806,6 +1050,9 @@ validate_source() {
         "deployment/linux/systemd/carequeue-backup.service"
         "deployment/linux/systemd/carequeue-backup.timer"
         "deployment/linux/systemd/carequeue-caddy.service"
+        "deployment/linux/networking/Set-CareQFlowNetworkAccess.sh"
+        "deployment/linux/networking/Export-CareQFlowClientTrust.sh"
+        "deployment/linux/networking/Install-CareQFlowClientTrust.sh"
     )
 
     local relative_path
@@ -819,7 +1066,9 @@ validate_source() {
 
 main() {
     require_root
+    validate_network_mode
     validate_application_origin
+    validate_secure_lan_origin
     validate_release_metadata
     detect_distribution
     validate_source
@@ -835,8 +1084,10 @@ main() {
     disable_default_caddy_service
     install_caddy_configuration
     configure_local_hostname
+    configure_network_access
     start_services
     trust_caddy_root_certificate
+    export_client_trust
     validate_post_installation_health
 
     printf '\n'

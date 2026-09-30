@@ -6,6 +6,12 @@ INSTALL_DIRECTORY="${INSTALL_DIRECTORY:-/opt/carequeue}"
 DATA_DIRECTORY="${DATA_DIRECTORY:-/var/lib/carequeue}"
 CONFIG_DIRECTORY="${CONFIG_DIRECTORY:-/etc/carequeue}"
 LOG_DIRECTORY="${LOG_DIRECTORY:-/var/log/carequeue}"
+SCRIPT_DIRECTORY="$(
+    cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1
+    pwd
+)"
+
+NETWORK_ACCESS_SCRIPT="${SCRIPT_DIRECTORY}/networking/Set-CareQFlowNetworkAccess.sh"
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -16,6 +22,21 @@ require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         fail "CareQFlow uninstall must be run as root."
     fi
+}
+
+remove_network_access() {
+    printf 'Removing CareQFlow managed network access...\n'
+
+    if [[ ! -f "${NETWORK_ACCESS_SCRIPT}" ]]; then
+        printf '%s\n' \
+            "CareQFlow network access script was not found; skipping firewall cleanup."
+        return
+    fi
+
+    bash \
+        "${NETWORK_ACCESS_SCRIPT}" \
+        --network-mode LocalOnly \
+        --config-directory "${CONFIG_DIRECTORY}"
 }
 
 stop_services() {
@@ -82,6 +103,7 @@ print_preserved_data() {
 
 main() {
     require_root
+    remove_network_access
     stop_services
     remove_systemd_units
     remove_application_files

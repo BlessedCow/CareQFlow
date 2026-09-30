@@ -1,6 +1,6 @@
 # Roadmap
 
-CareQFlow is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, an Android client, controlled upgrades, and failed-upgrade rollback workflows are in place.
+CareQFlow is under active development. The core authorization workflow, local authentication, MFA, session hardening, governance controls, encrypted storage and backups, PDF-assisted intake, packaged Windows and Linux deployment workflows, Windows Secure LAN hosting and client onboarding, an Android client, controlled upgrades, and failed-upgrade rollback workflows are in place.
 
 The current focus is release hardening, deployment validation, upgrade safety, maintainability, broader testing, and operational maturity.
 
@@ -427,21 +427,26 @@ Accessibility should be reviewed alongside each major frontend workflow.
 
 ## Later Work
 
-### Secure LAN hosting
+### Secure LAN follow-up
 
-A future deployment milestone will allow one CareQFlow host to serve approved clients on the same private network while retaining a single authoritative backend and SQLCipher database.
+Windows Secure LAN hosting and Windows client onboarding are implemented. One CareQFlow host can serve approved clients on the same trusted private network while retaining a single authoritative backend and SQLCipher database.
 
-This work should include:
+Implemented controls include:
 
-- Private-network hostname resolution for `careqflow.local`
-- Trusted HTTPS for every approved client device
-- Caddy network binding and firewall rules
+- Administrator-selected private IPv4 HTTPS origin
+- `careqflow.local` access on the host and enrolled Windows clients
+- Trusted HTTPS client onboarding with independent certificate fingerprint verification
+- Caddy network access on TCP 443 with Windows Private-profile and `LocalSubnet` firewall restrictions
 - Loopback-only FastAPI behind Caddy
-- Same-origin frontend/API behavior
-- Authentication, CSRF, session, and audit validation from remote clients
-- Explicit restriction of database access to the CareQFlow host
-- Android client validation against the LAN-hosted instance
-- Documentation for certificate distribution, network exposure, and recovery
+- Host-local SQLCipher database storage
+- Client onboarding that does not install a second CareQFlow backend or database
+
+Remaining follow-up includes:
+
+- Android client validation against a Secure LAN-hosted instance
+- Broader multi-device session and concurrency validation
+- Optional Tailscale-based private remote access without public port forwarding
+- Additional operational guidance for server-address changes and client re-onboarding
 
 The SQLCipher database must remain host-local rather than being placed on a network share.
 

@@ -4,6 +4,14 @@ set -Eeuo pipefail
 
 MODE="${1:-}"
 
+LOCAL_APPLICATION_ORIGIN="https://careqflow.local"
+
+REQUESTED_NETWORK_MODE=""
+REQUESTED_APPLICATION_ORIGIN=""
+
+RESOLVED_NETWORK_MODE=""
+RESOLVED_APPLICATION_ORIGIN=""
+
 INSTALL_DIRECTORY="${INSTALL_DIRECTORY:-/opt/carequeue}"
 DATA_DIRECTORY="${DATA_DIRECTORY:-/var/lib/carequeue}"
 CONFIG_DIRECTORY="${CONFIG_DIRECTORY:-/etc/carequeue}"
@@ -76,6 +84,146 @@ normalize_mode() {
             fail "Usage: $0 {install|upgrade|repair|rollback|uninstall}"
             ;;
     esac
+}
+
+parse_network_options() {
+    shift
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --network-mode)
+                if (( $# < 2 )); then
+                    fail "--network-mode requires a value."
+                fi
+
+                REQUESTED_NETWORK_MODE="$2"
+                shift 2
+                ;;
+
+            --application-origin)
+                if (( $# < 2 )); then
+                    fail "--application-origin requires a value."
+                fi
+
+                REQUESTED_APPLICATION_ORIGIN="$2"
+                shift 2
+                ;;
+
+            *)
+                fail \
+                    "Unknown installer option: $1. " \
+                    "Supported options are --network-mode and --application-origin."
+                ;;
+        esac
+    done
+}
+
+
+normalize_requested_network_mode() {
+    local normalized_mode
+
+    if [[ -z "${REQUESTED_NETWORK_MODE}" ]]; then
+        return
+    fi
+
+    normalized_mode="$(
+        printf '%s' "${REQUESTED_NETWORK_MODE}" |
+            tr '[:upper:]' '[:lower:]'
+    )"
+
+    case "${normalized_mode}" in
+        localonly)
+            REQUESTED_NETWORK_MODE="LocalOnly"
+            ;;
+
+        securelan)
+            REQUESTED_NETWORK_MODE="SecureLan"
+            ;;
+
+        *)
+            fail \
+                "Network mode must be LocalOnly or SecureLan. " \
+                "Received: ${REQUESTED_NETWORK_MODE}"
+            ;;
+    esac
+}
+
+
+resolve_network_configuration() {
+    local installed_network_mode=""
+    local installed_application_origin=""
+
+    if [[ "${MODE}" == "rollback" || "${MODE}" == "uninstall" ]]; then
+        return
+    fi
+
+    if [[ "${MODE}" == "install" ]]; then
+        RESOLVED_NETWORK_MODE="${REQUESTED_NETWORK_MODE:-LocalOnly}"
+
+        if [[ "${RESOLVED_NETWORK_MODE}" == "LocalOnly" ]]; then
+            if [[ -n "${REQUESTED_APPLICATION_ORIGIN}" ]] \
+                && [[ "${REQUESTED_APPLICATION_ORIGIN%/}" != "${LOCAL_APPLICATION_ORIGIN}" ]]; then
+                fail \
+                    "LocalOnly mode uses ${LOCAL_APPLICATION_ORIGIN}. " \
+                    "Do not provide a different application origin."
+            fi
+
+            RESOLVED_APPLICATION_ORIGIN="${LOCAL_APPLICATION_ORIGIN}"
+            return
+        fi
+
+        if [[ -z "${REQUESTED_APPLICATION_ORIGIN}" ]]; then
+            fail \
+                "SecureLan mode requires --application-origin using " \
+                "the CareQFlow host private IPv4 address."
+        fi
+
+        RESOLVED_APPLICATION_ORIGIN="${REQUESTED_APPLICATION_ORIGIN%/}"
+        return
+    fi
+
+    if [[ -f "${INSTALL_STATE_FILE}" ]]; then
+        installed_network_mode="$(
+            read_env_value \
+                "${INSTALL_STATE_FILE}" \
+                "CAREQUEUE_NETWORK_MODE"
+        )"
+
+        installed_application_origin="$(
+            read_env_value \
+                "${INSTALL_STATE_FILE}" \
+                "CAREQUEUE_APPLICATION_ORIGIN"
+        )"
+    fi
+
+    if [[ -z "${installed_network_mode}" ]]; then
+        installed_network_mode="LocalOnly"
+    fi
+
+    if [[ -z "${installed_application_origin}" ]]; then
+        installed_application_origin="${LOCAL_APPLICATION_ORIGIN}"
+    fi
+
+    RESOLVED_NETWORK_MODE="${REQUESTED_NETWORK_MODE:-${installed_network_mode}}"
+
+    if [[ "${RESOLVED_NETWORK_MODE}" == "LocalOnly" ]]; then
+        RESOLVED_APPLICATION_ORIGIN="${LOCAL_APPLICATION_ORIGIN}"
+        return
+    fi
+
+    if [[ -n "${REQUESTED_APPLICATION_ORIGIN}" ]]; then
+        RESOLVED_APPLICATION_ORIGIN="${REQUESTED_APPLICATION_ORIGIN%/}"
+        return
+    fi
+
+    if [[ "${installed_network_mode}" == "SecureLan" ]]; then
+        RESOLVED_APPLICATION_ORIGIN="${installed_application_origin%/}"
+        return
+    fi
+
+    fail \
+        "SecureLan mode requires --application-origin using " \
+        "the CareQFlow host private IPv4 address."
 }
 
 read_env_value() {
@@ -1629,7 +1777,12 @@ run_install_operation() {
         fail "CareQFlow production install script was not found: ${INSTALL_SCRIPT}"
     fi
 
-    bash "${INSTALL_SCRIPT}"
+    printf 'Network mode: %s\n' "${RESOLVED_NETWORK_MODE}"
+    printf 'Application origin: %s\n' "${RESOLVED_APPLICATION_ORIGIN}"
+
+    NETWORK_MODE="${RESOLVED_NETWORK_MODE}" \
+    APPLICATION_ORIGIN="${RESOLVED_APPLICATION_ORIGIN}" \
+        bash "${INSTALL_SCRIPT}"
 }
 
 run_uninstall_operation() {
@@ -1649,13 +1802,17 @@ run_initial_admin_setup() {
         fail "CareQFlow admin setup script was not installed."
     fi
 
-    bash "${admin_setup_script}"
+    APPLICATION_ORIGIN="${RESOLVED_APPLICATION_ORIGIN}" \
+        bash "${admin_setup_script}"
 }
 
 main() {
     require_root
     normalize_mode
+    parse_network_options "$@"
+    normalize_requested_network_mode
     validate_mode
+    resolve_network_configuration
     validate_upgrade_version
     require_license_acceptance
     resolve_failed_upgrade_recovery_record

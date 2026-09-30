@@ -20,14 +20,16 @@ A completed installation uses:
 - Bundled Caddy and WinSW service binaries
 - The CareQFlow API Windows service
 - The CareQFlow Caddy Windows service
+- Local-only or Secure LAN HTTPS access
 - The private HTTPS hostname `careqflow.local`
+- An administrator-selected private IPv4 address for Secure LAN access
 - SQLCipher-backed production storage
 - Runtime data under `C:\ProgramData\CareQueue`
 - Application files under `C:\Program Files\CareQueue`
 - A packaged first-time Admin setup workflow
 - A required organization governance attestation before normal protected application access
 
-The built-in Windows deployment is intended for a private workstation or restricted private network. It is not a public internet deployment template.
+The built-in Windows deployment supports either a private local-only workstation or approved clients on the same trusted private network through Secure LAN mode. It is not a public internet deployment template.
 
 CareQFlow's security controls do not establish HIPAA compliance by themselves. Before using real protected health information, review [SECURITY.md](../../SECURITY.md), [DISCLAIMER.md](../../DISCLAIMER.md), and the organization's legal, operational, and compliance requirements.
 
@@ -58,6 +60,66 @@ SQLCipher database under C:\ProgramData\CareQueue
 ```
 
 The browser should use the HTTPS application origin. The API remains bound to the loopback interface and should not be opened directly to the network.
+
+## Network Access Modes
+
+The packaged Windows installer supports two network access modes:
+
+```text
+LocalOnly
+SecureLan
+```
+
+### Local only
+
+Local-only mode is the default.
+
+The application is available on the CareQFlow host at:
+
+```text
+https://careqflow.local
+```
+
+The local hostname resolves to:
+
+```text
+127.0.0.1
+```
+
+No Secure LAN firewall rule is created.
+
+The FastAPI backend remains bound to:
+
+```text
+127.0.0.1:8000
+```
+
+### Secure LAN
+
+Secure LAN mode allows approved client devices on the same Windows Private network and local subnet to reach the CareQFlow host through Caddy over HTTPS.
+
+During installation, upgrade, or repair, the administrator selects the private IPv4 address that clients should use.
+
+For example:
+
+```text
+https://192.168.1.25
+```
+
+The exact address is administrator-selected and depends on the host network. It is not hardcoded by CareQFlow.
+
+In Secure LAN mode:
+
+- Caddy accepts both `https://careqflow.local` and the selected private IPv4 HTTPS origin.
+- FastAPI remains bound only to `127.0.0.1:8000`.
+- Windows Firewall permits inbound TCP 443 only on the Private profile from `LocalSubnet`.
+- TCP 8000 is not opened to the network.
+- The SQLCipher database remains on the CareQFlow host.
+- Client devices do not install a separate CareQFlow backend or database.
+
+Do not use router port forwarding to expose the Secure LAN listener directly to the public internet.
+
+For reliable client access, the CareQFlow host should use a stable private address. A DHCP reservation or appropriately managed static address is recommended so the administrator-selected address does not change unexpectedly.
 
 ## Installed Locations
 
@@ -544,40 +606,41 @@ The governance workflow records the organization, deployment mode, accepting Adm
 
 The governance workflow supports organizational accountability. It does not itself execute a Business Associate Agreement, establish HIPAA compliance, or replace required administrative, physical, technical, contractual, or legal safeguards.
 
-## Choose a Private Application Origin
+## Application Origins
 
-The packaged installer currently uses:
+The packaged Windows installer selects the application origin according to the configured network mode.
 
-```text
-https://careqflow.local
-```
+### Local-only origin
 
-The production origin must be an HTTPS origin. For the current private single-machine installation, use:
+Local-only installations use:
 
 ```text
 https://careqflow.local
 ```
 
-The origin must contain only:
+### Secure LAN origin
 
-- `https`
-- A hostname
-- An optional port
+Secure LAN installations use the administrator-selected private IPv4 address as the client-facing network origin.
 
-It must not contain:
+Example:
 
-- A path
-- Credentials
-- A query string
-- A fragment
+```text
+https://192.168.1.25
+```
 
-Valid example:
+The actual address depends on the host network.
+
+Secure LAN installations also preserve:
 
 ```text
 https://careqflow.local
 ```
 
-Invalid examples:
+for convenient access on the CareQFlow host and on enrolled Windows clients.
+
+Application origins must use HTTPS on port 443 and must not contain a path, credentials, query string, or fragment.
+
+Invalid examples include:
 
 ```text
 http://careqflow.local
@@ -586,45 +649,98 @@ https://user@careqflow.local
 https://careqflow.local?mode=prod
 ```
 
-Do not use `https://localhost` for the current production configuration. Production CORS validation rejects local development hosts.
+Do not use `https://localhost` for production access.
 
 ## Private Hostname Configuration
 
-The packaged Windows installer configures the local CareQFlow hostname for the default private installation:
-
-```text
-careqflow.local
-```
-
-The expected local mapping is:
+The CareQFlow host always maintains the local mapping:
 
 ```text
 127.0.0.1 careqflow.local
 ```
 
-Confirm name resolution after installation:
-
-```powershell
-ping careqflow.local
-```
-
-The hostname should resolve to:
+This allows the server itself to use:
 
 ```text
-127.0.0.1
+https://careqflow.local
 ```
 
-This local mapping does not publish CareQFlow to the internet. It provides a stable private hostname for the local HTTPS deployment.
+even when Secure LAN mode is enabled.
 
-If the hostname does not resolve after installation, review the installer log and the Windows hosts file:
+In Secure LAN mode, enrolled Windows client devices can also use the friendly hostname:
 
 ```text
-C:\Windows\System32\drivers\etc\hosts
+https://careqflow.local
 ```
 
-Do not add duplicate or conflicting `careqflow.local` entries.
+The client onboarding process maps that hostname to the administrator-selected CareQFlow server address.
 
-A broader restricted-network deployment using internal DNS requires separate deployment planning. The packaged Windows Caddy configuration is designed around the private `careqflow.local` deployment and should not be treated as a general-purpose network or public-internet configuration.
+For example, if the administrator selected:
+
+```text
+192.168.1.25
+```
+
+the client mapping becomes:
+
+```text
+192.168.1.25 careqflow.local
+```
+
+The mapping is generated from the selected application origin. CareQFlow does not hardcode a particular private IP address.
+
+Do not add duplicate or conflicting `careqflow.local` entries manually.
+
+## Secure LAN Client Onboarding
+
+A Secure LAN installation exports a Windows client trust package under:
+
+```text
+C:\ProgramData\CareQueue\ClientTrust
+```
+
+The package contains:
+
+```text
+CareQFlow-Root-CA.crt
+CLIENT-ONBOARDING.txt
+Install-CareQFlowClientTrust.ps1
+SHA256SUMS.txt
+```
+
+The package contains the public CareQFlow certificate authority certificate and onboarding utilities. It does not contain the CareQFlow backend, database, or private CA key.
+
+Copy the entire `ClientTrust` folder to an approved Windows client using a trusted method.
+
+Before installing the certificate, independently verify the SHA-256 certificate fingerprint with the CareQFlow administrator.
+
+Follow the command generated in:
+
+```text
+CLIENT-ONBOARDING.txt
+```
+
+The generated command:
+
+- Verifies the supplied certificate fingerprint.
+- Installs the verified CareQFlow root certificate into the Local Machine trusted root store.
+- Uses the administrator-selected Secure LAN origin.
+- Adds or updates the client's `careqflow.local` hostname mapping.
+- Flushes the Windows DNS client cache.
+- Can be rerun safely when the certificate is already trusted.
+
+After onboarding, an approved Windows client should be able to use both:
+
+```text
+https://careqflow.local
+https://<selected-private-ip>
+```
+
+Both addresses connect to the same CareQFlow host and the same authoritative SQLCipher database.
+
+A client device does not need a separate CareQFlow installation.
+
+If the CareQFlow server's private IPv4 address changes, regenerate the onboarding package through the supported installer or repair workflow and rerun client onboarding so the hostname mapping reflects the new address.
 
 ## Development Environment Files
 
@@ -691,10 +807,26 @@ Invoke-RestMethod `
     -TimeoutSec 5
 ```
 
-Open the application through the approved HTTPS origin:
+Open the application through the approved HTTPS origin.
+
+For local-only installations:
 
 ```text
 https://careqflow.local
+```
+
+For Secure LAN installations, verify both on the CareQFlow host:
+
+```text
+https://careqflow.local
+https://<selected-private-ip>
+```
+
+Then verify from at least one enrolled client:
+
+```text
+https://careqflow.local
+https://<selected-private-ip>
 ```
 
 Confirm:
@@ -933,6 +1065,9 @@ At minimum, test:
 - Fresh install on a clean Windows 11 VM
 - First-time Admin setup with no existing users
 - Browser access to `https://careqflow.local`
+- Secure LAN access from an approved second Windows device when Secure LAN mode is enabled
+- Client certificate trust and friendly-hostname onboarding when Secure LAN mode is enabled
+- Direct HTTPS access through the administrator-selected private IPv4 address when Secure LAN mode is enabled
 - Governance attestation after first Admin login
 - Login and logout
 - TOTP MFA enrollment and login

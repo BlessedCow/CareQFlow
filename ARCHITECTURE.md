@@ -840,19 +840,27 @@ When a supported Upgrade fails after the recovery state has been created, Rollba
 
 Uninstall removes Windows services and installed application files while preserving runtime data under ProgramData.
 
-### Private HTTPS
+### Private HTTPS and Secure LAN
 
-A private Windows installation can use a local hostname such as:
+Windows deployment supports two network modes: `LocalOnly` and `SecureLan`.
+
+Local-only installations use:
 
 ```text
 https://careqflow.local
 ```
 
-The hostname resolves locally, and Caddy issues a certificate through its local certificate authority.
+with the hostname mapped to loopback on the CareQFlow host.
 
-The Caddy root certificate must be trusted by the operating system or managed through an appropriate organizational certificate process.
+Secure LAN installations retain `https://careqflow.local` while also exposing Caddy on an administrator-selected RFC1918 IPv4 HTTPS origin for approved clients on the same Windows Private network and local subnet. FastAPI remains bound to `127.0.0.1:8000`, and the SQLCipher database remains host-local.
 
-This setup is private to the configured machine or network. It is not a public internet deployment.
+The Secure LAN firewall rule permits inbound TCP 443 only on the Windows Private profile from `LocalSubnet`. The backend API port is not opened directly to the network.
+
+Secure LAN client onboarding exports the public Caddy root certificate, certificate fingerprint information, and a Windows trust-installation script. The client installer can also map `careqflow.local` to the administrator-selected server address, so enrolled Windows clients can use the friendly hostname without maintaining a second CareQFlow backend or database.
+
+The Caddy root certificate must be trusted only on approved client systems or managed through an appropriate organizational certificate process. A stable private server address, such as one maintained with a DHCP reservation or appropriately managed static configuration, is recommended.
+
+This setup is private to the configured machine or trusted private network. It is not a public internet deployment.
 
 ## Linux Deployment
 

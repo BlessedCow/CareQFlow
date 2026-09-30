@@ -50,6 +50,9 @@ $requiredPaths = @(
     "deployment\linux\systemd\carequeue-caddy.service"
     "deployment\linux\systemd\carequeue-backup.service"
     "deployment\linux\systemd\carequeue-backup.timer"
+    "deployment\linux\networking\Set-CareQFlowNetworkAccess.sh"
+    "deployment\linux\networking\Export-CareQFlowClientTrust.sh"
+    "deployment\linux\networking\Install-CareQFlowClientTrust.sh"
 )
 
 Write-Host "Validating CareQFlow Linux payload sources..."
@@ -107,11 +110,11 @@ $licenseNoticeDestination = Join-Path `
     $stagingDirectory `
     "LICENSE"
 
+<#
 $licenseTextsDestination = Join-Path `
     $stagingDirectory `
     "LICENSES"
 
-<#
 $deploymentDestination = Join-Path `
     $stagingDirectory `
     "deployment"

@@ -217,6 +217,10 @@ The current Windows deployment can:
 - Run the FastAPI backend as a Windows service
 - Serve the frontend and proxy `/api` through Caddy
 - Provide private HTTPS through a local hostname such as `careqflow.local`
+- Optionally serve approved Windows clients on the same trusted private network through Secure LAN mode
+- Keep FastAPI bound to loopback while Caddy handles HTTPS client access
+- Restrict Secure LAN firewall access to TCP 443 on the Windows Private profile from `LocalSubnet`
+- Export a client trust package with certificate fingerprint verification and friendly-hostname onboarding
 - Offer installer modes for Install, Upgrade, Repair, Rollback, and Uninstall
 - Preserve runtime data during uninstall
 - Preserve verified pre-upgrade application and database recovery assets during upgrades
@@ -228,6 +232,8 @@ The current Windows deployment can:
 - Install scheduled encrypted backups
 
 The packaged Windows installer is intended to be the normal private Windows installation path. The lower-level PowerShell scripts remain useful for development, troubleshooting, and direct validation of installer modes.
+
+Windows installations can remain local-only or enable Secure LAN mode. Secure LAN keeps a single authoritative CareQFlow host and SQLCipher database while approved client devices connect through Caddy over HTTPS. The server address is selected by the administrator and is not hardcoded.
 
 The production installer is intended for private or restricted-network use. It should not be treated as a public internet deployment template without additional review and hardening.
 
