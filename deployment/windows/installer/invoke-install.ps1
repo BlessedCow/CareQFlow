@@ -15,7 +15,8 @@ param(
 
     [ValidateSet(
         "LocalOnly",
-        "SecureLan"
+        "SecureLan",
+        "Tailscale"
     )]
 
     [string]$NetworkMode,
@@ -151,12 +152,47 @@ function Test-CareQFlowPrivateLanIPv4Address {
 }
 
 
+function Test-CareQFlowTailscaleIPv4Address {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Address
+    )
+
+    $parsedAddress = $null
+
+    if (
+        -not [Net.IPAddress]::TryParse(
+            $Address,
+            [ref]$parsedAddress
+        )
+    ) {
+        return $false
+    }
+
+    if (
+        $parsedAddress.AddressFamily -ne
+        [Net.Sockets.AddressFamily]::InterNetwork
+    ) {
+        return $false
+    }
+
+    $bytes = $parsedAddress.GetAddressBytes()
+
+    return (
+        $bytes[0] -eq 100 `
+            -and $bytes[1] -ge 64 `
+            -and $bytes[1] -le 127
+    )
+}
+
+
 function Assert-CareQFlowNetworkOrigin {
     param(
         [Parameter(Mandatory)]
         [ValidateSet(
             "LocalOnly",
-            "SecureLan"
+            "SecureLan",
+            "Tailscale"
         )]
         [string]$NetworkMode,
 
@@ -164,7 +200,7 @@ function Assert-CareQFlowNetworkOrigin {
         [string]$ApplicationOrigin
     )
 
-    if ($NetworkMode -ne "SecureLan") {
+    if ($NetworkMode -eq "LocalOnly") {
         return
     }
 
@@ -173,7 +209,7 @@ function Assert-CareQFlowNetworkOrigin {
     }
     catch {
         throw (
-            "Secure LAN application origin is not a valid URI: " +
+            "$NetworkMode application origin is not a valid URI: " +
             $ApplicationOrigin
         )
     }
@@ -189,20 +225,35 @@ function Assert-CareQFlowNetworkOrigin {
             -or $applicationUri.Port -ne 443
     ) {
         throw (
-            "Secure LAN requires an HTTPS origin using the " +
+            "$NetworkMode requires an HTTPS origin using the " +
             "default HTTPS port with no path, query, or fragment."
         )
     }
 
+    if ($NetworkMode -eq "SecureLan") {
+        if (
+            -not (
+                Test-CareQFlowPrivateLanIPv4Address `
+                    -Address $applicationUri.Host
+            )
+        ) {
+            throw (
+                "Secure LAN requires a private IPv4 address in " +
+                "10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16."
+            )
+        }
+
+        return
+    }
+
     if (
         -not (
-            Test-CareQFlowPrivateLanIPv4Address `
+            Test-CareQFlowTailscaleIPv4Address `
                 -Address $applicationUri.Host
         )
     ) {
         throw (
-            "Secure LAN requires a private IPv4 address in " +
-            "10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16."
+            "Tailscale requires an IPv4 address in 100.64.0.0/10."
         )
     }
 }
@@ -534,7 +585,8 @@ function Get-CareQueueInstalledNetworkMode {
     if (
         $installedNetworkMode -notin @(
             "LocalOnly",
-            "SecureLan"
+            "SecureLan",
+            "Tailscale"
         )
     ) {
         throw (
@@ -2584,7 +2636,8 @@ function Assert-PostInstallationHealth {
         [Parameter(Mandatory)]
         [ValidateSet(
             "LocalOnly",
-            "SecureLan"
+            "SecureLan",
+            "Tailscale"
         )]
         [string]$NetworkMode,
 
@@ -2785,7 +2838,7 @@ function Assert-PostInstallationHealth {
             )
         }
     }
-    else {
+    elseif ($NetworkMode -eq "SecureLan") {
         if (
             -not (
                 Test-CareQFlowPrivateLanIPv4Address `
@@ -2810,6 +2863,36 @@ function Assert-PostInstallationHealth {
         if (-not $localLanAddress) {
             throw (
                 "Post-installation validation failed because the Secure LAN " +
+                "address '$applicationHostname' is not assigned to this " +
+                "CareQFlow host."
+            )
+        }
+    }
+    else {
+        if (
+            -not (
+                Test-CareQFlowTailscaleIPv4Address `
+                    -Address $applicationHostname
+            )
+        ) {
+            throw (
+                "Post-installation validation failed because Tailscale " +
+                "requires an IPv4 application origin in 100.64.0.0/10."
+            )
+        }
+    
+        $localTailscaleAddress = Get-NetIPAddress `
+            -AddressFamily IPv4 `
+            -IPAddress $applicationHostname `
+            -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.AddressState -eq "Preferred"
+        } |
+        Select-Object -First 1
+    
+        if (-not $localTailscaleAddress) {
+            throw (
+                "Post-installation validation failed because the Tailscale " +
                 "address '$applicationHostname' is not assigned to this " +
                 "CareQFlow host."
             )
@@ -4158,7 +4241,10 @@ try {
         -NetworkMode $resolvedNetworkMode
 
     if (
-        $resolvedNetworkMode -eq "SecureLan" `
+        $resolvedNetworkMode -in @(
+            "SecureLan",
+            "Tailscale"
+        ) `
             -and $Mode -in @(
             "Install",
             "Upgrade",
@@ -4182,7 +4268,7 @@ try {
             )
         }
         
-        "Preparing CareQFlow Secure LAN client trust material..." |
+        "Preparing CareQFlow client trust material..." |
         Tee-Object `
             -FilePath $logPath `
             -Append
@@ -4198,7 +4284,7 @@ try {
         }
         catch {
             throw (
-                "CareQFlow Secure LAN client trust export failed. " +
+                "CareQFlow client trust export failed. " +
                 "Error: $($_.Exception.Message)"
             )
         }

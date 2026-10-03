@@ -85,14 +85,26 @@ def test_production_installer_requires_client_trust_export_script():
     )
 
 
-def test_installer_exports_client_trust_only_for_secure_lan():
+def test_installer_exports_client_trust_for_networked_modes():
     content = _read(INSTALLER_WRAPPER)
 
-    assert '$resolvedNetworkMode -eq "SecureLan"' in content
+    assert "$resolvedNetworkMode -in @(" in content
+    assert '"SecureLan",' in content
+    assert '"Tailscale"' in content
     assert '"Install",' in content
     assert '"Upgrade",' in content
     assert '"Repair"' in content
     assert "Export-CareQFlowClientTrust.ps1" in content
+
+
+def test_client_trust_onboarding_supports_tailscale():
+    content = _read(CLIENT_TRUST_EXPORT)
+
+    assert '"CareQFlow Client Onboarding"' in content
+    assert (
+        '"- Tailscale access is limited by the configured '
+        'tailnet access policy."' in content
+    )
 
 
 def test_client_trust_export_runs_after_post_install_health():

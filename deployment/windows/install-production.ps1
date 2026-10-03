@@ -26,7 +26,8 @@ param(
 
     [ValidateSet(
         "LocalOnly",
-        "SecureLan"
+        "SecureLan",
+        "Tailscale"
     )]
 
     [string]$NetworkMode = "LocalOnly",
@@ -1633,6 +1634,7 @@ AUTHSTATUS_CSRF_HEADER_NAME=X-CSRF-Token
         -ExecutionPolicy Bypass `
         -File $networkAccessScript `
         -NetworkMode $NetworkMode `
+        -ApplicationOrigin $normalizedApplicationOrigin `
         -CaddyExecutable $installedCaddyExecutable
 
     if ($LASTEXITCODE -ne 0) {

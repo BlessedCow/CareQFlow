@@ -171,14 +171,13 @@ def test_linux_installer_migrates_legacy_default_application_origin():
         1
     ].split("\n}", maxsplit=1,)[0]
 
-    assert '-v application_origin="${APPLICATION_ORIGIN}"' in environment_function
+    assert '-v current_cors="${cors_origins}"' in environment_function
     assert (
         '$0 == "AUTHSTATUS_CORS_ORIGINS=[\\"https://carequeue.local\\"]"'
         in environment_function
     )
     assert (
-        'printf "AUTHSTATUS_CORS_ORIGINS=[\\"%s\\"]\\n", application_origin'
-        in environment_function
+        'printf "AUTHSTATUS_CORS_ORIGINS=%s\\n", current_cors' in environment_function
     )
 
 

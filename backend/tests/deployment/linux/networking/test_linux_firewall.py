@@ -32,6 +32,54 @@ def test_secure_lan_requires_active_firewall():
     assert "SecureLan requires an active UFW or firewalld firewall." in content
 
 
+def test_network_access_accepts_tailscale_mode():
+    content = _read(NETWORK_ACCESS_SCRIPT)
+
+    assert "LocalOnly|SecureLan|Tailscale" in content
+    assert "Network mode must be LocalOnly, SecureLan, or Tailscale." in content
+
+
+def test_tailscale_requires_installed_client():
+    content = _read(NETWORK_ACCESS_SCRIPT)
+
+    assert "command -v tailscale" in content
+    assert "Tailscale mode requires the Tailscale client to be installed." in content
+
+
+def test_tailscale_requires_cgnat_ipv4_origin():
+    content = _read(NETWORK_ACCESS_SCRIPT)
+
+    assert 'ipaddress.IPv4Network("100.64.0.0/10")' in content
+    assert "if address not in tailnet:" in content
+    assert (
+        "Tailscale mode requires an HTTPS origin using a "
+        "Tailscale IPv4 address." in content
+    )
+
+
+def test_tailscale_origin_must_match_local_tailscale_address():
+    content = _read(NETWORK_ACCESS_SCRIPT)
+
+    assert '["tailscale", "ip", "-4"]' in content
+    assert '"${application_ip}" != "${tailscale_ip}"' in content
+    assert "The selected Tailscale address is not assigned to this host." in content
+
+
+def test_tailscale_does_not_create_careqflow_lan_firewall_rule():
+    content = _read(NETWORK_ACCESS_SCRIPT)
+
+    tailscale_branch = content.split(
+        'if [[ "${NETWORK_MODE}" == "Tailscale" ]]; then',
+        maxsplit=1,
+    )[1].split("return", maxsplit=1,)[0]
+
+    assert "resolve_tailscale_ipv4" in tailscale_branch
+    assert "write_state" in tailscale_branch
+    assert "detect_active_firewall" not in tailscale_branch
+    assert "configure_ufw" not in tailscale_branch
+    assert "configure_firewalld" not in tailscale_branch
+
+
 def test_secure_lan_supports_ufw_and_firewalld():
     content = _read(NETWORK_ACCESS_SCRIPT)
 
@@ -137,3 +185,23 @@ def test_uninstall_removes_managed_network_access():
     services_index = content.index("stop_services\n")
 
     assert network_index < services_index
+
+
+def test_tailscale_lookup_has_timeout():
+    content = _read(NETWORK_ACCESS_SCRIPT)
+
+    function = content.split(
+        "resolve_tailscale_ipv4() {",
+        maxsplit=1,
+    )[1].split(
+        "\n}",
+        maxsplit=1,
+    )[0]
+
+    assert "subprocess.run(" in function
+    assert '["tailscale", "ip", "-4"]' in function
+    assert "timeout=10" in function
+    assert "except subprocess.TimeoutExpired:" in function
+    assert "raise SystemExit(124)" in function
+    assert '"${tailscale_status}" -eq 124' in function
+    assert "Tailscale did not respond within 10 seconds." in function

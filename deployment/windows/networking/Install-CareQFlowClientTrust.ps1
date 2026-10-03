@@ -80,8 +80,8 @@ function Set-CareQFlowClientHostname {
             -or $applicationUri.Scheme -ne "https" `
             -or $applicationUri.Port -ne 443 `
             -or -not $applicationUri.HostNameType.Equals(
-                [System.UriHostNameType]::IPv4
-            )
+            [System.UriHostNameType]::IPv4
+        )
     ) {
         throw (
             "CareQFlow client hostname configuration requires " +
@@ -98,20 +98,29 @@ function Set-CareQFlowClientHostname {
     $isPrivateAddress = (
         $bytes[0] -eq 10 `
             -or (
-                $bytes[0] -eq 172 `
-                    -and $bytes[1] -ge 16 `
-                    -and $bytes[1] -le 31
-            ) `
+            $bytes[0] -eq 172 `
+                -and $bytes[1] -ge 16 `
+                -and $bytes[1] -le 31
+        ) `
             -or (
-                $bytes[0] -eq 192 `
-                    -and $bytes[1] -eq 168
-            )
+            $bytes[0] -eq 192 `
+                -and $bytes[1] -eq 168
+        )
     )
-
-    if (-not $isPrivateAddress) {
+    
+    $isTailscaleAddress = (
+        $bytes[0] -eq 100 `
+            -and $bytes[1] -ge 64 `
+            -and $bytes[1] -le 127
+    )
+    
+    if (
+        -not $isPrivateAddress `
+            -and -not $isTailscaleAddress
+    ) {
         throw (
             "CareQFlow client hostname configuration requires " +
-            "a private RFC1918 IPv4 address."
+            "an RFC1918 or Tailscale IPv4 address."
         )
     }
 
@@ -149,7 +158,7 @@ function Set-CareQFlowClientHostname {
             if (
                 $parts.Count -ge 2 `
                     -and $parts[1..($parts.Count - 1)] `
-                        -contains $hostname
+                    -contains $hostname
             ) {
                 if (-not $mappingAdded) {
                     $updatedHostsContent += $replacementLine

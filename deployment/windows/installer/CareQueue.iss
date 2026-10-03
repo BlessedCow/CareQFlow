@@ -128,6 +128,19 @@ begin
     ) > 0
   ) then
     Result := 'SecureLan';
+  
+  if (
+    Pos(
+      '"network_mode": "Tailscale"',
+      StateText
+    ) > 0
+  ) or (
+    Pos(
+      '"network_mode":"Tailscale"',
+      StateText
+    ) > 0
+  ) then
+    Result := 'Tailscale';
 end;
 
 function ExtractJsonStringValue(
@@ -325,7 +338,7 @@ function GetApplicationOrigin(): String;
 var
   LanAddress: String;
 begin
-  if GetNetworkMode() <> 'SecureLan' then
+  if GetNetworkMode() = 'LocalOnly' then
   begin
     Result := CareQueueApplicationOrigin;
     exit;
@@ -362,7 +375,9 @@ begin
     exit;
   end;
 
-  if NetworkModePage.Values[1] then
+  if NetworkModePage.Values[2] then
+    SelectedNetworkMode := 'Tailscale'
+  else if NetworkModePage.Values[1] then
     SelectedNetworkMode := 'SecureLan'
   else
     SelectedNetworkMode := 'LocalOnly';
@@ -634,6 +649,28 @@ begin
           MB_YESNO
         ) = IDYES;
     end;
+
+        if SelectedNetworkMode = 'Tailscale' then
+    begin
+      Result :=
+        MsgBox(
+          'Tailscale access allows authorized devices in your ' +
+          'Tailscale network to reach CareQFlow over HTTPS.' +
+          Chr(13) + Chr(10) +
+          Chr(13) + Chr(10) +
+          'The Tailscale client must already be installed, ' +
+          'connected, and configured on this computer.' +
+          Chr(13) + Chr(10) +
+          Chr(13) + Chr(10) +
+          'CareQFlow does not configure your Tailscale account, ' +
+          'tailnet membership, or access policy.' +
+          Chr(13) + Chr(10) +
+          Chr(13) + Chr(10) +
+          'Enable Tailscale access?',
+          mbConfirmation,
+          MB_YESNO
+        ) = IDYES;
+    end;
   end;
 
   if (LanAddressPage <> nil) and
@@ -642,8 +679,8 @@ begin
     if Trim(LanAddressPage.Values[0]) = '' then
     begin
       MsgBox(
-        'Enter the private IPv4 address assigned to this ' +
-        'CareQFlow host.',
+        'Enter the IPv4 address assigned to this ' +
+        'CareQFlow host for the selected network mode.',
         mbError,
         MB_OK
       );
@@ -658,8 +695,8 @@ begin
     ) > 0 then
     begin
       MsgBox(
-        'Enter only the IPv4 address, such as 192.168.1.50. ' +
-        'Do not include https:// or a port.',
+        'Enter only the IPv4 address, such as 192.168.1.50 ' +
+        'or 100.64.10.20. Do not include https:// or a port.',
         mbError,
         MB_OK
       );
@@ -746,7 +783,7 @@ begin
     Result :=
       (OperationMode = 'Rollback') or
       (OperationMode = 'Uninstall') or
-      (GetNetworkMode() <> 'SecureLan');
+      (GetNetworkMode() = 'LocalOnly');
 
     exit;
   end;
@@ -827,7 +864,7 @@ begin
       'CareQFlow will be installed as two Windows services.' +
       Chr(13) + Chr(10) +
       'You can keep access local to this computer or enable ' +
-      'Secure LAN access for trusted devices.';
+      'Secure LAN or Tailscale access for trusted devices.';
 
     NetworkModeAfterPageId := wpWelcome;
   end;
@@ -837,8 +874,8 @@ begin
       NetworkModeAfterPageId,
       'Choose CareQFlow network access',
       'Select which devices can reach this CareQFlow installation.',
-      'Local only is the safest default. Secure LAN should only ' +
-      'be enabled on a trusted Windows Private network.',
+      'Local only is the safest default. Secure LAN is for trusted ' +
+      'private networks. Tailscale requires an existing tailnet.',
       True,
       False
     );
@@ -851,33 +888,40 @@ begin
     'Secure LAN - allow devices on the local private network'
   );
 
-  if (
-    CareQueueIsInstalled()
-  ) and (
-    GetInstalledNetworkMode() = 'SecureLan'
-  ) then
-    NetworkModePage.Values[1] := True
+  NetworkModePage.Add(
+    'Tailscale - allow authorized devices in the tailnet'
+  );
+
+  if CareQueueIsInstalled() then
+  begin
+    if GetInstalledNetworkMode() = 'Tailscale' then
+      NetworkModePage.Values[2] := True
+    else if GetInstalledNetworkMode() = 'SecureLan' then
+      NetworkModePage.Values[1] := True
+    else
+      NetworkModePage.Values[0] := True;
+  end
   else
     NetworkModePage.Values[0] := True;
 
   LanAddressPage :=
     CreateInputQueryPage(
       NetworkModePage.ID,
-      'Configure Secure LAN address',
-      'Enter the private IPv4 address of this CareQFlow host.',
-      'Use a stable private address assigned to this computer. ' +
-      'A DHCP reservation or static address is recommended.'
+      'Configure network address',
+      'Enter the IPv4 address of this CareQFlow host.',
+      'For Secure LAN, use the host private IPv4 address. ' +
+      'For Tailscale, use the host Tailscale IPv4 address.'
     );
 
   LanAddressPage.Add(
-    'Private IPv4 address:',
+    'IPv4 address:',
     False
   );
 
   if (
     CareQueueIsInstalled()
   ) and (
-    GetInstalledNetworkMode() = 'SecureLan'
+    GetInstalledNetworkMode() <> 'LocalOnly'
   ) then
     LanAddressPage.Values[0] := GetInstalledLanAddress();
 end;

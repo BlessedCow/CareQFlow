@@ -500,10 +500,10 @@ CareQFlow keeps the application release version in several backend and deploymen
 Use the repository helper before building a new release:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.5.0
+.\deployment\bump-version.ps1 -Version 0.7.0
 ```
 
-Replace `0.5.0` with the intended release version when preparing a later release.
+Replace `0.7.0` with the intended release version when preparing a later release.
 
 The helper updates the controlled version declarations used by the backend, Windows installer, Windows package validation, Windows payload metadata, and Linux release-package defaults.
 
@@ -556,7 +556,7 @@ After building the payload, compile the Inno Setup script:
 The default output is:
 
 ```text
-build\windows\installer\CareQFlow-Setup-0.5.0.exe
+build\windows\installer\CareQFlow-Setup-0.7.0.exe
 ```
 
 The exact filename follows the version configured in `CareQueue.iss`.
@@ -566,13 +566,13 @@ The exact filename follows the version configured in `CareQueue.iss`.
 Run the compiled installer:
 
 ```powershell
-.\build\windows\installer\CareQFlow-Setup-0.5.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.7.0.exe
 ```
 
 If PowerShell requires an explicit invocation path:
 
 ```powershell
-& "G:\CareQFlow\build\windows\installer\CareQFlow-Setup-0.5.0.exe"
+& "G:\CareQFlow\build\windows\installer\CareQFlow-Setup-0.7.0.exe"
 ```
 
 The installer requires administrator elevation because it installs services and writes to protected directories.

@@ -72,7 +72,7 @@ A normal uninstall is not secure data destruction.
 CareQFlow tracks three separate version values:
 
 ```text
-CareQFlow application version: 0.5.0
+CareQFlow application version: 0.7.0
 Governance attestation version: 1
 Governance document revision: governance-attestation-v1
 ```
@@ -207,10 +207,10 @@ Do not package or deploy:
 Use the repository release-version helper to update controlled application and installer version declarations:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.5.0
+.\deployment\bump-version.ps1 -Version 0.7.0
 ```
 
-Replace `0.5.0` with the intended release version when preparing a later release.
+Replace `0.7.0` with the intended release version when preparing a later release.
 
 The version helper intentionally does not rewrite arbitrary matching version strings in tests, dependency versions, documentation examples, or historical governance fixtures.
 
@@ -228,7 +228,7 @@ The packaged Windows installer is the normal Windows upgrade path.
 A versioned release has a filename such as:
 
 ```text
-CareQFlow-Setup-0.5.0.exe
+CareQFlow-Setup-0.7.0.exe
 ```
 
 The lower-level installer engine is:
@@ -438,10 +438,10 @@ Compile the Inno Setup installer:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQFlow `0.5.0`, the resulting artifact is:
+For CareQFlow `0.7.0`, the resulting artifact is:
 
 ```text
-build\windows\installer\CareQFlow-Setup-0.5.0.exe
+build\windows\installer\CareQFlow-Setup-0.7.0.exe
 ```
 
 Validate the release package:
@@ -455,7 +455,7 @@ Validate the release package:
 Launch the versioned installer:
 
 ```powershell
-.\build\windows\installer\CareQFlow-Setup-0.5.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.7.0.exe
 ```
 
 When an existing installation is detected, select:
@@ -648,7 +648,7 @@ CareQFlow includes a packaged Linux release workflow for supported Debian-based 
 The release archive has a filename such as:
 
 ```text
-CareQFlow-Linux-Setup-0.5.0.tar.gz
+CareQFlow-Linux-Setup-0.7.0.tar.gz
 ```
 
 The packaged entry point is:
@@ -828,7 +828,7 @@ npm --prefix frontend run build
 Build the Linux release archive:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.7.0
 ```
 
 After the repository version has already been bumped, the default version can be used:
@@ -837,10 +837,10 @@ After the repository version has already been bumped, the default version can be
 .\deployment\linux\installer\build-payload.ps1
 ```
 
-For CareQFlow `0.5.0`, the resulting artifact is:
+For CareQFlow `0.7.0`, the resulting artifact is:
 
 ```text
-build\linux\installer\CareQFlow-Linux-Setup-0.5.0.tar.gz
+build\linux\installer\CareQFlow-Linux-Setup-0.7.0.tar.gz
 ```
 
 The build script reports the package path, size, and SHA256 value.
@@ -851,7 +851,7 @@ On the target Linux system:
 
 ```bash
 mkdir carequeue-installer
-tar -xzf CareQFlow-Linux-Setup-0.5.0.tar.gz \
+tar -xzf CareQFlow-Linux-Setup-0.7.0.tar.gz \
   -C carequeue-installer
 cd carequeue-installer
 ```

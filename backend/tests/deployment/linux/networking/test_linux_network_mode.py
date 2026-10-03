@@ -43,8 +43,8 @@ def test_linux_network_mode_accepts_only_supported_modes():
         "validate_network_mode",
     )
 
-    assert "LocalOnly|SecureLan" in function
-    assert "Network mode must be LocalOnly or SecureLan." in function
+    assert "LocalOnly|SecureLan|Tailscale" in function
+    assert "Network mode must be LocalOnly, SecureLan, or Tailscale." in function
 
 
 def test_linux_secure_lan_requires_https_origin():
@@ -57,6 +57,41 @@ def test_linux_secure_lan_requires_https_origin():
 
     assert 'if [[ "${NETWORK_MODE}" != "SecureLan" ]]' in function
     assert 'parsed.scheme.lower() != "https"' in function
+
+
+def test_linux_tailscale_requires_https_origin():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "validate_tailscale_origin",
+    )
+
+    assert 'if [[ "${NETWORK_MODE}" != "Tailscale" ]]' in function
+    assert 'parsed.scheme.lower() != "https"' in function
+
+
+def test_linux_tailscale_accepts_only_cgnat_network():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "validate_tailscale_origin",
+    )
+
+    assert 'ipaddress.IPv4Network("100.64.0.0/10")' in function
+    assert "if address not in tailscale_network:" in function
+
+
+def test_linux_tailscale_requires_standard_https_port():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "validate_tailscale_origin",
+    )
+
+    assert "if port not in {None, 443}:" in function
 
 
 def test_linux_secure_lan_requires_ipv4():
@@ -155,7 +190,8 @@ def test_linux_wrapper_normalizes_supported_network_modes():
 
     assert 'REQUESTED_NETWORK_MODE="LocalOnly"' in function
     assert 'REQUESTED_NETWORK_MODE="SecureLan"' in function
-    assert "Network mode must be LocalOnly or SecureLan." in function
+    assert 'REQUESTED_NETWORK_MODE="Tailscale"' in function
+    assert "Network mode must be LocalOnly, SecureLan, or Tailscale." in function
 
 
 def test_linux_new_install_defaults_to_local_only():
@@ -182,6 +218,19 @@ def test_linux_secure_lan_install_requires_selected_origin():
     assert "SecureLan mode requires --application-origin" in function
 
 
+def test_linux_tailscale_install_requires_selected_origin():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "resolve_network_configuration",
+    )
+
+    assert 'RESOLVED_NETWORK_MODE}" == "Tailscale"' in function
+    assert "Tailscale mode requires --application-origin" in function
+    assert "the CareQFlow host Tailscale IPv4 address." in function
+
+
 def test_linux_upgrade_and_repair_read_installed_network_state():
     content = _read(LINUX_INSTALLER_WRAPPER)
 
@@ -206,7 +255,7 @@ def test_linux_legacy_install_defaults_to_local_only():
     assert 'installed_application_origin="${LOCAL_APPLICATION_ORIGIN}"' in function
 
 
-def test_linux_secure_lan_upgrade_preserves_existing_origin():
+def test_linux_networked_upgrade_preserves_existing_origin():
     content = _read(LINUX_INSTALLER_WRAPPER)
 
     function = _shell_function(
@@ -214,8 +263,21 @@ def test_linux_secure_lan_upgrade_preserves_existing_origin():
         "resolve_network_configuration",
     )
 
-    assert 'if [[ "${installed_network_mode}" == "SecureLan" ]]' in function
+    assert '[[ "${installed_network_mode}" == "SecureLan" ]]' in function
+    assert '[[ "${installed_network_mode}" == "Tailscale" ]]' in function
     assert 'RESOLVED_APPLICATION_ORIGIN="${installed_application_origin%/}"' in function
+
+
+def test_linux_switch_to_tailscale_requires_new_origin():
+    content = _read(LINUX_INSTALLER_WRAPPER)
+
+    function = _shell_function(
+        content,
+        "resolve_network_configuration",
+    )
+
+    assert 'if [[ "${RESOLVED_NETWORK_MODE}" == "Tailscale" ]]' in function
+    assert "Tailscale mode requires --application-origin using" in function
 
 
 def test_linux_wrapper_passes_network_configuration_to_installer():
@@ -277,7 +339,7 @@ def test_linux_cors_origins_are_local_only_by_default():
         "build_cors_origins",
     )
 
-    assert 'if [[ "${NETWORK_MODE}" == "SecureLan" ]]' in function
+    assert 'if [[ "${NETWORK_MODE}" != "LocalOnly" ]]' in function
     assert '"${LOCAL_APPLICATION_ORIGIN}"' in function
     assert '"${APPLICATION_ORIGIN%/}"' in function
 
@@ -296,7 +358,7 @@ def test_linux_existing_managed_cors_origins_are_migrated():
     assert 'current_cors="${cors_origins}"' in function
 
 
-def test_linux_caddy_uses_local_hostname_and_secure_lan_origin():
+def test_linux_caddy_uses_local_hostname_and_network_origin():
     content = _read(LINUX_PRODUCTION_INSTALLER)
 
     function = _shell_function(
@@ -305,7 +367,7 @@ def test_linux_caddy_uses_local_hostname_and_secure_lan_origin():
     )
 
     assert 'caddy_site_addresses="careqflow.local"' in function
-    assert 'if [[ "${NETWORK_MODE}" == "SecureLan" ]]' in function
+    assert 'if [[ "${NETWORK_MODE}" != "LocalOnly" ]]' in function
     assert 'application_authority="${APPLICATION_ORIGIN#https://}"' in function
     assert (
         'caddy_site_addresses="${caddy_site_addresses}, '
@@ -345,7 +407,7 @@ def test_linux_caddy_template_is_rewritten_before_validation():
     assert rewrite_index < validation_index
 
 
-def test_linux_secure_lan_health_checks_both_origins():
+def test_linux_networked_modes_health_check_both_origins():
     content = _read(LINUX_PRODUCTION_INSTALLER)
 
     function = _shell_function(
@@ -355,7 +417,7 @@ def test_linux_secure_lan_health_checks_both_origins():
 
     assert 'application_origin="${APPLICATION_ORIGIN%/}"' in function
     assert 'local_application_origin="${LOCAL_APPLICATION_ORIGIN%/}"' in function
-    assert 'if [[ "${NETWORK_MODE}" == "SecureLan" ]]' in function
+    assert 'if [[ "${NETWORK_MODE}" != "LocalOnly" ]]' in function
     assert '"${application_origin}/api/health/live"' in function
     assert '"${local_application_origin}/api/health/live"' in function
 

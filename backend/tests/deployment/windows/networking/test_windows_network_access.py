@@ -30,6 +30,7 @@ def test_windows_network_access_defaults_to_local_only():
 
     assert '"LocalOnly"' in content
     assert '"SecureLan"' in content
+    assert '"Tailscale"' in content
     assert '[string]$NetworkMode = "LocalOnly"' in content
 
 
@@ -75,6 +76,72 @@ def test_windows_local_only_removes_secure_lan_rule():
     assert "Enable-CareQFlowSecureLanFirewallRule" not in local_only_branch
 
 
+def test_windows_tailscale_removes_secure_lan_rule():
+    content = _read()
+
+    tailscale_branch = content.split(
+        '"Tailscale" {',
+        maxsplit=1,
+    )[1].split(
+        "default {",
+        maxsplit=1,
+    )[0]
+
+    assert "Remove-CareQFlowSecureLanFirewallRule" in tailscale_branch
+    assert "Assert-CareQFlowTailscaleAddress" in tailscale_branch
+    assert "Enable-CareQFlowSecureLanFirewallRule" not in tailscale_branch
+    assert "New-NetFirewallRule" not in tailscale_branch
+
+
+def test_windows_tailscale_accepts_only_cgnat_ipv4():
+    content = _read()
+
+    assert "function Test-CareQFlowTailscaleIPv4Address {" in content
+    assert "$bytes[0] -eq 100" in content
+    assert "$bytes[1] -ge 64" in content
+    assert "$bytes[1] -le 127" in content
+
+
+def test_windows_tailscale_requires_client():
+    content = _read()
+
+    function = content.split(
+        "function Assert-CareQFlowTailscaleAddress {",
+        maxsplit=1,
+    )[1].split("function Enable-CareQFlowSecureLanFirewallRule {", maxsplit=1,)[0]
+
+    assert 'Get-Command `\n        "tailscale.exe"' in function.replace(
+        "\r\n",
+        "\n",
+    )
+    assert "Tailscale mode requires the Tailscale client " in function
+
+
+def test_windows_tailscale_reads_local_ipv4():
+    content = _read()
+
+    function = content.split(
+        "function Assert-CareQFlowTailscaleAddress {",
+        maxsplit=1,
+    )[1].split("function Enable-CareQFlowSecureLanFirewallRule {", maxsplit=1,)[0]
+
+    assert '$processStartInfo.Arguments = "ip -4"' in function
+    assert "$applicationUri.Host -notin $tailscaleAddresses" in function
+    assert "The selected Tailscale address is not assigned " in function
+
+
+def test_windows_tailscale_requires_application_origin():
+    content = _read()
+
+    function = content.split(
+        "function Assert-CareQFlowTailscaleAddress {",
+        maxsplit=1,
+    )[1].split("function Enable-CareQFlowSecureLanFirewallRule {", maxsplit=1,)[0]
+
+    assert "[string]::IsNullOrWhiteSpace($ApplicationOrigin)" in function
+    assert "Tailscale mode requires ApplicationOrigin using " in function
+
+
 def test_windows_secure_lan_replaces_existing_rule():
     content = _read()
 
@@ -100,6 +167,71 @@ def test_windows_production_installer_defaults_to_local_only():
     assert '[string]$NetworkMode = "LocalOnly"' in content
     assert '"LocalOnly"' in content
     assert '"SecureLan"' in content
+    assert '"Tailscale"' in content
+
+
+def test_windows_installer_accepts_tailscale_network_mode():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    assert '"Tailscale"' in content
+
+    function = content.split(
+        "function Get-CareQueueInstalledNetworkMode {",
+        maxsplit=1,
+    )[1].split("function ", maxsplit=1,)[0]
+
+    assert '"Tailscale"' in function
+
+
+def test_tailscale_accepts_only_cgnat_ipv4_origins():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    assert "function Test-CareQFlowTailscaleIPv4Address {" in content
+    assert "$bytes[0] -eq 100" in content
+    assert "$bytes[1] -ge 64" in content
+    assert "$bytes[1] -le 127" in content
+
+    function = content.split(
+        "function Assert-CareQFlowNetworkOrigin {",
+        maxsplit=1,
+    )[
+        1
+    ].split("function ", maxsplit=1,)[0]
+
+    assert 'if ($NetworkMode -eq "SecureLan") {' in function
+    assert "Test-CareQFlowTailscaleIPv4Address" in function
+    assert "100.64.0.0/10" in function
+
+
+def test_tailscale_requires_https_port_443():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    function = content.split(
+        "function Assert-CareQFlowNetworkOrigin {",
+        maxsplit=1,
+    )[
+        1
+    ].split("function ", maxsplit=1,)[0]
+
+    assert '$applicationUri.Scheme -ne "https"' in function
+    assert "$applicationUri.Port -ne 443" in function
+
+
+def test_post_install_health_distinguishes_tailscale_from_secure_lan():
+    content = WINDOWS_INSTALLER_WRAPPER.read_text(encoding="utf-8")
+
+    function = content.split(
+        "function Assert-PostInstallationHealth {",
+        maxsplit=1,
+    )[
+        1
+    ].split("function ", maxsplit=1,)[0]
+
+    assert 'elseif ($NetworkMode -eq "SecureLan") {' in function
+    assert "Test-CareQFlowPrivateLanIPv4Address" in function
+    assert "Test-CareQFlowTailscaleIPv4Address" in function
+    assert "$localTailscaleAddress" in function
+    assert "100.64.0.0/10" in function
 
 
 def test_windows_production_installer_requires_network_access_script():
@@ -115,6 +247,7 @@ def test_windows_production_installer_applies_selected_network_mode():
 
     assert '"windows\\networking\\Set-CareQFlowNetworkAccess.ps1"' in content
     assert "-NetworkMode $NetworkMode" in content
+    assert "-ApplicationOrigin $normalizedApplicationOrigin" in content
     assert "-CaddyExecutable $installedCaddyExecutable" in content
 
 
@@ -240,3 +373,18 @@ def test_installer_always_registers_local_careqflow_hostname():
         '        -ApplicationOrigin "https://careqflow.local"'
         in content.replace("\r\n", "\n")
     )
+
+
+def test_windows_tailscale_lookup_has_timeout():
+    content = _read()
+
+    function = content.split(
+        "function Assert-CareQFlowTailscaleAddress {",
+        maxsplit=1,
+    )[1].split("function Enable-CareQFlowSecureLanFirewallRule {", maxsplit=1,)[0]
+
+    assert "System.Diagnostics.ProcessStartInfo" in function
+    assert '$processStartInfo.Arguments = "ip -4"' in function
+    assert "$tailscaleProcess.WaitForExit(10000)" in function
+    assert "$tailscaleProcess.Kill()" in function
+    assert "Tailscale did not respond within 10 seconds." in function

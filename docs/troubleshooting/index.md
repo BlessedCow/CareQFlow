@@ -638,10 +638,10 @@ docs/operations/upgrades.md
 Use the controlled release-version helper:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.5.0
+.\deployment\bump-version.ps1 -Version 0.7.0
 ```
 
-Replace `0.5.0` with the intended version when preparing a later release.
+Replace `0.7.0` with the intended version when preparing a later release.
 
 Review the resulting changes:
 

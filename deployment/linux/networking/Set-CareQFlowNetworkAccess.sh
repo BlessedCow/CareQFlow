@@ -57,11 +57,11 @@ parse_arguments() {
 
 validate_network_mode() {
     case "${NETWORK_MODE}" in
-        LocalOnly|SecureLan)
+        LocalOnly|SecureLan|Tailscale)
             ;;
         *)
             fail \
-                "Network mode must be LocalOnly or SecureLan."
+                "Network mode must be LocalOnly, SecureLan, or Tailscale."
             ;;
     esac
 }
@@ -225,6 +225,89 @@ PY
         "to a local network interface."
 }
 
+resolve_tailscale_ipv4() {
+    local application_ip
+    local tailscale_ip
+
+    command -v tailscale >/dev/null 2>&1 \
+        || fail \
+            "Tailscale mode requires the Tailscale client to be installed."
+
+    application_ip="$(
+        python3 - "${APPLICATION_ORIGIN}" <<'PY'
+import ipaddress
+import sys
+from urllib.parse import urlsplit
+
+parsed = urlsplit(sys.argv[1].strip())
+
+try:
+    address = ipaddress.IPv4Address(parsed.hostname or "")
+except ipaddress.AddressValueError:
+    raise SystemExit(1)
+
+tailnet = ipaddress.IPv4Network("100.64.0.0/10")
+
+if address not in tailnet:
+    raise SystemExit(1)
+
+print(address)
+PY
+    )" || fail \
+        "Tailscale mode requires an HTTPS origin using a Tailscale IPv4 address."
+
+    local tailscale_status=0
+
+    tailscale_ip="$(
+        python3 -c '
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise SystemExit(124)
+
+    if result.returncode != 0:
+        raise SystemExit(result.returncode or 1)
+
+    for line in result.stdout.splitlines():
+        address = line.strip()
+
+        if address:
+            print(address)
+            break
+    '
+    )" || tailscale_status=$?
+
+    if [[ "${tailscale_status}" -eq 124 ]]; then
+        fail \
+            "Tailscale did not respond within 10 seconds. " \
+            "Verify that the Tailscale service is running normally."
+    fi
+
+    if [[ "${tailscale_status}" -ne 0 || -z "${tailscale_ip}" ]]; then
+        fail \
+            "Tailscale is not connected or does not have an IPv4 address."
+    fi
+
+    if [[ "${application_ip}" != "${tailscale_ip}" ]]; then
+        fail \
+            "The selected Tailscale address is not assigned to this host."
+    fi
+
+    SECURE_LAN_INTERFACE=""
+    SECURE_LAN_SUBNET=""
+    FIREWALL_MANAGER=""
+    FIREWALL_ZONE=""
+    FIREWALL_RULE=""
+}
+
 detect_active_firewall() {
     if command -v ufw >/dev/null 2>&1 \
         && ufw status 2>/dev/null |
@@ -329,7 +412,18 @@ configure_network_access() {
 
     if [[ -z "${APPLICATION_ORIGIN}" ]]; then
         fail \
-            "SecureLan requires --application-origin."
+            "${NETWORK_MODE} requires --application-origin."
+    fi
+
+    if [[ "${NETWORK_MODE}" == "Tailscale" ]]; then
+        resolve_tailscale_ipv4
+        write_state
+
+        printf \
+            'CareQFlow Tailscale access enabled at %s. No CareQFlow LAN firewall rule was created.\n' \
+            "${APPLICATION_ORIGIN}"
+
+        return
     fi
 
     command -v ip >/dev/null 2>&1 \

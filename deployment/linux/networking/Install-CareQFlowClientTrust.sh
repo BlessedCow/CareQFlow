@@ -110,20 +110,21 @@ try:
 except ipaddress.AddressValueError:
     raise SystemExit(1)
 
-private_networks = (
+supported_networks = (
     ipaddress.IPv4Network("10.0.0.0/8"),
     ipaddress.IPv4Network("172.16.0.0/12"),
     ipaddress.IPv4Network("192.168.0.0/16"),
+    ipaddress.IPv4Network("100.64.0.0/10"),
 )
 
-if not any(address in network for network in private_networks):
+if not any(address in network for network in supported_networks):
     raise SystemExit(1)
 
 print(address)
 PY
     )" || fail \
         "CareQFlow client hostname configuration requires an HTTPS " \
-        "RFC1918 IPv4 application origin on port 443."
+        "RFC1918 or Tailscale IPv4 application origin on port 443."
 
     APPLICATION_ORIGIN="${APPLICATION_ORIGIN%/}"
 }

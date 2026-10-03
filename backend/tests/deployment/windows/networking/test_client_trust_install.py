@@ -172,3 +172,13 @@ def test_existing_certificate_does_not_exit_before_hostname_configuration():
 
     assert "exit 0" not in existing_branch
     assert "Set-CareQFlowClientHostname" in content
+
+
+def test_client_hostname_accepts_tailscale_ipv4():
+    content = CLIENT_TRUST_INSTALLER.read_text(encoding="utf-8")
+
+    assert "$isTailscaleAddress" in content
+    assert "$bytes[0] -eq 100" in content
+    assert "$bytes[1] -ge 64" in content
+    assert "$bytes[1] -le 127" in content
+    assert "an RFC1918 or Tailscale IPv4 address." in content

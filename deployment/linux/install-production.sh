@@ -45,11 +45,11 @@ require_root() {
 
 validate_network_mode() {
     case "${NETWORK_MODE}" in
-        LocalOnly|SecureLan)
+        LocalOnly|SecureLan|Tailscale)
             ;;
         *)
             fail \
-                "Network mode must be LocalOnly or SecureLan. " \
+                "Network mode must be LocalOnly, SecureLan, or Tailscale. " \
                 "Received: ${NETWORK_MODE}"
             ;;
     esac
@@ -109,6 +109,59 @@ PY
         fail \
             "SecureLan requires an HTTPS origin using a private " \
             "RFC1918 IPv4 address on port 443."
+    fi
+}
+
+validate_tailscale_origin() {
+    if [[ "${NETWORK_MODE}" != "Tailscale" ]]; then
+        return
+    fi
+
+    if ! python3 - "${APPLICATION_ORIGIN}" <<'PY'
+import ipaddress
+import sys
+from urllib.parse import urlsplit
+
+origin = sys.argv[1].strip()
+
+try:
+    parsed = urlsplit(origin)
+    port = parsed.port
+except ValueError:
+    raise SystemExit(1)
+
+if parsed.scheme.lower() != "https":
+    raise SystemExit(1)
+
+if not parsed.hostname:
+    raise SystemExit(1)
+
+if parsed.username is not None or parsed.password is not None:
+    raise SystemExit(1)
+
+if parsed.path not in {"", "/"}:
+    raise SystemExit(1)
+
+if parsed.query or parsed.fragment:
+    raise SystemExit(1)
+
+if port not in {None, 443}:
+    raise SystemExit(1)
+
+try:
+    address = ipaddress.IPv4Address(parsed.hostname)
+except ipaddress.AddressValueError:
+    raise SystemExit(1)
+
+tailscale_network = ipaddress.IPv4Network("100.64.0.0/10")
+
+if address not in tailscale_network:
+    raise SystemExit(1)
+PY
+    then
+        fail \
+            "Tailscale requires an HTTPS origin using a " \
+            "100.64.0.0/10 IPv4 address on port 443."
     fi
 }
 
@@ -490,7 +543,7 @@ read_install_state_value() {
 }
 
 build_cors_origins() {
-    if [[ "${NETWORK_MODE}" == "SecureLan" ]]; then
+    if [[ "${NETWORK_MODE}" != "LocalOnly" ]]; then
         printf \
             '["%s","%s"]\n' \
             "${LOCAL_APPLICATION_ORIGIN}" \
@@ -756,7 +809,7 @@ install_caddy_configuration() {
 
     caddy_site_addresses="careqflow.local"
 
-    if [[ "${NETWORK_MODE}" == "SecureLan" ]]; then
+    if [[ "${NETWORK_MODE}" != "LocalOnly" ]]; then
         application_authority="${APPLICATION_ORIGIN#https://}"
         application_authority="${application_authority%/}"
 
@@ -909,16 +962,16 @@ export_client_trust() {
 
     client_trust_directory="${DATA_DIRECTORY}/ClientTrust"
 
-    if [[ "${NETWORK_MODE}" != "SecureLan" ]]; then
+    if [[ "${NETWORK_MODE}" == "LocalOnly" ]]; then
         rm -rf "${client_trust_directory}"
 
         printf '%s\n' \
-            "CareQFlow Secure LAN client trust export is disabled."
+            "CareQFlow client trust export is disabled for LocalOnly mode."
 
         return
     fi
 
-    printf 'Preparing CareQFlow Secure LAN client trust package...\n'
+    printf 'Preparing CareQFlow client trust package...\n'
 
     if [[ ! -f "${CLIENT_TRUST_EXPORT_SCRIPT}" ]]; then
         fail \
@@ -1020,7 +1073,7 @@ validate_post_installation_health() {
         "API readiness health check" \
         "${application_origin}/api/health/ready"
 
-    if [[ "${NETWORK_MODE}" == "SecureLan" ]]; then
+    if [[ "${NETWORK_MODE}" != "LocalOnly" ]]; then
         validate_http_endpoint \
             "Local HTTPS frontend" \
             "${local_application_origin}/"
@@ -1069,6 +1122,7 @@ main() {
     validate_network_mode
     validate_application_origin
     validate_secure_lan_origin
+    validate_tailscale_origin
     validate_release_metadata
     detect_distribution
     validate_source

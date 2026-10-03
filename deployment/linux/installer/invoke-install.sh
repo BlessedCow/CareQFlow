@@ -140,9 +140,13 @@ normalize_requested_network_mode() {
             REQUESTED_NETWORK_MODE="SecureLan"
             ;;
 
+        tailscale)
+            REQUESTED_NETWORK_MODE="Tailscale"
+            ;;
+
         *)
             fail \
-                "Network mode must be LocalOnly or SecureLan. " \
+                "Network mode must be LocalOnly, SecureLan, or Tailscale. " \
                 "Received: ${REQUESTED_NETWORK_MODE}"
             ;;
     esac
@@ -173,6 +177,12 @@ resolve_network_configuration() {
         fi
 
         if [[ -z "${REQUESTED_APPLICATION_ORIGIN}" ]]; then
+            if [[ "${RESOLVED_NETWORK_MODE}" == "Tailscale" ]]; then
+                fail \
+                    "Tailscale mode requires --application-origin using" \
+                    "the CareQFlow host Tailscale IPv4 address."
+            fi
+
             fail \
                 "SecureLan mode requires --application-origin using " \
                 "the CareQFlow host private IPv4 address."
@@ -216,9 +226,18 @@ resolve_network_configuration() {
         return
     fi
 
-    if [[ "${installed_network_mode}" == "SecureLan" ]]; then
-        RESOLVED_APPLICATION_ORIGIN="${installed_application_origin%/}"
-        return
+    if [[ "${installed_network_mode}" == "${RESOLVED_NETWORK_MODE}" ]]; then
+        if [[ "${installed_network_mode}" == "SecureLan" ]] \
+            || [[ "${installed_network_mode}" == "Tailscale" ]]; then
+            RESOLVED_APPLICATION_ORIGIN="${installed_application_origin%/}"
+            return
+        fi
+    fi
+
+    if [[ "${RESOLVED_NETWORK_MODE}" == "Tailscale" ]]; then
+        fail \
+            "Tailscale mode requires --application-origin using" \
+            "the CareQFlow host Tailscale IPv4 address."
     fi
 
     fail \

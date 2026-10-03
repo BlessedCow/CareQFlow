@@ -79,12 +79,26 @@ def test_linux_client_trust_onboarding_uses_selected_origin():
     assert "https://careqflow.local" in content
 
 
-def test_linux_installer_exports_trust_only_for_secure_lan():
+def test_linux_installer_exports_trust_for_networked_modes():
     content = _read(PRODUCTION_INSTALLER)
 
     assert "export_client_trust()" in content
-    assert 'if [[ "${NETWORK_MODE}" != "SecureLan" ]]' in content
+    assert 'if [[ "${NETWORK_MODE}" == "LocalOnly" ]]' in content
     assert "CLIENT_TRUST_EXPORT_SCRIPT" in content
+
+
+def test_linux_client_trust_export_accepts_tailscale_addresses():
+    content = _read(EXPORT_SCRIPT)
+
+    assert 'ipaddress.IPv4Network("100.64.0.0/10")' in content
+    assert "supported_networks" in content
+
+
+def test_linux_client_trust_installer_accepts_tailscale_addresses():
+    content = _read(CLIENT_INSTALLER)
+
+    assert 'ipaddress.IPv4Network("100.64.0.0/10")' in content
+    assert "supported_networks" in content
 
 
 def test_linux_client_trust_export_runs_after_caddy_trust():

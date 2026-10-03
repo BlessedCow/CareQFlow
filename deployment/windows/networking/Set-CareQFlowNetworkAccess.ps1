@@ -2,10 +2,13 @@
 param(
     [ValidateSet(
         "LocalOnly",
-        "SecureLan"
+        "SecureLan",
+        "Tailscale"
     )]
     [string]$NetworkMode = "LocalOnly",
-
+    
+    [string]$ApplicationOrigin,
+    
     [string]$CaddyExecutable = (
         "C:\Program Files\CareQueue\vendor\caddy\caddy.exe"
     )
@@ -34,6 +37,40 @@ function Test-Administrator {
 }
 
 
+function Test-CareQFlowTailscaleIPv4Address {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Address
+    )
+
+    $parsedAddress = $null
+
+    if (
+        -not [Net.IPAddress]::TryParse(
+            $Address,
+            [ref]$parsedAddress
+        )
+    ) {
+        return $false
+    }
+
+    if (
+        $parsedAddress.AddressFamily -ne
+        [Net.Sockets.AddressFamily]::InterNetwork
+    ) {
+        return $false
+    }
+
+    $bytes = $parsedAddress.GetAddressBytes()
+
+    return (
+        $bytes[0] -eq 100 `
+            -and $bytes[1] -ge 64 `
+            -and $bytes[1] -le 127
+    )
+}
+
+
 function Remove-CareQFlowSecureLanFirewallRule {
     $existingRules = @(
         Get-NetFirewallRule `
@@ -50,6 +87,126 @@ function Remove-CareQFlowSecureLanFirewallRule {
     $existingRules |
     Remove-NetFirewallRule `
         -ErrorAction Stop
+}
+
+
+function Assert-CareQFlowTailscaleAddress {
+    if ([string]::IsNullOrWhiteSpace($ApplicationOrigin)) {
+        throw (
+            "Tailscale mode requires ApplicationOrigin using " +
+            "the CareQFlow host Tailscale IPv4 address."
+        )
+    }
+
+    try {
+        $applicationUri = [Uri]$ApplicationOrigin
+    }
+    catch {
+        throw (
+            "Tailscale ApplicationOrigin is not a valid URI: " +
+            $ApplicationOrigin
+        )
+    }
+
+    if (
+        -not $applicationUri.IsAbsoluteUri `
+            -or $applicationUri.Scheme -ne "https" `
+            -or -not $applicationUri.Host `
+            -or $applicationUri.UserInfo `
+            -or $applicationUri.AbsolutePath -ne "/" `
+            -or $applicationUri.Query `
+            -or $applicationUri.Fragment `
+            -or $applicationUri.Port -ne 443
+    ) {
+        throw (
+            "Tailscale mode requires an HTTPS origin using the " +
+            "default HTTPS port with no path, query, or fragment."
+        )
+    }
+
+    if (
+        -not (
+            Test-CareQFlowTailscaleIPv4Address `
+                -Address $applicationUri.Host
+        )
+    ) {
+        throw (
+            "Tailscale mode requires an IPv4 address in " +
+            "100.64.0.0/10."
+        )
+    }
+
+    $tailscaleCommand = Get-Command `
+        "tailscale.exe" `
+        -ErrorAction SilentlyContinue
+
+    if (-not $tailscaleCommand) {
+        throw (
+            "Tailscale mode requires the Tailscale client " +
+            "to be installed."
+        )
+    }
+
+    $processStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $processStartInfo.FileName = $tailscaleCommand.Source
+    $processStartInfo.Arguments = "ip -4"
+    $processStartInfo.UseShellExecute = $false
+    $processStartInfo.CreateNoWindow = $true
+    $processStartInfo.RedirectStandardOutput = $true
+    $processStartInfo.RedirectStandardError = $true
+    
+    $tailscaleProcess = New-Object System.Diagnostics.Process
+    $tailscaleProcess.StartInfo = $processStartInfo
+    
+    if (-not $tailscaleProcess.Start()) {
+        throw "CareQFlow could not start the Tailscale client."
+    }
+    
+    if (-not $tailscaleProcess.WaitForExit(10000)) {
+        try {
+            $tailscaleProcess.Kill()
+        }
+        catch {
+        }
+    
+        throw (
+            "Tailscale did not respond within 10 seconds. " +
+            "Verify that the Tailscale service is running normally."
+        )
+    }
+    
+    $tailscaleOutput = $tailscaleProcess.StandardOutput.ReadToEnd()
+    
+    if ($tailscaleProcess.ExitCode -ne 0) {
+        throw (
+            "Tailscale is not connected or does not have " +
+            "an IPv4 address."
+        )
+    }
+    
+    $tailscaleAddresses = @(
+        $tailscaleOutput -split "\r?\n" |
+        ForEach-Object {
+            $_.Trim()
+        } |
+        Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_)
+        }
+    )
+    
+    if ($tailscaleAddresses.Count -eq 0) {
+        throw (
+            "Tailscale is not connected or does not have " +
+            "an IPv4 address."
+        )
+    }
+
+    if ($applicationUri.Host -notin $tailscaleAddresses) {
+        throw (
+            "The selected Tailscale address is not assigned " +
+            "to this host."
+        )
+    }
 }
 
 
@@ -120,6 +277,16 @@ switch ($NetworkMode) {
             "CareQFlow network mode: SecureLan. " +
             "HTTPS is permitted from the local subnet on " +
             "Private Windows networks."
+        )
+    }
+
+    "Tailscale" {
+        Remove-CareQFlowSecureLanFirewallRule
+        Assert-CareQFlowTailscaleAddress
+
+        Write-Host (
+            "CareQFlow network mode: Tailscale. " +
+            "No CareQFlow LAN firewall rule is enabled."
         )
     }
 

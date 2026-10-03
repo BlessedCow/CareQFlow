@@ -205,15 +205,17 @@ def test_inno_installer_collects_secure_lan_ipv4_address():
     content = _read_installer()
 
     assert "LanAddressPage: TInputQueryWizardPage;" in content
-    assert "'Configure Secure LAN address'" in content
-    assert "'Private IPv4 address:'" in content
+    assert "'Configure network address'" in content
+    assert "'For Secure LAN, use the host private IPv4 address. '" in content
+    assert "'For Tailscale, use the host Tailscale IPv4 address.'" in content
+    assert "'IPv4 address:'" in content
 
 
 def test_inno_installer_uses_lan_address_for_secure_lan_origin():
     content = _read_installer()
 
     assert "function GetApplicationOrigin(): String;" in content
-    assert "GetNetworkMode() <> 'SecureLan'" in content
+    assert "GetNetworkMode() = 'LocalOnly'" in content
     assert "'https://' +" in content
     assert "LanAddressPage.Values[0]" in content
 
@@ -222,11 +224,52 @@ def test_inno_installer_hides_lan_address_for_local_only():
     content = _read_installer()
 
     assert "PageID = LanAddressPage.ID" in content
-    assert "GetNetworkMode() <> 'SecureLan'" in content
+    assert "GetNetworkMode() = 'LocalOnly'" in content
 
 
 def test_inno_installer_rejects_blank_lan_address():
     content = _read_installer()
 
     assert "Trim(LanAddressPage.Values[0]) = ''" in content
-    assert "'Enter the private IPv4 address assigned to this '" in content
+    assert "'Enter the IPv4 address assigned to this '" in content
+    assert "'CareQFlow host for the selected network mode.'" in content
+
+
+def test_inno_installer_detects_existing_tailscale_mode():
+    content = _read_installer()
+
+    assert '\'"network_mode": "Tailscale"\'' in content
+    assert '\'"network_mode":"Tailscale"\'' in content
+    assert "Result := 'Tailscale';" in content
+
+
+def test_inno_installer_offers_tailscale_network_mode():
+    content = _read_installer()
+
+    assert "'Tailscale - allow authorized devices in the tailnet'" in content
+    assert "SelectedNetworkMode := 'Tailscale'" in content
+    assert "NetworkModePage.Values[2]" in content
+
+
+def test_inno_installer_requires_tailscale_confirmation():
+    content = _read_installer()
+
+    assert "if SelectedNetworkMode = 'Tailscale' then" in content
+    assert "'Enable Tailscale access?'" in content
+    assert "'The Tailscale client must already be installed, '" in content
+
+
+def test_inno_installer_uses_address_page_for_networked_modes():
+    content = _read_installer()
+
+    assert "'Configure network address'" in content
+    assert "'For Secure LAN, use the host private IPv4 address. '" in content
+    assert "'For Tailscale, use the host Tailscale IPv4 address.'" in content
+    assert "GetNetworkMode() = 'LocalOnly'" in content
+
+
+def test_inno_installer_preserves_existing_tailscale_selection():
+    content = _read_installer()
+
+    assert "GetInstalledNetworkMode() = 'Tailscale'" in content
+    assert "NetworkModePage.Values[2] := True" in content

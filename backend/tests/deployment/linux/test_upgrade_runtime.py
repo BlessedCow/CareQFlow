@@ -117,6 +117,227 @@ def test_validate_version_string_rejects_unsupported_versions(
     assert result.returncode != 0
 
 
+@pytest.mark.parametrize(
+    ("requested_mode", "requested_origin", "expected_mode", "expected_origin"),
+    [
+        ("", "", "LocalOnly", "https://careqflow.local"),
+        (
+            "SecureLan",
+            "https://192.168.1.50",
+            "SecureLan",
+            "https://192.168.1.50",
+        ),
+        (
+            "Tailscale",
+            "https://100.64.10.20",
+            "Tailscale",
+            "https://100.64.10.20",
+        ),
+    ],
+)
+def test_fresh_install_resolves_network_configuration(
+    tmp_path: Path,
+    requested_mode: str,
+    requested_origin: str,
+    expected_mode: str,
+    expected_origin: str,
+):
+    installer = _installer_without_main(tmp_path)
+
+    result = _run_bash(f"""
+        source "{installer}"
+        MODE="install"
+        REQUESTED_NETWORK_MODE="{requested_mode}"
+        REQUESTED_APPLICATION_ORIGIN="{requested_origin}"
+
+        resolve_network_configuration
+
+        printf '%s\\n' "${{RESOLVED_NETWORK_MODE}}"
+        printf '%s\\n' "${{RESOLVED_APPLICATION_ORIGIN}}"
+        """)
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        expected_mode,
+        expected_origin,
+    ]
+
+
+def test_tailscale_install_requires_origin(tmp_path: Path):
+    installer = _installer_without_main(tmp_path)
+
+    result = _run_bash(f"""
+        source "{installer}"
+        MODE="install"
+        REQUESTED_NETWORK_MODE="Tailscale"
+        REQUESTED_APPLICATION_ORIGIN=""
+
+        resolve_network_configuration
+        """)
+
+    assert result.returncode != 0
+    assert (
+        "Tailscale mode requires --application-origin using "
+        "the CareQFlow host Tailscale IPv4 address." in result.stderr
+    )
+
+
+@pytest.mark.parametrize("mode", ["upgrade", "repair"])
+def test_tailscale_upgrade_and_repair_preserve_installed_origin(
+    tmp_path: Path,
+    mode: str,
+):
+    installer = _installer_without_main(tmp_path)
+    install_state = tmp_path / "install-state.env"
+
+    install_state.write_text(
+        "\n".join(
+            [
+                "CAREQUEUE_NETWORK_MODE=Tailscale",
+                "CAREQUEUE_APPLICATION_ORIGIN=https://100.64.10.20",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+        MODE="{mode}"
+        INSTALL_STATE_FILE="{install_state}"
+        REQUESTED_NETWORK_MODE=""
+        REQUESTED_APPLICATION_ORIGIN=""
+
+        resolve_network_configuration
+
+        printf '%s\\n' "${{RESOLVED_NETWORK_MODE}}"
+        printf '%s\\n' "${{RESOLVED_APPLICATION_ORIGIN}}"
+        """)
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        "Tailscale",
+        "https://100.64.10.20",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("installed_mode", "installed_origin"),
+    [
+        ("LocalOnly", "https://careqflow.local"),
+        ("SecureLan", "https://192.168.1.50"),
+    ],
+)
+def test_switch_to_tailscale_requires_new_origin(
+    tmp_path: Path,
+    installed_mode: str,
+    installed_origin: str,
+):
+    installer = _installer_without_main(tmp_path)
+    install_state = tmp_path / "install-state.env"
+
+    install_state.write_text(
+        "\n".join(
+            [
+                f"CAREQUEUE_NETWORK_MODE={installed_mode}",
+                f"CAREQUEUE_APPLICATION_ORIGIN={installed_origin}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+        MODE="upgrade"
+        INSTALL_STATE_FILE="{install_state}"
+        REQUESTED_NETWORK_MODE="Tailscale"
+        REQUESTED_APPLICATION_ORIGIN=""
+
+        resolve_network_configuration
+        """)
+
+    assert result.returncode != 0
+    assert (
+        "Tailscale mode requires --application-origin using "
+        "the CareQFlow host Tailscale IPv4 address." in result.stderr
+    )
+
+
+def test_switch_from_tailscale_to_local_only_uses_local_origin(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+    install_state = tmp_path / "install-state.env"
+
+    install_state.write_text(
+        "\n".join(
+            [
+                "CAREQUEUE_NETWORK_MODE=Tailscale",
+                "CAREQUEUE_APPLICATION_ORIGIN=https://100.64.10.20",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+        MODE="upgrade"
+        INSTALL_STATE_FILE="{install_state}"
+        REQUESTED_NETWORK_MODE="LocalOnly"
+        REQUESTED_APPLICATION_ORIGIN=""
+
+        resolve_network_configuration
+
+        printf '%s\\n' "${{RESOLVED_NETWORK_MODE}}"
+        printf '%s\\n' "${{RESOLVED_APPLICATION_ORIGIN}}"
+        """)
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        "LocalOnly",
+        "https://careqflow.local",
+    ]
+
+
+def test_switch_from_secure_lan_to_tailscale_uses_requested_origin(
+    tmp_path: Path,
+):
+    installer = _installer_without_main(tmp_path)
+    install_state = tmp_path / "install-state.env"
+
+    install_state.write_text(
+        "\n".join(
+            [
+                "CAREQUEUE_NETWORK_MODE=SecureLan",
+                "CAREQUEUE_APPLICATION_ORIGIN=https://192.168.1.50",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_bash(f"""
+        source "{installer}"
+        MODE="upgrade"
+        INSTALL_STATE_FILE="{install_state}"
+        REQUESTED_NETWORK_MODE="Tailscale"
+        REQUESTED_APPLICATION_ORIGIN="https://100.64.10.20"
+
+        resolve_network_configuration
+
+        printf '%s\\n' "${{RESOLVED_NETWORK_MODE}}"
+        printf '%s\\n' "${{RESOLVED_APPLICATION_ORIGIN}}"
+        """)
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [
+        "Tailscale",
+        "https://100.64.10.20",
+    ]
+
+
 def test_upgrade_accepts_newer_release(
     tmp_path: Path,
 ):

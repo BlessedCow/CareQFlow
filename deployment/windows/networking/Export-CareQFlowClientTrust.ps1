@@ -243,7 +243,7 @@ $certificateFingerprint = (
 ) -join ":"
 
 @(
-    "CareQFlow Secure LAN Client Onboarding"
+    "CareQFlow Client Onboarding"
     ""
     "CareQFlow server URL:"
     $normalizedApplicationOrigin
@@ -285,7 +285,8 @@ $certificateFingerprint = (
     "Security:"
     "- Do not install the certificate if the fingerprint is different."
     "- Do not expose CareQFlow using router port forwarding."
-    "- Secure LAN is intended only for trusted private networks."
+    "- Secure LAN access is intended only for trusted private networks."
+    "- Tailscale access is limited by the configured tailnet access policy."
     "- The CareQFlow backend remains inaccessible directly."
 ) |
 Set-Content `

@@ -499,10 +499,10 @@ Compile the installer:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQFlow `0.5.0`, run:
+For CareQFlow `0.7.0`, run:
 
 ```powershell
-.\build\windows\installer\CareQFlow-Setup-0.5.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.7.0.exe
 ```
 
 Validate the package:
@@ -522,13 +522,13 @@ npm --prefix frontend run build
 Build the Linux release archive:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.5.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.7.0
 ```
 
-For CareQFlow `0.5.0`, the resulting archive is:
+For CareQFlow `0.7.0`, the resulting archive is:
 
 ```text
-build\linux\installer\CareQFlow-Linux-Setup-0.5.0.tar.gz
+build\linux\installer\CareQFlow-Linux-Setup-0.7.0.tar.gz
 ```
 
 Local package creation is not sufficient release validation. Test the exact release artifact on clean supported virtual machines before publishing it.
@@ -568,16 +568,16 @@ Review findings before changing dependencies.
 When preparing a new release, use the repository version helper:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.5.0
+.\deployment\bump-version.ps1 -Version 0.7.0
 ```
 
-Replace `0.5.0` with the intended application release version when preparing a later release.
+Replace `0.7.0` with the intended application release version when preparing a later release.
 
 The helper updates controlled backend and deployment version declarations without blindly replacing matching strings in tests, dependency versions, documentation examples, or historical governance fixtures.
 
 The governance attestation version and governance document revision are independent of the CareQFlow application version. Do not change either value only because the application release number changes.
 
-Application release licensing is also version-sensitive. CareQueue `0.4.x` and earlier releases retain their historical MIT terms, while CareQFlow `0.5.0` and later versions expressly released under the current licensing model use Business Source License 1.1 until the applicable Change Date.
+Application release licensing is also version-sensitive. CareQueue `0.4.x` and earlier releases retain their historical MIT terms, while CareQFlow `0.7.0` and later versions expressly released under the current licensing model use Business Source License 1.1 until the applicable Change Date.
 
 Before publishing a release, review:
 
