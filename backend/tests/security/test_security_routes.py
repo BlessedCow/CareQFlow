@@ -369,6 +369,54 @@ def test_locked_login_writes_audit_event(client):
     assert row["username"] == "user@example.com"
 
 
+def test_locked_account_still_performs_password_verification(
+    client,
+    monkeypatch,
+):
+    user = create_user(
+        "locked@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+
+    for _ in range(5):
+        response = client.post(
+            "/api/security/login",
+            json={
+                "username": user["username"],
+                "password": "wrong password",
+            },
+        )
+
+        assert response.status_code == 401
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_verify_password(
+        password_hash: str,
+        password: str,
+    ) -> bool:
+        calls.append((password_hash, password))
+        return True
+
+    monkeypatch.setattr(
+        "authstatus_api.security.users.verify_password",
+        fake_verify_password,
+    )
+
+    response = client.post(
+        "/api/security/login",
+        json={
+            "username": user["username"],
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 401
+    assert len(calls) == 1
+    assert calls[0][1] == "correct horse battery staple"
+
+
 def test_login_rejects_unknown_user(client):
     response = client.post(
         "/api/security/login",
@@ -380,6 +428,32 @@ def test_login_rejects_unknown_user(client):
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid username or password."}
+
+
+def test_unknown_user_performs_dummy_password_verification(
+    client,
+    monkeypatch,
+):
+    calls: list[str] = []
+
+    def fake_dummy_verification(password: str) -> None:
+        calls.append(password)
+
+    monkeypatch.setattr(
+        "authstatus_api.security.users.perform_dummy_password_verification",
+        fake_dummy_verification,
+    )
+
+    response = client.post(
+        "/api/security/login",
+        json={
+            "username": "missing@example.com",
+            "password": "attacker supplied password",
+        },
+    )
+
+    assert response.status_code == 401
+    assert calls == ["attacker supplied password"]
 
 
 def test_locked_and_unknown_accounts_return_same_login_response(client):

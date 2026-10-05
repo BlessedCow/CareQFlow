@@ -29,6 +29,7 @@ function renderSessionTimeoutManager(
   const onSessionRenewed = vi.fn();
   const onSessionExpired = vi.fn();
   const onLogout = vi.fn();
+  const onWarningVisibilityChange = vi.fn();
 
   render(
     <SessionTimeoutManager
@@ -38,6 +39,7 @@ function renderSessionTimeoutManager(
       onSessionRenewed={onSessionRenewed}
       onSessionExpired={onSessionExpired}
       onLogout={onLogout}
+      onWarningVisibilityChange={onWarningVisibilityChange}
       {...overrides}
     />
   );
@@ -46,12 +48,14 @@ function renderSessionTimeoutManager(
     onSessionRenewed,
     onSessionExpired,
     onLogout,
+    onWarningVisibilityChange,
+
   };
 }
 
 function StatefulSessionTimeoutManager() {
   const [expiresAt, setExpiresAt] = useState(
-    expirationAfter(5 * 60)
+    expirationAfter(60)
   );
 
   return (
@@ -62,20 +66,21 @@ function StatefulSessionTimeoutManager() {
       onSessionRenewed={setExpiresAt}
       onSessionExpired={vi.fn()}
       onLogout={vi.fn()}
+      onWarningVisibilityChange={vi.fn()}
     />
   );
 }
 
 function ActivityUpdatedSessionTimeoutManager() {
   const [expiresAt, setExpiresAt] = useState(
-    expirationAfter(5 * 60)
+    expirationAfter(60)
   );
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setExpiresAt(expirationAfter(20 * 60))}
+        onClick={() => setExpiresAt(expirationAfter(10 * 60))}
       >
         Simulate authenticated activity
       </button>
@@ -87,6 +92,7 @@ function ActivityUpdatedSessionTimeoutManager() {
         onSessionRenewed={setExpiresAt}
         onSessionExpired={vi.fn()}
         onLogout={vi.fn()}
+        onWarningVisibilityChange={vi.fn()}
       />
     </>
   );
@@ -134,9 +140,9 @@ describe("SessionTimeoutManager", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the warning when five minutes remain", () => {
+  it("shows the warning when one minute remains", () => {
     renderSessionTimeoutManager({
-      expiresAt: expirationAfter(5 * 60),
+      expiresAt: expirationAfter(60),
     });
 
     expect(
@@ -147,12 +153,12 @@ describe("SessionTimeoutManager", () => {
 
     expect(
       screen.getByText(/You will be signed out in/)
-    ).toHaveTextContent("5:00");
+    ).toHaveTextContent("1:00");
   });
 
   it("shows the mandatory warning when the countdown is hidden", () => {
     renderSessionTimeoutManager({
-      expiresAt: expirationAfter(5 * 60),
+      expiresAt: expirationAfter(60),
       showTimer: false,
     });
 
@@ -169,7 +175,7 @@ describe("SessionTimeoutManager", () => {
 
   it("allows the user to log out immediately from the warning", () => {
     const { onLogout } = renderSessionTimeoutManager({
-      expiresAt: expirationAfter(5 * 60),
+      expiresAt: expirationAfter(60),
     });
 
     fireEvent.click(
@@ -196,14 +202,14 @@ describe("SessionTimeoutManager", () => {
   });
 
   it("returns the renewed expiration to the parent", async () => {
-    const renewedExpiration = expirationAfter(20 * 60);
+    const renewedExpiration = expirationAfter(10 * 60);
 
     mockedRenewCurrentSession.mockResolvedValue({
       expires_at: renewedExpiration,
     });
 
     const { onSessionRenewed } = renderSessionTimeoutManager({
-      expiresAt: expirationAfter(5 * 60),
+      expiresAt: expirationAfter(60),
     });
 
     fireEvent.click(
@@ -228,7 +234,7 @@ describe("SessionTimeoutManager", () => {
     );
 
     renderSessionTimeoutManager({
-      expiresAt: expirationAfter(5 * 60),
+      expiresAt: expirationAfter(60),
     });
 
     fireEvent.click(
@@ -261,7 +267,7 @@ describe("SessionTimeoutManager", () => {
     );
 
     renderSessionTimeoutManager({
-      expiresAt: expirationAfter(5 * 60),
+      expiresAt: expirationAfter(60),
     });
 
     fireEvent.click(
@@ -284,14 +290,14 @@ describe("SessionTimeoutManager", () => {
 
     await act(async () => {
       resolveRenewal?.({
-        expires_at: expirationAfter(20 * 60),
+        expires_at: expirationAfter(10 * 60),
       });
     });
   });
 
   it("closes the warning after a successful renewal", async () => {
     mockedRenewCurrentSession.mockResolvedValue({
-      expires_at: expirationAfter(20 * 60),
+      expires_at: expirationAfter(10 * 60),
     });
 
     render(<StatefulSessionTimeoutManager />);
@@ -317,7 +323,7 @@ describe("SessionTimeoutManager", () => {
     ).not.toBeInTheDocument();
 
     expect(
-      screen.getByText("Session: 20:00")
+      screen.getByText("Session: 10:00")
     ).toBeInTheDocument();
   });
 
@@ -331,7 +337,7 @@ describe("SessionTimeoutManager", () => {
     ).toBeInTheDocument();
   
     expect(
-      screen.getByText("Session: 5:00")
+      screen.getByText("Session: 1:00")
     ).toBeInTheDocument();
   
     fireEvent.click(
@@ -345,7 +351,15 @@ describe("SessionTimeoutManager", () => {
     ).not.toBeInTheDocument();
   
     expect(
-      screen.getByText("Session: 20:00")
+      screen.getByText("Session: 10:00")
     ).toBeInTheDocument();
+  });
+  it("reports when the mandatory warning becomes visible", () => {
+    const { onWarningVisibilityChange } =
+      renderSessionTimeoutManager({
+        expiresAt: expirationAfter(60),
+      });
+  
+    expect(onWarningVisibilityChange).toHaveBeenCalledWith(true);
   });
 });

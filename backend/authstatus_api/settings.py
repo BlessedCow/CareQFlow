@@ -139,7 +139,7 @@ class Settings(BaseSettings):
         validation_alias="AUTHSTATUS_SESSION_COOKIE_SECURE",
     )
     session_inactivity_minutes: int = Field(
-        default=20,
+        default=10,
         ge=5,
         le=480,
         validation_alias="AUTHSTATUS_SESSION_INACTIVITY_MINUTES",

@@ -12,7 +12,11 @@ from authstatus_api.security.mappings import (
     parse_datetime,
     user_row_to_dict,
 )
-from authstatus_api.security.password_hashing import hash_password, verify_password
+from authstatus_api.security.password_hashing import (
+    hash_password,
+    perform_dummy_password_verification,
+    verify_password,
+)
 from authstatus_api.security.password_policy import validate_password_policy
 from authstatus_api.security.sessions import (
     get_active_session_by_token,
@@ -424,12 +428,15 @@ def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
     user = get_user_by_username(username)
 
     if user is None:
+        perform_dummy_password_verification(password)
         return None
 
     if not user["is_active"]:
+        verify_password(user["password_hash"], password)
         return None
 
     if _is_user_locked(user):
+        verify_password(user["password_hash"], password)
         raise UserLockedError
 
     if user.get("locked_until"):

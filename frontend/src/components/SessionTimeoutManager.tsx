@@ -9,9 +9,10 @@ interface SessionTimeoutManagerProps {
   onSessionRenewed: (expiresAt: string) => void;
   onSessionExpired: () => void;
   onLogout: () => void;
+  onWarningVisibilityChange: (visible: boolean) => void;
 }
 
-const WARNING_THRESHOLD_SECONDS = 5 * 60;
+const WARNING_THRESHOLD_SECONDS = 60;
 
 function calculateRemainingSeconds(expiresAt: string): number {
   const expirationTimestamp = Date.parse(expiresAt);
@@ -20,10 +21,7 @@ function calculateRemainingSeconds(expiresAt: string): number {
     return 0;
   }
 
-  return Math.max(
-    0,
-    Math.ceil((expirationTimestamp - Date.now()) / 1000)
-  );
+  return Math.max(0, Math.ceil((expirationTimestamp - Date.now()) / 1000));
 }
 
 function formatRemainingTime(totalSeconds: number): string {
@@ -40,6 +38,7 @@ export function SessionTimeoutManager({
   onSessionRenewed,
   onSessionExpired,
   onLogout,
+  onWarningVisibilityChange,
 }: SessionTimeoutManagerProps) {
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
     calculateRemainingSeconds(expiresAt)
@@ -63,10 +62,7 @@ export function SessionTimeoutManager({
   }, [expiresAt]);
 
   useEffect(() => {
-    if (
-      remainingSeconds > 0 ||
-      expirationHandledRef.current
-    ) {
+    if (remainingSeconds > 0 || expirationHandledRef.current) {
       return;
     }
 
@@ -80,8 +76,15 @@ export function SessionTimeoutManager({
   );
 
   const warningVisible =
-    remainingSeconds > 0 &&
-    remainingSeconds <= WARNING_THRESHOLD_SECONDS;
+    remainingSeconds > 0 && remainingSeconds <= WARNING_THRESHOLD_SECONDS;
+
+  useEffect(() => {
+    onWarningVisibilityChange(warningVisible);
+
+    return () => {
+      onWarningVisibilityChange(false);
+    };
+  }, [warningVisible, onWarningVisibilityChange]);
 
   const handleRenewSession = async () => {
     setIsRenewing(true);
@@ -111,8 +114,8 @@ export function SessionTimeoutManager({
                 ? "border-amber-700 bg-amber-950 text-amber-200"
                 : "border-amber-300 bg-amber-50 text-amber-900"
               : darkMode
-                ? "border-gray-700 bg-gray-900 text-gray-200"
-                : "border-gray-200 bg-white text-gray-700",
+              ? "border-gray-700 bg-gray-900 text-gray-200"
+              : "border-gray-200 bg-white text-gray-700",
           ].join(" ")}
           aria-live="polite"
         >
@@ -136,10 +139,7 @@ export function SessionTimeoutManager({
                 : "border-gray-200 bg-white text-gray-900",
             ].join(" ")}
           >
-            <h2
-              id="session-warning-title"
-              className="text-xl font-semibold"
-            >
+            <h2 id="session-warning-title" className="text-xl font-semibold">
               Your session is about to expire
             </h2>
 
@@ -151,8 +151,8 @@ export function SessionTimeoutManager({
               ].join(" ")}
             >
               You will be signed out in{" "}
-              <strong>{formattedRemainingTime}</strong>. Extend your session
-              to continue working.
+              <strong>{formattedRemainingTime}</strong>. Extend your session to
+              continue working.
             </p>
 
             {renewalError && (

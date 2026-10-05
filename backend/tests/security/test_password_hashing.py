@@ -3,6 +3,7 @@ from __future__ import annotations
 from authstatus_api.security.password_hashing import (
     hash_password,
     password_needs_rehash,
+    perform_dummy_password_verification,
     verify_password,
 )
 
@@ -38,3 +39,9 @@ def test_password_needs_rehash_handles_current_hash():
 
 def test_password_needs_rehash_rejects_invalid_hash():
     assert password_needs_rehash("not-a-real-hash") is True
+
+
+def test_dummy_password_verification_accepts_arbitrary_password():
+    result = perform_dummy_password_verification("attacker supplied password")
+
+    assert result is None

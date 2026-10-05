@@ -19,6 +19,7 @@ def valid_production_settings(**overrides):
         "AUTHSTATUS_APP_ENVIRONMENT": "production",
         "AUTHSTATUS_SQLCIPHER_KEY": secrets.token_urlsafe(32),
         "AUTHSTATUS_ENCRYPTION_KEY": encryption_key(),
+        "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN": secrets.token_urlsafe(48),
         "AUTHSTATUS_BACKUP_ENCRYPTION_KEY": encryption_key(),
         "AUTHSTATUS_SESSION_COOKIE_SECURE": True,
         "AUTHSTATUS_CORS_ORIGINS": "https://carequeue.example",
@@ -226,10 +227,16 @@ def test_production_allows_hostname_containing_localhost_text():
     ]
 
 
-def test_session_inactivity_defaults_to_twenty_minutes():
+# def test_session_inactivity_defaults_to_twenty_minutes():
+#    settings = Settings()
+#
+#    assert settings.session_inactivity_minutes == 20
+
+
+def test_session_inactivity_defaults_to_ten_minutes():
     settings = Settings()
 
-    assert settings.session_inactivity_minutes == 20
+    assert settings.session_inactivity_minutes == 10
 
 
 @pytest.mark.parametrize(

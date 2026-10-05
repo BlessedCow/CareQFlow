@@ -68,12 +68,15 @@ function App() {
     useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
+  const [sessionWarningVisible, setSessionWarningVisible] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [governanceStatus, setGovernanceStatus] =
     useState<GovernanceStatus | null>(null);
   const [governanceError, setGovernanceError] = useState<string | null>(null);
 
-  useSessionActivity(currentUser !== null);
+  useSessionActivity(
+    currentUser !== null && !sessionWarningVisible
+  );
 
   const {
     dashboardCardSettings,
@@ -439,6 +442,7 @@ function App() {
   const handleLogin = (authSession: AuthSession) => {
     setCurrentUser(authSession.user);
     setSessionExpiresAt(authSession.session.expires_at);
+    setSessionWarningVisible(false);
     setGovernanceStatus(null);
     setGovernanceError(null);
     setActivePage("dashboard");
@@ -447,6 +451,7 @@ function App() {
   const clearAuthenticatedState = useCallback(() => {
     setCurrentUser(null);
     setSessionExpiresAt(null);
+    setSessionWarningVisible(false);
     setGovernanceStatus(null);
     setGovernanceError(null);
     setAuthRequests([]);
@@ -622,6 +627,7 @@ function App() {
             showTimer={showSessionTimer}
             onSessionRenewed={setSessionExpiresAt}
             onSessionExpired={handleSessionExpired}
+            onWarningVisibilityChange={setSessionWarningVisible}
             onLogout={() => {
               void handleLogout();
             }}
@@ -915,6 +921,7 @@ function App() {
           showTimer={showSessionTimer}
           onSessionRenewed={setSessionExpiresAt}
           onSessionExpired={handleSessionExpired}
+          onWarningVisibilityChange={setSessionWarningVisible}
           onLogout={() => {
             void handleLogout();
           }}
