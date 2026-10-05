@@ -135,8 +135,21 @@ def _download_headers(filename: str) -> dict[str, str]:
 
 
 @router.get("", response_model=AuthListResponse)
-def read_auths(current_user: dict = ReadAuthUser) -> AuthListResponse:
-    return AuthListResponse(auths=list_auths())
+def read_auths(
+    request: Request,
+    current_user: dict = ReadAuthUser,
+) -> AuthListResponse:
+    records = list_auths()
+
+    record_audit_event(
+        action="auth.list",
+        resource_type="auth",
+        user=current_user,
+        metadata={"result_count": len(records)},
+        request=request,
+    )
+
+    return AuthListResponse(auths=records)
 
 
 @router.post("", response_model=AuthRecord, status_code=status.HTTP_201_CREATED)
@@ -161,13 +174,26 @@ def create_auth_record(
 
 
 @router.get("/{auth_id}", response_model=AuthRecord)
-def read_auth(auth_id: int, current_user: dict = ReadAuthUser) -> AuthRecord:
+def read_auth(
+    auth_id: int,
+    request: Request,
+    current_user: dict = ReadAuthUser,
+) -> AuthRecord:
     record = get_auth(auth_id)
 
     if record is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Auth record not found."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
         )
+
+    record_audit_event(
+        action="auth.read",
+        resource_type="auth",
+        resource_id=auth_id,
+        user=current_user,
+        request=request,
+    )
 
     return AuthRecord(**record)
 
@@ -175,6 +201,7 @@ def read_auth(auth_id: int, current_user: dict = ReadAuthUser) -> AuthRecord:
 @router.get("/{auth_id}/documents", response_model=AuthDocumentListResponse)
 def read_auth_document_records(
     auth_id: int,
+    request: Request,
     current_user: dict = ReadAuthUser,
 ) -> AuthDocumentListResponse:
     documents = list_auth_documents(auth_id)
@@ -184,6 +211,17 @@ def read_auth_document_records(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Auth record not found.",
         )
+
+    record_audit_event(
+        action="auth_document.list",
+        resource_type="auth_document",
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            "result_count": len(documents),
+        },
+        request=request,
+    )
 
     return AuthDocumentListResponse(
         documents=[AuthDocumentRecord(**document) for document in documents]
@@ -348,14 +386,27 @@ def update_auth_record(
 @router.get("/{auth_id}/events", response_model=AuthEventListResponse)
 def read_auth_events(
     auth_id: int,
+    request: Request,
     current_user: dict = ReadAuthUser,
 ) -> AuthEventListResponse:
     events = list_auth_events(auth_id)
 
     if events is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Auth record not found."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
         )
+
+    record_audit_event(
+        action="auth_event.list",
+        resource_type="auth_event",
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            "result_count": len(events),
+        },
+        request=request,
+    )
 
     return AuthEventListResponse(events=[AuthEventRecord(**event) for event in events])
 
@@ -451,6 +502,7 @@ def delete_auth_event_record(
 )
 def read_auth_loc_episodes(
     auth_id: int,
+    request: Request,
     current_user: dict = ReadAuthUser,
 ) -> AuthLocEpisodeListResponse:
     episodes = list_auth_loc_episodes(auth_id)
@@ -460,6 +512,17 @@ def read_auth_loc_episodes(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Auth record not found.",
         )
+
+    record_audit_event(
+        action="auth_loc_episode.list",
+        resource_type="auth_loc_episode",
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            "result_count": len(episodes),
+        },
+        request=request,
+    )
 
     return AuthLocEpisodeListResponse(
         episodes=[AuthLocEpisodeRecord(**episode) for episode in episodes]
@@ -601,6 +664,7 @@ def delete_auth_loc_episode_record(
 )
 def read_clinical_assessments(
     auth_id: int,
+    request: Request,
     current_user: dict = ReadAuthUser,
 ) -> ClinicalAssessmentListResponse:
     assessments = list_clinical_assessments(auth_id)
@@ -610,6 +674,17 @@ def read_clinical_assessments(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Auth record not found.",
         )
+
+    record_audit_event(
+        action="clinical_assessment.list",
+        resource_type="clinical_assessment",
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            "result_count": len(assessments),
+        },
+        request=request,
+    )
 
     return ClinicalAssessmentListResponse(
         assessments=[
@@ -751,6 +826,7 @@ def delete_clinical_assessment_record(
 )
 def read_auth_decision_snapshots(
     auth_id: int,
+    request: Request,
     current_user: dict = ReadAuthUser,
 ) -> AuthDecisionSnapshotListResponse:
     snapshots = list_auth_decision_snapshots(auth_id)
@@ -760,6 +836,17 @@ def read_auth_decision_snapshots(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Auth record not found.",
         )
+
+    record_audit_event(
+        action="auth_decision_snapshot.list",
+        resource_type="auth_decision_snapshot",
+        user=current_user,
+        metadata={
+            "auth_id": auth_id,
+            "result_count": len(snapshots),
+        },
+        request=request,
+    )
 
     return AuthDecisionSnapshotListResponse(
         snapshots=[AuthDecisionSnapshotRecord(**snapshot) for snapshot in snapshots]

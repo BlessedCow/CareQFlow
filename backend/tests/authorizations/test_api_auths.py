@@ -496,6 +496,82 @@ def audit_rows() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def test_list_auths_writes_phi_read_audit_event(client, auth_headers):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    response = client.get(
+        "/api/auths",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    rows = audit_rows()
+
+    assert rows[-1]["action"] == "auth.list"
+    assert rows[-1]["resource_type"] == "auth"
+    assert rows[-1]["resource_id"] is None
+    assert rows[-1]["username"] == "ur@example.com"
+
+    metadata = json.loads(rows[-1]["metadata"])
+
+    assert metadata == {"result_count": 1}
+    assert "John Smith" not in rows[-1]["metadata"]
+    assert "ABC123" not in rows[-1]["metadata"]
+    assert "AUTH-789" not in rows[-1]["metadata"]
+
+
+def test_read_auth_writes_phi_read_audit_event(client, auth_headers):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    auth_id = create_response.json()["id"]
+
+    response = client.get(
+        f"/api/auths/{auth_id}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    rows = audit_rows()
+
+    assert rows[-1]["action"] == "auth.read"
+    assert rows[-1]["resource_type"] == "auth"
+    assert rows[-1]["resource_id"] == auth_id
+    assert rows[-1]["username"] == "ur@example.com"
+
+    assert "John Smith" not in rows[-1]["metadata"]
+    assert "ABC123" not in rows[-1]["metadata"]
+    assert "AUTH-789" not in rows[-1]["metadata"]
+
+
+def test_missing_auth_does_not_write_successful_phi_read_audit_event(
+    client,
+    auth_headers,
+):
+    before = len(audit_rows())
+
+    response = client.get(
+        "/api/auths/999999",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    assert len(audit_rows()) == before
+
+
 def test_create_auth_writes_audit_event(client, auth_headers):
     response = client.post("/api/auths", json=make_payload(), headers=auth_headers)
 
@@ -761,6 +837,66 @@ def make_event_payload() -> dict:
     }
 
 
+def test_list_auth_events_writes_phi_read_audit_event(
+    client,
+    auth_headers,
+):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    event_response = client.post(
+        "/api/auths/1/events",
+        json=make_event_payload(),
+        headers=auth_headers,
+    )
+
+    assert event_response.status_code == 201
+
+    response = client.get(
+        "/api/auths/1/events",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    rows = audit_rows()
+
+    assert rows[-1]["action"] == "auth_event.list"
+    assert rows[-1]["resource_type"] == "auth_event"
+    assert rows[-1]["resource_id"] is None
+    assert rows[-1]["username"] == "ur@example.com"
+
+    metadata = json.loads(rows[-1]["metadata"])
+
+    assert metadata == {
+        "auth_id": 1,
+        "result_count": len(response.json()["events"]),
+    }
+
+    assert "Do not store this note" not in rows[-1]["metadata"]
+    assert "Approved" not in rows[-1]["metadata"]
+
+
+def test_missing_auth_event_list_does_not_write_successful_phi_read_event(
+    client,
+    auth_headers,
+):
+    before = len(audit_rows())
+
+    response = client.get(
+        "/api/auths/999999/events",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    assert len(audit_rows()) == before
+
+
 def test_create_auth_event_writes_audit_event_without_note_value(client, auth_headers):
     create_response = client.post(
         "/api/auths", json=make_payload(), headers=auth_headers
@@ -980,6 +1116,46 @@ def test_analytics_summary_endpoint_counts_records(client, auth_headers):
         "no_pa_required": 1,
         "waiting_on_clinicals": 1,
     }
+
+
+def test_analytics_summary_writes_read_audit_event_without_phi(
+    client,
+    auth_headers,
+):
+    payload = make_payload()
+
+    create_response = client.post(
+        "/api/auths",
+        json=payload,
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    response = client.get(
+        "/api/analytics/summary",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    rows = audit_rows()
+
+    assert rows[-1]["action"] == "analytics.summary.read"
+    assert rows[-1]["resource_type"] == "analytics"
+    assert rows[-1]["resource_id"] is None
+    assert rows[-1]["username"] == "ur@example.com"
+
+    metadata = json.loads(rows[-1]["metadata"])
+
+    assert metadata == {
+        "result_count": response.json()["total_auths"],
+    }
+
+    assert "John Smith" not in rows[-1]["metadata"]
+    assert "ABC123" not in rows[-1]["metadata"]
+    assert "RTC" not in rows[-1]["metadata"]
+    assert "In Progress" not in rows[-1]["metadata"]
 
 
 def test_sparse_seeded_auths_serialize_with_nullable_database_text(

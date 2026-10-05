@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.main import create_app
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
@@ -140,6 +143,58 @@ def test_list_auth_loc_episodes_endpoint(client, auth_headers):
     ]
 
 
+def test_list_auth_loc_episodes_writes_phi_read_audit_event(
+    client,
+    auth_headers,
+):
+    auth_id = _create_auth(client, auth_headers)
+
+    create_response = client.post(
+        f"/api/auths/{auth_id}/loc-episodes",
+        json={
+            "loc": "RTC",
+            "started_at": "2026-09-01T08:00:00+00:00",
+            "ended_at": "2026-09-05T10:00:00+00:00",
+            "source": "manual",
+        },
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    response = client.get(
+        f"/api/auths/{auth_id}/loc-episodes",
+    )
+
+    assert response.status_code == 200
+
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT action, resource_type, resource_id, username, metadata
+            FROM audit_events
+            WHERE action = 'auth_loc_episode.list'
+            ORDER BY id DESC
+            LIMIT 1
+            """).fetchone()
+
+    assert row is not None
+    assert row["action"] == "auth_loc_episode.list"
+    assert row["resource_type"] == "auth_loc_episode"
+    assert row["resource_id"] is None
+    assert row["username"] == "ur@example.com"
+
+    metadata = json.loads(row["metadata"])
+
+    assert metadata == {
+        "auth_id": auth_id,
+        "result_count": len(response.json()["episodes"]),
+    }
+
+    assert "RTC" not in row["metadata"]
+    assert "2026-09-01" not in row["metadata"]
+    assert "manual" not in row["metadata"]
+
+
 def test_update_auth_loc_episode_endpoint(client, auth_headers):
     auth_id = _create_auth(client, auth_headers)
 
@@ -223,6 +278,33 @@ def test_list_auth_loc_episodes_returns_404_for_missing_auth(
     assert response.json() == {
         "detail": "Auth record not found.",
     }
+
+
+def test_missing_auth_loc_episode_list_does_not_write_phi_read_audit_event(
+    client,
+    auth_headers,
+):
+    with get_conn() as conn:
+        before = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_loc_episode.list'
+            """).fetchone()["count"]
+
+    response = client.get(
+        "/api/auths/999/loc-episodes",
+    )
+
+    assert response.status_code == 404
+
+    with get_conn() as conn:
+        after = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_loc_episode.list'
+            """).fetchone()["count"]
+
+    assert after == before
 
 
 def test_update_auth_loc_episode_returns_404_for_missing_episode(

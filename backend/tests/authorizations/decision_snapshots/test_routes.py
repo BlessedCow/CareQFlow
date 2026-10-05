@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.main import create_app
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
@@ -115,6 +118,89 @@ def test_list_decision_snapshots_endpoint(client, auth_headers):
 
     assert response.status_code == 200
     assert len(response.json()["snapshots"]) == 1
+
+
+def test_list_decision_snapshots_writes_phi_read_audit_event(
+    client,
+    auth_headers,
+):
+    auth_id = _create_auth(client, auth_headers)
+
+    created = client.post(
+        f"/api/auths/{auth_id}/decision-snapshots",
+        json={
+            "facility": "Facility A",
+            "loc": "RTC",
+            "auth_type": "Concurrent",
+            "outcome": "Denied",
+            "decision_at": "2026-09-10T12:00:00+00:00",
+        },
+        headers=auth_headers,
+    )
+
+    assert created.status_code == 201
+
+    response = client.get(
+        f"/api/auths/{auth_id}/decision-snapshots",
+    )
+
+    assert response.status_code == 200
+
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT action, resource_type, resource_id, username, metadata
+            FROM audit_events
+            WHERE action = 'auth_decision_snapshot.list'
+            ORDER BY id DESC
+            LIMIT 1
+            """).fetchone()
+
+    assert row is not None
+    assert row["action"] == "auth_decision_snapshot.list"
+    assert row["resource_type"] == "auth_decision_snapshot"
+    assert row["resource_id"] is None
+    assert row["username"] == "ur@example.com"
+
+    metadata = json.loads(row["metadata"])
+
+    assert metadata == {
+        "auth_id": auth_id,
+        "result_count": len(response.json()["snapshots"]),
+    }
+
+    assert "Facility A" not in row["metadata"]
+    assert "RTC" not in row["metadata"]
+    assert "Concurrent" not in row["metadata"]
+    assert "Denied" not in row["metadata"]
+    assert "2026-09-10" not in row["metadata"]
+
+
+def test_missing_auth_decision_snapshot_list_does_not_write_phi_read_event(
+    client,
+    auth_headers,
+):
+    with get_conn() as conn:
+        before = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_decision_snapshot.list'
+            """).fetchone()["count"]
+
+    response = client.get(
+        "/api/auths/999999/decision-snapshots",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+
+    with get_conn() as conn:
+        after = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_decision_snapshot.list'
+            """).fetchone()["count"]
+
+    assert after == before
 
 
 def test_create_snapshot_returns_404_for_missing_auth(

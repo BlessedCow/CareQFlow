@@ -175,6 +175,83 @@ def test_list_auth_documents_returns_metadata_only(client, auth_headers):
     assert "encrypted_pdf" not in documents[0]
 
 
+def test_list_auth_documents_writes_phi_read_audit_event(
+    client,
+    auth_headers,
+):
+    auth = create_auth_record(client, auth_headers)
+
+    upload_response = client.post(
+        f"/api/auths/{auth['id']}/documents"
+        "?document_type=denial_letter&filename=John Smith denial.pdf",
+        content=b"%PDF-1.7\nsensitive denial content",
+        headers=pdf_headers(auth_headers),
+    )
+
+    assert upload_response.status_code == 201
+
+    response = client.get(
+        f"/api/auths/{auth['id']}/documents",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT action, resource_type, resource_id, username, metadata
+            FROM audit_events
+            WHERE action = 'auth_document.list'
+            ORDER BY id DESC
+            LIMIT 1
+            """).fetchone()
+
+    assert row is not None
+    assert row["action"] == "auth_document.list"
+    assert row["resource_type"] == "auth_document"
+    assert row["resource_id"] is None
+    assert row["username"] == "ur@example.com"
+
+    metadata = json.loads(row["metadata"])
+
+    assert metadata == {
+        "auth_id": auth["id"],
+        "result_count": len(response.json()["documents"]),
+    }
+
+    assert "John Smith" not in row["metadata"]
+    assert "denial.pdf" not in row["metadata"]
+    assert "sensitive denial content" not in row["metadata"]
+
+
+def test_missing_auth_document_list_does_not_write_phi_read_audit_event(
+    client,
+    auth_headers,
+):
+    with get_conn() as conn:
+        before = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_document.list'
+            """).fetchone()["count"]
+
+    response = client.get(
+        "/api/auths/999999/documents",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+
+    with get_conn() as conn:
+        after = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_document.list'
+            """).fetchone()["count"]
+
+    assert after == before
+
+
 def test_download_auth_document_returns_pdf_with_no_store_headers(
     client,
     auth_headers,
