@@ -236,6 +236,47 @@ def test_authorized_role_can_preview_pdf(
     assert response.headers["expires"] == "0"
 
 
+def test_pdf_preview_rejects_request_when_preview_capacity_is_full(client):
+    create_user(
+        "user@example.com",
+        "password value",
+        role="UR",
+    )
+
+    from authstatus_api.pdf_intake import router as pdf_router
+
+    acquired_slots = 0
+
+    try:
+        for _ in range(pdf_router.MAX_CONCURRENT_PDF_PREVIEWS):
+            assert pdf_router._pdf_preview_slots.acquire(blocking=False) is True
+            acquired_slots += 1
+
+        with patch(
+            "authstatus_api.pdf_intake.router.extract_pdf_text_isolated",
+        ) as extract_mock:
+            response = client.post(
+                "/api/pdf-intake/preview",
+                content=b"%PDF-1.7 synthetic content",
+                headers=auth_headers_for(
+                    client,
+                    "user@example.com",
+                    "password value",
+                ),
+            )
+
+        assert response.status_code == 503
+        assert response.json() == {
+            "detail": ("PDF preview capacity is temporarily unavailable."),
+        }
+        assert response.headers["retry-after"] == "1"
+        assert response.headers["cache-control"] == ("no-store, private")
+        extract_mock.assert_not_called()
+    finally:
+        for _ in range(acquired_slots):
+            pdf_router._pdf_preview_slots.release()
+
+
 def test_pdf_preview_requires_authentication(client):
     response = client.post(
         "/api/pdf-intake/preview",

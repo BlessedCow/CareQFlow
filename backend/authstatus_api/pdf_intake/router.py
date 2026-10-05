@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from threading import BoundedSemaphore
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from authstatus_api.audit.service import record_audit_event
 from authstatus_api.pdf_intake.extractor import (
@@ -31,6 +34,9 @@ router = APIRouter(
 )
 
 PdfIntakeUser = Depends(require_role("Admin", "UR"))
+
+MAX_CONCURRENT_PDF_PREVIEWS = 2
+_pdf_preview_slots = BoundedSemaphore(MAX_CONCURRENT_PDF_PREVIEWS)
 
 NO_STORE_HEADERS = {
     "Cache-Control": "no-store, private",
@@ -106,7 +112,24 @@ async def preview_pdf_intake(
 
     try:
         pdf_bytes = await read_pdf_request_body(request)
-        extraction_result = extract_pdf_text_isolated(pdf_bytes)
+
+        if not _pdf_preview_slots.acquire(blocking=False):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="PDF preview capacity is temporarily unavailable.",
+                headers={
+                    **NO_STORE_HEADERS,
+                    "Retry-After": "1",
+                },
+            )
+
+        try:
+            extraction_result = await run_in_threadpool(
+                extract_pdf_text_isolated,
+                pdf_bytes,
+            )
+        finally:
+            _pdf_preview_slots.release()
     except (
         PdfRequestBodyTooLargeError,
         OversizedPdfError,
