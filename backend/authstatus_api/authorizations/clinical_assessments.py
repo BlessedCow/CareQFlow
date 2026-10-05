@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -151,6 +152,8 @@ def _prepare_assessment_values(
 def create_clinical_assessment(
     auth_id: int,
     payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -201,6 +204,26 @@ def create_clinical_assessment(
         )
 
         assessment_id = int(cursor.lastrowid)
+
+        row = conn.execute(
+            """
+            SELECT *
+            FROM clinical_assessments
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth_id,
+                assessment_id,
+            ),
+        ).fetchone()
+
+        if row is None:
+            raise RuntimeError("Created clinical assessment could not be reloaded.")
+
+        assessment = _row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, assessment)
 
     return get_clinical_assessment(
         auth_id,
@@ -259,6 +282,8 @@ def update_clinical_assessment(
     auth_id: int,
     assessment_id: int,
     payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -320,6 +345,26 @@ def update_clinical_assessment(
             ),
         )
 
+        updated_row = conn.execute(
+            """
+            SELECT *
+            FROM clinical_assessments
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth_id,
+                assessment_id,
+            ),
+        ).fetchone()
+
+        if updated_row is None:
+            raise RuntimeError("Updated clinical assessment could not be reloaded.")
+
+        assessment = _row_to_dict(updated_row)
+
+        if before_commit is not None:
+            before_commit(conn, assessment)
+
     return get_clinical_assessment(
         auth_id,
         assessment_id,
@@ -329,6 +374,8 @@ def update_clinical_assessment(
 def delete_clinical_assessment(
     auth_id: int,
     assessment_id: int,
+    *,
+    before_commit: Callable[[Any], None] | None = None,
 ) -> bool:
     init_db()
 
@@ -344,4 +391,9 @@ def delete_clinical_assessment(
             ),
         )
 
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+
+        if deleted and before_commit is not None:
+            before_commit(conn)
+
+    return deleted

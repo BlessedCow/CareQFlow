@@ -594,6 +594,55 @@ def test_create_auth_writes_audit_event(client, auth_headers):
     assert "ABC123" not in rows[-1]["metadata"]
 
 
+def test_create_auth_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.post(
+            "/api/auths",
+            json=make_payload(),
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        auth_count = conn.execute("SELECT COUNT(*) AS count FROM auths").fetchone()[
+            "count"
+        ]
+
+        event_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM auth_events"
+        ).fetchone()["count"]
+
+        snapshot_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM auth_decision_snapshots"
+        ).fetchone()["count"]
+
+        create_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth.create'
+            """).fetchone()["count"]
+
+    assert auth_count == 0
+    assert event_count == 0
+    assert snapshot_count == 0
+    assert create_audit_count == 0
+
+
 def test_update_auth_writes_audit_event_without_phi_values(client, auth_headers):
     create_response = client.post(
         "/api/auths", json=make_payload(), headers=auth_headers
@@ -629,6 +678,132 @@ def test_update_auth_writes_audit_event_without_phi_values(client, auth_headers)
     assert "AUTH-999" not in rows[-1]["metadata"]
 
 
+def test_update_auth_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    auth_id = create_response.json()["id"]
+
+    with get_conn() as conn:
+        before = conn.execute(
+            """
+            SELECT client_name, member_id, auth_number, status
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        before_event_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_snapshot_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_update_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth.update'
+              AND resource_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+    assert before is not None
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.patch(
+            f"/api/auths/{auth_id}",
+            json={
+                "client_name": "Changed Patient",
+                "member_id": "CHANGED123",
+                "auth_number": "CHANGED-AUTH",
+                "status": "Approved",
+                "approved_days": 5,
+            },
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after = conn.execute(
+            """
+            SELECT client_name, member_id, auth_number, status
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        after_event_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_snapshot_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_update_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth.update'
+              AND resource_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+    assert after is not None
+
+    assert dict(after) == dict(before)
+    assert after_event_count == before_event_count
+    assert after_snapshot_count == before_snapshot_count
+    assert after_update_audit_count == before_update_audit_count
+
+
 def test_delete_auth_writes_audit_event(client, auth_headers):
     create_response = client.post(
         "/api/auths", json=make_payload(), headers=auth_headers
@@ -646,6 +821,123 @@ def test_delete_auth_writes_audit_event(client, auth_headers):
     assert rows[-1]["resource_type"] == "auth"
     assert rows[-1]["resource_id"] == 1
     assert rows[-1]["username"] == "ur@example.com"
+
+
+def test_delete_auth_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    auth_id = create_response.json()["id"]
+
+    with get_conn() as conn:
+        before_auth_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_event_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_snapshot_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_delete_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth.delete'
+              AND resource_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+    assert before_auth_count == 1
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.delete(
+            f"/api/auths/{auth_id}",
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_auth_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_event_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_snapshot_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_delete_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth.delete'
+              AND resource_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+    assert after_auth_count == before_auth_count
+    assert after_event_count == before_event_count
+    assert after_snapshot_count == before_snapshot_count
+    assert after_delete_audit_count == before_delete_audit_count
 
 
 def test_auth_routes_require_authentication(client):
@@ -928,6 +1220,76 @@ def test_create_auth_event_writes_audit_event_without_note_value(client, auth_he
     assert "Do not store this note" not in rows[-1]["metadata"]
 
 
+def test_create_auth_event_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    auth_id = create_response.json()["id"]
+
+    with get_conn() as conn:
+        before_event_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_create_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_event.create'
+            """).fetchone()["count"]
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.post(
+            f"/api/auths/{auth_id}/events",
+            json=make_event_payload(),
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_event_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_create_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_event.create'
+            """).fetchone()["count"]
+
+    assert after_event_count == before_event_count
+    assert after_create_audit_count == before_create_audit_count
+
+
 def test_update_auth_event_writes_audit_event_without_note_value(client, auth_headers):
     create_response = client.post(
         "/api/auths", json=make_payload(), headers=auth_headers
@@ -965,6 +1327,140 @@ def test_update_auth_event_writes_audit_event_without_note_value(client, auth_he
 
     assert metadata == {"auth_id": 1, "fields": ["notes", "outcome"]}
     assert "Sensitive update note" not in rows[-1]["metadata"]
+
+
+def test_update_auth_event_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    auth_id = create_response.json()["id"]
+
+    event_response = client.post(
+        f"/api/auths/{auth_id}/events",
+        json=make_event_payload(),
+        headers=auth_headers,
+    )
+
+    assert event_response.status_code == 201
+
+    event_id = event_response.json()["id"]
+
+    with get_conn() as conn:
+        before_event = conn.execute(
+            """
+            SELECT *
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+        before_auth = conn.execute(
+            """
+            SELECT
+                submitted_at,
+                decision_at,
+                status,
+                requested_days,
+                approved_days,
+                auth_start_date,
+                auth_end_date,
+                review_due_date
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        before_update_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_event.update'
+              AND resource_id = ?
+            """,
+            (event_id,),
+        ).fetchone()["count"]
+
+    assert before_event is not None
+    assert before_auth is not None
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.patch(
+            f"/api/auths/{auth_id}/events/{event_id}",
+            json={
+                "outcome": "Denied",
+                "approved_days": 0,
+                "review_due_date": "2026-10-15",
+                "notes": "This update must roll back.",
+            },
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_event = conn.execute(
+            """
+            SELECT *
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+        after_auth = conn.execute(
+            """
+            SELECT
+                submitted_at,
+                decision_at,
+                status,
+                requested_days,
+                approved_days,
+                auth_start_date,
+                auth_end_date,
+                review_due_date
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        after_update_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_event.update'
+              AND resource_id = ?
+            """,
+            (event_id,),
+        ).fetchone()["count"]
+
+    assert after_event is not None
+    assert after_auth is not None
+
+    assert dict(after_event) == dict(before_event)
+    assert dict(after_auth) == dict(before_auth)
+    assert after_update_audit_count == before_update_audit_count
 
 
 def test_patch_auth_endpoint_tracks_denial_p2p_appeal_and_retro_pipeline_fields(
@@ -1075,6 +1571,134 @@ def test_delete_auth_event_writes_audit_event(client, auth_headers):
     assert rows[-1]["resource_id"] == 1
     assert rows[-1]["username"] == "ur@example.com"
     assert json.loads(rows[-1]["metadata"]) == {"auth_id": 1}
+
+
+def test_delete_auth_event_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    auth_id = create_response.json()["id"]
+
+    event_response = client.post(
+        f"/api/auths/{auth_id}/events",
+        json=make_event_payload(),
+        headers=auth_headers,
+    )
+
+    assert event_response.status_code == 201
+
+    event_id = event_response.json()["id"]
+
+    with get_conn() as conn:
+        before_event = conn.execute(
+            """
+            SELECT *
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+        before_auth = conn.execute(
+            """
+            SELECT
+                submitted_at,
+                decision_at,
+                status,
+                requested_days,
+                approved_days,
+                auth_start_date,
+                auth_end_date,
+                review_due_date
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        before_delete_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_event.delete'
+              AND resource_id = ?
+            """,
+            (event_id,),
+        ).fetchone()["count"]
+
+    assert before_event is not None
+    assert before_auth is not None
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.delete(
+            f"/api/auths/{auth_id}/events/{event_id}",
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_event = conn.execute(
+            """
+            SELECT *
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+        after_auth = conn.execute(
+            """
+            SELECT
+                submitted_at,
+                decision_at,
+                status,
+                requested_days,
+                approved_days,
+                auth_start_date,
+                auth_end_date,
+                review_due_date
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        after_delete_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_event.delete'
+              AND resource_id = ?
+            """,
+            (event_id,),
+        ).fetchone()["count"]
+
+    assert after_event is not None
+    assert after_auth is not None
+
+    assert dict(after_event) == dict(before_event)
+    assert dict(after_auth) == dict(before_auth)
+    assert after_delete_audit_count == before_delete_audit_count
 
 
 def test_analytics_summary_endpoint_counts_records(client, auth_headers):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from authstatus_api.authorizations.mappings import (
@@ -81,6 +82,8 @@ def _auth_exists(auth_id: int) -> bool:
 def create_auth_event(
     auth_id: int,
     payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -106,6 +109,23 @@ def create_auth_event(
             values,
         )
         event_id = int(cursor.lastrowid)
+
+        row = conn.execute(
+            """
+            SELECT *
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+        if row is None:
+            raise RuntimeError("Created authorization event could not be reloaded.")
+
+        event = auth_event_row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, event)
 
     sync_auth_timeline_fields(auth_id)
 
@@ -160,6 +180,8 @@ def update_auth_event(
     auth_id: int,
     event_id: int,
     payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -176,8 +198,15 @@ def update_auth_event(
     )
 
     if not keys:
+        event = get_auth_event(auth_id, event_id)
+
+        if event is not None and before_commit is not None:
+            with get_conn() as conn:
+                before_commit(conn, event)
+
         sync_auth_timeline_fields(auth_id)
-        return get_auth_event(auth_id, event_id)
+
+        return event
 
     with get_conn() as conn:
         for key in keys:
@@ -185,6 +214,23 @@ def update_auth_event(
                 AUTH_EVENT_UPDATE_QUERIES[key],
                 (prepared[key], auth_id, event_id),
             )
+
+        row = conn.execute(
+            """
+            SELECT *
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+        if row is None:
+            raise RuntimeError("Updated authorization event could not be reloaded.")
+
+        event = auth_event_row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, event)
 
     sync_auth_timeline_fields(auth_id)
 
@@ -194,6 +240,8 @@ def update_auth_event(
 def delete_auth_event(
     auth_id: int,
     event_id: int,
+    *,
+    before_commit: Callable[[Any], None] | None = None,
 ) -> bool:
     init_db()
 
@@ -206,6 +254,9 @@ def delete_auth_event(
             (auth_id, event_id),
         )
         deleted = cursor.rowcount > 0
+
+        if deleted and before_commit is not None:
+            before_commit(conn)
 
     if deleted:
         sync_auth_timeline_fields(auth_id)

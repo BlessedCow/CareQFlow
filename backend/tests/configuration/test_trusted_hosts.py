@@ -40,6 +40,10 @@ def configure_production(
         generate_encryption_key(),
     )
     monkeypatch.setenv(
+        "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN",
+        "careqflow-test-initial-admin-setup-token-1234567890",
+    )
+    monkeypatch.setenv(
         "AUTHSTATUS_SESSION_COOKIE_SECURE",
         "true",
     )

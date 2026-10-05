@@ -159,15 +159,24 @@ def create_auth_record(
     current_user: dict = WriteAuthUser,
 ) -> AuthRecord:
     payload_data = payload.model_dump()
-    record = create_auth(payload_data)
 
-    record_audit_event(
-        action="auth.create",
-        resource_type="auth",
-        resource_id=record["id"],
-        user=current_user,
-        metadata=audit_field_names(payload_data),
-        request=request,
+    def audit_create(
+        conn: object,
+        record: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth.create",
+            resource_type="auth",
+            resource_id=record["id"],
+            user=current_user,
+            metadata=audit_field_names(payload_data),
+            request=request,
+            conn=conn,
+        )
+
+    record = create_auth(
+        payload_data,
+        before_commit=audit_create,
     )
 
     return AuthRecord(**record)
@@ -242,6 +251,24 @@ async def create_auth_document_record(
 ) -> AuthDocumentRecord:
     _validate_pdf_content_type(request)
 
+    def audit_create_document(
+        conn: object,
+        document: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth_document.create",
+            resource_type="auth_document",
+            resource_id=document["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                "document_type": document["document_type"],
+                "file_size_bytes": document["file_size_bytes"],
+            },
+            request=request,
+            conn=conn,
+        )
+
     try:
         pdf_bytes = await read_pdf_request_body(request)
         document = create_auth_document(
@@ -249,6 +276,7 @@ async def create_auth_document_record(
             document_type=document_type,
             original_filename=filename,
             pdf_bytes=pdf_bytes,
+            before_commit=audit_create_document,
         )
     except PdfRequestBodyTooLargeError:
         _raise_document_error(
@@ -276,19 +304,6 @@ async def create_auth_document_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Auth record not found.",
         )
-
-    record_audit_event(
-        action="auth_document.create",
-        resource_type="auth_document",
-        resource_id=document["id"],
-        user=current_user,
-        metadata={
-            "auth_id": auth_id,
-            "document_type": document["document_type"],
-            "file_size_bytes": document["file_size_bytes"],
-        },
-        request=request,
-    )
 
     return AuthDocumentRecord(**document)
 
@@ -336,22 +351,28 @@ def delete_auth_document_record(
     request: Request,
     current_user: dict = WriteAuthUser,
 ) -> DeleteResponse:
-    deleted = delete_auth_document(auth_id, document_id)
+    def audit_delete_document(conn: object) -> None:
+        record_audit_event(
+            action="auth_document.delete",
+            resource_type="auth_document",
+            resource_id=document_id,
+            user=current_user,
+            metadata={"auth_id": auth_id},
+            request=request,
+            conn=conn,
+        )
+
+    deleted = delete_auth_document(
+        auth_id,
+        document_id,
+        before_commit=audit_delete_document,
+    )
 
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Authorization document not found.",
         )
-
-    record_audit_event(
-        action="auth_document.delete",
-        resource_type="auth_document",
-        resource_id=document_id,
-        user=current_user,
-        metadata={"auth_id": auth_id},
-        request=request,
-    )
 
     return DeleteResponse(deleted=True, id=document_id)
 
@@ -364,21 +385,32 @@ def update_auth_record(
     current_user: dict = WriteAuthUser,
 ) -> AuthRecord:
     payload_data = payload.model_dump(exclude_unset=True)
-    record = update_auth(auth_id, payload_data)
+
+    def audit_update(
+        conn: object,
+        record: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth.update",
+            resource_type="auth",
+            resource_id=record["id"],
+            user=current_user,
+            metadata=audit_field_names(payload_data),
+            request=request,
+            conn=conn,
+        )
+
+    record = update_auth(
+        auth_id,
+        payload_data,
+        before_commit=audit_update,
+    )
 
     if record is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Auth record not found."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
         )
-
-    record_audit_event(
-        action="auth.update",
-        resource_type="auth",
-        resource_id=auth_id,
-        user=current_user,
-        metadata=audit_field_names(payload_data),
-        request=request,
-    )
 
     return AuthRecord(**record)
 
@@ -423,21 +455,35 @@ def create_auth_event_record(
     current_user: dict = WriteAuthUser,
 ) -> AuthEventRecord:
     payload_data = payload.model_dump()
-    event = create_auth_event(auth_id, payload_data)
+
+    def audit_create_event(
+        conn: object,
+        event: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth_event.create",
+            resource_type="auth_event",
+            resource_id=event["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                **audit_field_names(payload_data),
+            },
+            request=request,
+            conn=conn,
+        )
+
+    event = create_auth_event(
+        auth_id,
+        payload_data,
+        before_commit=audit_create_event,
+    )
 
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Auth record not found."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
         )
-
-    record_audit_event(
-        action="auth_event.create",
-        resource_type="auth_event",
-        resource_id=event["id"],
-        user=current_user,
-        metadata={"auth_id": auth_id, **audit_field_names(payload_data)},
-        request=request,
-    )
 
     return AuthEventRecord(**event)
 
@@ -451,21 +497,36 @@ def update_auth_event_record(
     current_user: dict = WriteAuthUser,
 ) -> AuthEventRecord:
     payload_data = payload.model_dump(exclude_unset=True)
-    event = update_auth_event(auth_id, event_id, payload_data)
+
+    def audit_update_event(
+        conn: object,
+        event: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth_event.update",
+            resource_type="auth_event",
+            resource_id=event["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                **audit_field_names(payload_data),
+            },
+            request=request,
+            conn=conn,
+        )
+
+    event = update_auth_event(
+        auth_id,
+        event_id,
+        payload_data,
+        before_commit=audit_update_event,
+    )
 
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Auth event not found."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth event not found.",
         )
-
-    record_audit_event(
-        action="auth_event.update",
-        resource_type="auth_event",
-        resource_id=event_id,
-        user=current_user,
-        metadata={"auth_id": auth_id, **audit_field_names(payload_data)},
-        request=request,
-    )
 
     return AuthEventRecord(**event)
 
@@ -477,21 +538,28 @@ def delete_auth_event_record(
     request: Request,
     current_user: dict = WriteAuthUser,
 ) -> DeleteResponse:
-    deleted = delete_auth_event(auth_id, event_id)
+    def audit_delete_event(conn: object) -> None:
+        record_audit_event(
+            action="auth_event.delete",
+            resource_type="auth_event",
+            resource_id=event_id,
+            user=current_user,
+            metadata={"auth_id": auth_id},
+            request=request,
+            conn=conn,
+        )
+
+    deleted = delete_auth_event(
+        auth_id,
+        event_id,
+        before_commit=audit_delete_event,
+    )
 
     if not deleted:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Auth event not found."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth event not found.",
         )
-
-    record_audit_event(
-        action="auth_event.delete",
-        resource_type="auth_event",
-        resource_id=event_id,
-        user=current_user,
-        metadata={"auth_id": auth_id},
-        request=request,
-    )
 
     return DeleteResponse(deleted=True, id=event_id)
 
@@ -541,8 +609,30 @@ def create_auth_loc_episode_record(
     current_user: dict = WriteAuthUser,
 ) -> AuthLocEpisodeRecord:
     payload_data = payload.model_dump()
+
+    def audit_create_loc_episode(
+        conn: object,
+        episode: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth_loc_episode.create",
+            resource_type="auth_loc_episode",
+            resource_id=episode["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                **audit_field_names(payload_data),
+            },
+            request=request,
+            conn=conn,
+        )
+
     try:
-        episode = create_auth_loc_episode(auth_id, payload_data)
+        episode = create_auth_loc_episode(
+            auth_id,
+            payload_data,
+            before_commit=audit_create_loc_episode,
+        )
     except InvalidAuthLocEpisodeError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -560,18 +650,6 @@ def create_auth_loc_episode_record(
             detail="Auth record not found.",
         )
 
-    record_audit_event(
-        action="auth_loc_episode.create",
-        resource_type="auth_loc_episode",
-        resource_id=episode["id"],
-        user=current_user,
-        metadata={
-            "auth_id": auth_id,
-            **audit_field_names(payload_data),
-        },
-        request=request,
-    )
-
     return AuthLocEpisodeRecord(**episode)
 
 
@@ -587,11 +665,30 @@ def update_auth_loc_episode_record(
     current_user: dict = WriteAuthUser,
 ) -> AuthLocEpisodeRecord:
     payload_data = payload.model_dump(exclude_unset=True)
+
+    def audit_update_loc_episode(
+        conn: object,
+        episode: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth_loc_episode.update",
+            resource_type="auth_loc_episode",
+            resource_id=episode["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                **audit_field_names(payload_data),
+            },
+            request=request,
+            conn=conn,
+        )
+
     try:
         episode = update_auth_loc_episode(
             auth_id,
             episode_id,
             payload_data,
+            before_commit=audit_update_loc_episode,
         )
     except InvalidAuthLocEpisodeError as exc:
         raise HTTPException(
@@ -610,18 +707,6 @@ def update_auth_loc_episode_record(
             detail="Authorization LOC episode not found.",
         )
 
-    record_audit_event(
-        action="auth_loc_episode.update",
-        resource_type="auth_loc_episode",
-        resource_id=episode_id,
-        user=current_user,
-        metadata={
-            "auth_id": auth_id,
-            **audit_field_names(payload_data),
-        },
-        request=request,
-    )
-
     return AuthLocEpisodeRecord(**episode)
 
 
@@ -635,22 +720,28 @@ def delete_auth_loc_episode_record(
     request: Request,
     current_user: dict = WriteAuthUser,
 ) -> DeleteResponse:
-    deleted = delete_auth_loc_episode(auth_id, episode_id)
+    def audit_delete_loc_episode(conn: object) -> None:
+        record_audit_event(
+            action="auth_loc_episode.delete",
+            resource_type="auth_loc_episode",
+            resource_id=episode_id,
+            user=current_user,
+            metadata={"auth_id": auth_id},
+            request=request,
+            conn=conn,
+        )
+
+    deleted = delete_auth_loc_episode(
+        auth_id,
+        episode_id,
+        before_commit=audit_delete_loc_episode,
+    )
 
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Authorization LOC episode not found.",
         )
-
-    record_audit_event(
-        action="auth_loc_episode.delete",
-        resource_type="auth_loc_episode",
-        resource_id=episode_id,
-        user=current_user,
-        metadata={"auth_id": auth_id},
-        request=request,
-    )
 
     return DeleteResponse(
         deleted=True,
@@ -706,10 +797,28 @@ def create_clinical_assessment_record(
 ) -> ClinicalAssessmentRecord:
     payload_data = payload.model_dump()
 
+    def audit_create_clinical_assessment(
+        conn: object,
+        assessment: dict,
+    ) -> None:
+        record_audit_event(
+            action="clinical_assessment.create",
+            resource_type="clinical_assessment",
+            resource_id=assessment["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                **audit_field_names(payload_data),
+            },
+            request=request,
+            conn=conn,
+        )
+
     try:
         assessment = create_clinical_assessment(
             auth_id,
             payload_data,
+            before_commit=audit_create_clinical_assessment,
         )
     except InvalidClinicalAssessmentError as exc:
         raise HTTPException(
@@ -722,18 +831,6 @@ def create_clinical_assessment_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Auth record not found.",
         )
-
-    record_audit_event(
-        action="clinical_assessment.create",
-        resource_type="clinical_assessment",
-        resource_id=assessment["id"],
-        user=current_user,
-        metadata={
-            "auth_id": auth_id,
-            **audit_field_names(payload_data),
-        },
-        request=request,
-    )
 
     return ClinicalAssessmentRecord(**assessment)
 
@@ -751,11 +848,29 @@ def update_clinical_assessment_record(
 ) -> ClinicalAssessmentRecord:
     payload_data = payload.model_dump(exclude_unset=True)
 
+    def audit_update_clinical_assessment(
+        conn: object,
+        assessment: dict,
+    ) -> None:
+        record_audit_event(
+            action="clinical_assessment.update",
+            resource_type="clinical_assessment",
+            resource_id=assessment["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                **audit_field_names(payload_data),
+            },
+            request=request,
+            conn=conn,
+        )
+
     try:
         assessment = update_clinical_assessment(
             auth_id,
             assessment_id,
             payload_data,
+            before_commit=audit_update_clinical_assessment,
         )
     except InvalidClinicalAssessmentError as exc:
         raise HTTPException(
@@ -768,18 +883,6 @@ def update_clinical_assessment_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Clinical assessment not found.",
         )
-
-    record_audit_event(
-        action="clinical_assessment.update",
-        resource_type="clinical_assessment",
-        resource_id=assessment_id,
-        user=current_user,
-        metadata={
-            "auth_id": auth_id,
-            **audit_field_names(payload_data),
-        },
-        request=request,
-    )
 
     return ClinicalAssessmentRecord(**assessment)
 
@@ -794,9 +897,21 @@ def delete_clinical_assessment_record(
     request: Request,
     current_user: dict = WriteAuthUser,
 ) -> DeleteResponse:
+    def audit_delete_clinical_assessment(conn: object) -> None:
+        record_audit_event(
+            action="clinical_assessment.delete",
+            resource_type="clinical_assessment",
+            resource_id=assessment_id,
+            user=current_user,
+            metadata={"auth_id": auth_id},
+            request=request,
+            conn=conn,
+        )
+
     deleted = delete_clinical_assessment(
         auth_id,
         assessment_id,
+        before_commit=audit_delete_clinical_assessment,
     )
 
     if not deleted:
@@ -804,15 +919,6 @@ def delete_clinical_assessment_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Clinical assessment not found.",
         )
-
-    record_audit_event(
-        action="clinical_assessment.delete",
-        resource_type="clinical_assessment",
-        resource_id=assessment_id,
-        user=current_user,
-        metadata={"auth_id": auth_id},
-        request=request,
-    )
 
     return DeleteResponse(
         deleted=True,
@@ -866,10 +972,28 @@ def create_auth_decision_snapshot_record(
 ) -> AuthDecisionSnapshotRecord:
     payload_data = payload.model_dump()
 
+    def audit_create_decision_snapshot(
+        conn: object,
+        snapshot: dict,
+    ) -> None:
+        record_audit_event(
+            action="auth_decision_snapshot.create",
+            resource_type="auth_decision_snapshot",
+            resource_id=snapshot["id"],
+            user=current_user,
+            metadata={
+                "auth_id": auth_id,
+                **audit_field_names(payload_data),
+            },
+            request=request,
+            conn=conn,
+        )
+
     try:
         snapshot = create_auth_decision_snapshot(
             auth_id,
             payload_data,
+            before_commit=audit_create_decision_snapshot,
         )
     except InvalidAuthDecisionSnapshotError as exc:
         raise HTTPException(
@@ -883,18 +1007,6 @@ def create_auth_decision_snapshot_record(
             detail="Auth record not found.",
         )
 
-    record_audit_event(
-        action="auth_decision_snapshot.create",
-        resource_type="auth_decision_snapshot",
-        resource_id=snapshot["id"],
-        user=current_user,
-        metadata={
-            "auth_id": auth_id,
-            **audit_field_names(payload_data),
-        },
-        request=request,
-    )
-
     return AuthDecisionSnapshotRecord(**snapshot)
 
 
@@ -904,19 +1016,25 @@ def delete_auth_record(
     request: Request,
     current_user: dict = WriteAuthUser,
 ) -> DeleteResponse:
-    deleted = delete_auth(auth_id)
+    def audit_delete(conn: object) -> None:
+        record_audit_event(
+            action="auth.delete",
+            resource_type="auth",
+            resource_id=auth_id,
+            user=current_user,
+            request=request,
+            conn=conn,
+        )
+
+    deleted = delete_auth(
+        auth_id,
+        before_commit=audit_delete,
+    )
 
     if not deleted:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Auth record not found."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
         )
-
-    record_audit_event(
-        action="auth.delete",
-        resource_type="auth",
-        resource_id=auth_id,
-        user=current_user,
-        request=request,
-    )
 
     return DeleteResponse(deleted=True, id=auth_id)

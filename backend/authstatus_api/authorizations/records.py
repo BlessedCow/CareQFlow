@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from authstatus_api.authorizations.decision_snapshots import (
@@ -492,7 +493,11 @@ def _sync_retro_timeline_event(auth_id: int, auth_record: dict[str, Any]) -> Non
     )
 
 
-def create_auth(payload: dict[str, Any]) -> dict[str, Any]:
+def create_auth(
+    payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     init_db()
 
     now = current_timestamp()
@@ -521,10 +526,27 @@ def create_auth(payload: dict[str, Any]) -> dict[str, Any]:
 
         auth_id = int(cursor.lastrowid)
 
+        if before_commit is not None:
+            row = conn.execute(
+                "SELECT * FROM auths WHERE id = ?",
+                (auth_id,),
+            ).fetchone()
+
+            if row is None:
+                raise RuntimeError("Created authorization could not be reloaded.")
+
+            before_commit(
+                conn,
+                auth_row_to_dict(row),
+            )
+
     created_auth = get_auth(auth_id)
 
     if created_auth is not None:
-        create_auth_event(auth_id, initial_timeline_event_payload(created_auth))
+        create_auth_event(
+            auth_id,
+            initial_timeline_event_payload(created_auth),
+        )
 
         final_auth = get_auth(auth_id)
 
@@ -560,7 +582,12 @@ def get_auth(auth_id: int) -> dict[str, Any] | None:
     return auth_row_to_dict(row)
 
 
-def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
+def update_auth(
+    auth_id: int,
+    payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
+) -> dict[str, Any] | None:
     init_db()
 
     existing_auth = get_auth(auth_id)
@@ -586,6 +613,10 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
     if not keys:
         final_auth = get_auth(auth_id)
 
+        if final_auth is not None and before_commit is not None:
+            with get_conn() as conn:
+                before_commit(conn, final_auth)
+
         if final_auth is not None:
             create_automatic_auth_decision_snapshot(final_auth)
             create_automatic_follow_up_decision_snapshots(final_auth)
@@ -601,7 +632,18 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
             [*values, auth_id],
         )
 
-    updated_auth = get_auth(auth_id)
+        row = conn.execute(
+            "SELECT * FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+        if row is None:
+            raise RuntimeError("Updated authorization could not be reloaded.")
+
+        updated_auth = auth_row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, updated_auth)
 
     old_status = str(existing_auth.get("status") or "").strip()
     requested_status = str(payload.get("status") or "").strip()
@@ -644,10 +686,22 @@ def update_auth(auth_id: int, payload: dict[str, Any]) -> dict[str, Any] | None:
     return final_auth
 
 
-def delete_auth(auth_id: int) -> bool:
+def delete_auth(
+    auth_id: int,
+    *,
+    before_commit: Callable[[Any], None] | None = None,
+) -> bool:
     init_db()
 
     with get_conn() as conn:
-        cursor = conn.execute("DELETE FROM auths WHERE id = ?", (auth_id,))
+        cursor = conn.execute(
+            "DELETE FROM auths WHERE id = ?",
+            (auth_id,),
+        )
 
-    return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+
+        if deleted and before_commit is not None:
+            before_commit(conn)
+
+    return deleted

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from cryptography.fernet import InvalidToken
@@ -239,6 +240,7 @@ def create_auth_document(
     document_type: str,
     original_filename: str | None,
     pdf_bytes: bytes,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -296,7 +298,15 @@ def create_auth_document(
             (document_id,),
         ).fetchone()
 
-    return _document_row_to_dict(row)
+        if row is None:
+            raise RuntimeError("Created authorization document could not be reloaded.")
+
+        document = _document_row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, document)
+
+    return document
 
 
 def get_auth_document(
@@ -349,6 +359,8 @@ def get_auth_document_pdf(
 def delete_auth_document(
     auth_id: int,
     document_id: int,
+    *,
+    before_commit: Callable[[Any], None] | None = None,
 ) -> bool:
     init_db()
 
@@ -362,4 +374,9 @@ def delete_auth_document(
             (document_id, auth_id),
         )
 
-    return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+
+        if deleted and before_commit is not None:
+            before_commit(conn)
+
+    return deleted

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from authstatus_api.crypto import ENCRYPTED_TEXT_PREFIX, generate_encryption_key
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
+from authstatus_api.routers import auths as auths_router
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
@@ -146,6 +147,69 @@ def test_upload_auth_document_stores_encrypted_pdf_metadata_only(
     assert row is not None
     assert row["encrypted_pdf"].startswith(ENCRYPTED_TEXT_PREFIX.encode())
     assert pdf_bytes not in row["encrypted_pdf"]
+
+
+def test_upload_auth_document_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    auth = create_auth_record(client, auth_headers)
+
+    with get_conn() as conn:
+        before_document_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_documents
+            WHERE auth_id = ?
+            """,
+            (auth["id"],),
+        ).fetchone()["count"]
+
+        before_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_document.create'
+            """).fetchone()["count"]
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.post(
+            f"/api/auths/{auth['id']}/documents"
+            "?document_type=approval_letter&filename=rollback.pdf",
+            content=b"%PDF-1.7\nsensitive document content",
+            headers=pdf_headers(auth_headers),
+        )
+
+    with get_conn() as conn:
+        after_document_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_documents
+            WHERE auth_id = ?
+            """,
+            (auth["id"],),
+        ).fetchone()["count"]
+
+        after_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_document.create'
+            """).fetchone()["count"]
+
+    assert after_document_count == before_document_count
+    assert after_audit_count == before_audit_count
 
 
 def test_list_auth_documents_returns_metadata_only(client, auth_headers):
@@ -317,6 +381,95 @@ def test_delete_auth_document_removes_document(client, auth_headers):
 
     assert list_response.status_code == 200
     assert list_response.json() == {"documents": []}
+
+
+def test_delete_auth_document_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    auth = create_auth_record(client, auth_headers)
+
+    upload_response = client.post(
+        f"/api/auths/{auth['id']}/documents"
+        "?document_type=other&filename=rollback.pdf",
+        content=b"%PDF-1.7\nrollback document",
+        headers=pdf_headers(auth_headers),
+    )
+
+    assert upload_response.status_code == 201
+
+    document_id = upload_response.json()["id"]
+
+    with get_conn() as conn:
+        before_document = conn.execute(
+            """
+            SELECT *
+            FROM auth_documents
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth["id"],
+                document_id,
+            ),
+        ).fetchone()
+
+        before_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_document.delete'
+              AND resource_id = ?
+            """,
+            (document_id,),
+        ).fetchone()["count"]
+
+    assert before_document is not None
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.delete(
+            f"/api/auths/{auth['id']}/documents/{document_id}",
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_document = conn.execute(
+            """
+            SELECT *
+            FROM auth_documents
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth["id"],
+                document_id,
+            ),
+        ).fetchone()
+
+        after_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_document.delete'
+              AND resource_id = ?
+            """,
+            (document_id,),
+        ).fetchone()["count"]
+
+    assert after_document is not None
+    assert dict(after_document) == dict(before_document)
+    assert after_audit_count == before_audit_count
 
 
 def test_upload_auth_document_rejects_non_pdf_content_type(client, auth_headers):

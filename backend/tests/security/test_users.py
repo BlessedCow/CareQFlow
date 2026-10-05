@@ -16,6 +16,7 @@ from authstatus_api.security.users import (
     get_user_by_id,
     get_user_by_username,
     list_users,
+    record_successful_login,
     update_user,
     update_user_password,
     update_user_walkthrough_status,
@@ -342,7 +343,7 @@ def test_authenticate_user_locks_after_repeated_failed_logins():
         authenticate_user("locked@example.com", "correct horse battery staple")
 
 
-def test_successful_login_clears_failed_login_state():
+def test_completed_login_clears_failed_login_state():
     user = create_user(
         "reset-lockout@example.com",
         "correct horse battery staple",
@@ -357,6 +358,13 @@ def test_successful_login_clears_failed_login_state():
     )
 
     assert logged_in is not None
+
+    before_completion = get_user_by_id(user["id"])
+
+    assert before_completion is not None
+    assert before_completion["failed_login_count"] == 1
+
+    record_successful_login(user["id"])
 
     found = get_user_by_id(user["id"])
 

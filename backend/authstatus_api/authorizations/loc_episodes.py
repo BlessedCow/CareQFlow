@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -111,6 +112,8 @@ def _episode_overlaps(
 def create_auth_loc_episode(
     auth_id: int,
     payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -166,6 +169,23 @@ def create_auth_loc_episode(
         )
         episode_id = int(cursor.lastrowid)
 
+        row = conn.execute(
+            """
+            SELECT *
+            FROM auth_loc_episodes
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, episode_id),
+        ).fetchone()
+
+        if row is None:
+            raise RuntimeError("Created LOC episode could not be reloaded.")
+
+        episode = _row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, episode)
+
     return get_auth_loc_episode(auth_id, episode_id)
 
 
@@ -217,6 +237,8 @@ def update_auth_loc_episode(
     auth_id: int,
     episode_id: int,
     payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -287,6 +309,23 @@ def update_auth_loc_episode(
             ),
         )
 
+        row = conn.execute(
+            """
+            SELECT *
+            FROM auth_loc_episodes
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, episode_id),
+        ).fetchone()
+
+        if row is None:
+            raise RuntimeError("Updated LOC episode could not be reloaded.")
+
+        episode = _row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, episode)
+
     return get_auth_loc_episode(auth_id, episode_id)
 
 
@@ -305,6 +344,8 @@ def close_auth_loc_episode(
 def delete_auth_loc_episode(
     auth_id: int,
     episode_id: int,
+    *,
+    before_commit: Callable[[Any], None] | None = None,
 ) -> bool:
     init_db()
 
@@ -317,4 +358,9 @@ def delete_auth_loc_episode(
             (auth_id, episode_id),
         )
 
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+
+        if deleted and before_commit is not None:
+            before_commit(conn)
+
+    return deleted

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
+from authstatus_api.routers import auths as auths_router
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
@@ -93,6 +94,74 @@ def test_create_decision_snapshot_endpoint(client, auth_headers):
 
     assert response.status_code == 201
     assert response.json()["outcome"] == "Approved"
+
+
+def test_create_decision_snapshot_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    auth_id = _create_auth(client, auth_headers)
+
+    with get_conn() as conn:
+        before_snapshot_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_decision_snapshot.create'
+            """).fetchone()["count"]
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.post(
+            f"/api/auths/{auth_id}/decision-snapshots",
+            json={
+                "facility": "Facility A",
+                "loc": "RTC",
+                "auth_type": "Concurrent",
+                "outcome": "Denied",
+                "decision_at": "2026-09-10T12:00:00+00:00",
+            },
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_snapshot_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'auth_decision_snapshot.create'
+            """).fetchone()["count"]
+
+    assert after_snapshot_count == before_snapshot_count
+    assert after_audit_count == before_audit_count
 
 
 def test_list_decision_snapshots_endpoint(client, auth_headers):

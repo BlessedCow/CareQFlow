@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
+from authstatus_api.routers import auths as auths_router
 from authstatus_api.security.users import create_user
 from authstatus_api.settings import get_settings
 
@@ -101,6 +102,68 @@ def test_create_clinical_assessment_endpoint(client, auth_headers):
     assert data["instrument"] == "CIWA-Ar"
     assert data["score"] == 23.0
     assert data["loc"] == "RTC"
+
+
+def test_create_clinical_assessment_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    auth_id = _create_auth(client, auth_headers)
+
+    with get_conn() as conn:
+        before_assessment_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM clinical_assessments
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        before_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'clinical_assessment.create'
+            """).fetchone()["count"]
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.post(
+            f"/api/auths/{auth_id}/clinical-assessments",
+            json=_assessment_payload(),
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_assessment_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM clinical_assessments
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["count"]
+
+        after_audit_count = conn.execute("""
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'clinical_assessment.create'
+            """).fetchone()["count"]
+
+    assert after_assessment_count == before_assessment_count
+    assert after_audit_count == before_audit_count
 
 
 def test_list_clinical_assessments_endpoint(client, auth_headers):
@@ -238,6 +301,100 @@ def test_update_clinical_assessment_endpoint(client, auth_headers):
     assert response.json()["score"] == 18.0
 
 
+def test_update_clinical_assessment_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    auth_id = _create_auth(client, auth_headers)
+
+    created = client.post(
+        f"/api/auths/{auth_id}/clinical-assessments",
+        json=_assessment_payload(),
+        headers=auth_headers,
+    )
+
+    assert created.status_code == 201
+
+    assessment_id = created.json()["id"]
+
+    with get_conn() as conn:
+        before_assessment = conn.execute(
+            """
+            SELECT *
+            FROM clinical_assessments
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth_id,
+                assessment_id,
+            ),
+        ).fetchone()
+
+        before_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'clinical_assessment.update'
+              AND resource_id = ?
+            """,
+            (assessment_id,),
+        ).fetchone()["count"]
+
+    assert before_assessment is not None
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.patch(
+            f"/api/auths/{auth_id}/clinical-assessments/{assessment_id}",
+            json={
+                "instrument": "COWS",
+                "score": 18,
+                "loc": "3.7-WM",
+                "source": "clinical",
+            },
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_assessment = conn.execute(
+            """
+            SELECT *
+            FROM clinical_assessments
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth_id,
+                assessment_id,
+            ),
+        ).fetchone()
+
+        after_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'clinical_assessment.update'
+              AND resource_id = ?
+            """,
+            (assessment_id,),
+        ).fetchone()["count"]
+
+    assert after_assessment is not None
+    assert dict(after_assessment) == dict(before_assessment)
+    assert after_audit_count == before_audit_count
+
+
 def test_delete_clinical_assessment_endpoint(client, auth_headers):
     auth_id = _create_auth(client, auth_headers)
 
@@ -259,6 +416,94 @@ def test_delete_clinical_assessment_endpoint(client, auth_headers):
         "deleted": True,
         "id": assessment_id,
     }
+
+
+def test_delete_clinical_assessment_rolls_back_when_audit_write_fails(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    auth_id = _create_auth(client, auth_headers)
+
+    created = client.post(
+        f"/api/auths/{auth_id}/clinical-assessments",
+        json=_assessment_payload(),
+        headers=auth_headers,
+    )
+
+    assert created.status_code == 201
+
+    assessment_id = created.json()["id"]
+
+    with get_conn() as conn:
+        before_assessment = conn.execute(
+            """
+            SELECT *
+            FROM clinical_assessments
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth_id,
+                assessment_id,
+            ),
+        ).fetchone()
+
+        before_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'clinical_assessment.delete'
+              AND resource_id = ?
+            """,
+            (assessment_id,),
+        ).fetchone()["count"]
+
+    assert before_assessment is not None
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic audit write failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic audit write failure.",
+    ):
+        client.delete(
+            f"/api/auths/{auth_id}/clinical-assessments/{assessment_id}",
+            headers=auth_headers,
+        )
+
+    with get_conn() as conn:
+        after_assessment = conn.execute(
+            """
+            SELECT *
+            FROM clinical_assessments
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth_id,
+                assessment_id,
+            ),
+        ).fetchone()
+
+        after_audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM audit_events
+            WHERE action = 'clinical_assessment.delete'
+              AND resource_id = ?
+            """,
+            (assessment_id,),
+        ).fetchone()["count"]
+
+    assert after_assessment is not None
+    assert dict(after_assessment) == dict(before_assessment)
+    assert after_audit_count == before_audit_count
 
 
 def test_create_clinical_assessment_rejects_invalid_timestamp(

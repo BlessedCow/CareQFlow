@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -418,6 +419,8 @@ def create_automatic_auth_decision_snapshot(
 def create_auth_decision_snapshot(
     auth_id: int,
     payload: dict[str, Any],
+    *,
+    before_commit: Callable[[Any, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any] | None:
     init_db()
 
@@ -599,6 +602,28 @@ def create_auth_decision_snapshot(
         )
 
         snapshot_id = int(cursor.lastrowid)
+
+        row = conn.execute(
+            """
+            SELECT *
+            FROM auth_decision_snapshots
+            WHERE auth_id = ? AND id = ?
+            """,
+            (
+                auth_id,
+                snapshot_id,
+            ),
+        ).fetchone()
+
+        if row is None:
+            raise RuntimeError(
+                "Created authorization decision snapshot could not be reloaded."
+            )
+
+        snapshot = _row_to_dict(row)
+
+        if before_commit is not None:
+            before_commit(conn, snapshot)
 
     return get_auth_decision_snapshot(
         auth_id,
