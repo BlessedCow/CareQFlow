@@ -26,6 +26,10 @@ from authstatus_api.settings import get_settings
 def configure_test_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTHSTATUS_ENCRYPTION_KEY", generate_encryption_key())
     monkeypatch.setenv("AUTHSTATUS_DATABASE_PATH", str(tmp_path / "auth_tracker.db"))
+    monkeypatch.setenv(
+        "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN",
+        "careqflow-test-initial-admin-setup-token-1234567890",
+    )
     get_settings.cache_clear()
 
     yield
@@ -1144,6 +1148,56 @@ def test_admin_can_list_users(client):
     assert "password_hash" not in data["users"][0]
 
 
+def test_setup_initial_admin_status_rejects_missing_setup_token(client):
+    response = client.get(
+        "/api/security/setup-initial-admin/status",
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Initial admin setup authorization failed."}
+
+
+def test_setup_initial_admin_status_rejects_invalid_setup_token(client):
+    response = client.get(
+        "/api/security/setup-initial-admin/status",
+        headers={
+            "X-CareQFlow-Setup-Token": "incorrect-setup-token",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Initial admin setup authorization failed."}
+
+
+def test_setup_initial_admin_rejects_missing_setup_token(client):
+    response = client.post(
+        "/api/security/setup-initial-admin",
+        json={
+            "username": "admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Initial admin setup authorization failed."}
+
+
+def test_setup_initial_admin_rejects_invalid_setup_token(client):
+    response = client.post(
+        "/api/security/setup-initial-admin",
+        headers={
+            "X-CareQFlow-Setup-Token": "incorrect-setup-token",
+        },
+        json={
+            "username": "admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Initial admin setup authorization failed."}
+
+
 def test_ur_user_cannot_list_users(client):
     create_user("ur@example.com", "correct horse battery staple", role="UR")
 
@@ -1159,8 +1213,17 @@ def test_ur_user_cannot_list_users(client):
     assert response.status_code == 403
 
 
+def initial_admin_setup_headers() -> dict[str, str]:
+    return {
+        "X-CareQFlow-Setup-Token": "careqflow-test-initial-admin-setup-token-1234567890",
+    }
+
+
 def test_setup_initial_admin_status_is_available_when_no_users_exist(client):
-    response = client.get("/api/security/setup-initial-admin/status")
+    response = client.get(
+        "/api/security/setup-initial-admin/status",
+        headers=initial_admin_setup_headers(),
+    )
 
     assert response.status_code == 200
     assert response.json() == {"setup_available": True}
@@ -1169,7 +1232,10 @@ def test_setup_initial_admin_status_is_available_when_no_users_exist(client):
 def test_setup_initial_admin_status_is_unavailable_after_user_exists(client):
     create_user("existing@example.com", "correct horse battery staple", role="Admin")
 
-    response = client.get("/api/security/setup-initial-admin/status")
+    response = client.get(
+        "/api/security/setup-initial-admin/status",
+        headers=initial_admin_setup_headers(),
+    )
 
     assert response.status_code == 200
     assert response.json() == {"setup_available": False}
@@ -3258,6 +3324,7 @@ def test_session_activity_requires_active_session(client):
 def test_setup_initial_admin_creates_admin_when_no_users_exist(client):
     response = client.post(
         "/api/security/setup-initial-admin",
+        headers=initial_admin_setup_headers(),
         json={
             "username": "FirstAdmin@Example.com",
             "password": "correct horse battery staple",
@@ -3301,6 +3368,7 @@ def test_setup_initial_admin_creates_admin_when_no_users_exist(client):
 def test_setup_initial_admin_rejects_invalid_username(client, username):
     response = client.post(
         "/api/security/setup-initial-admin",
+        headers=initial_admin_setup_headers(),
         json={
             "username": username,
             "password": "correct horse battery staple",
@@ -3313,6 +3381,7 @@ def test_setup_initial_admin_rejects_invalid_username(client, username):
 def test_failed_initial_admin_username_validation_does_not_consume_setup(client):
     invalid_response = client.post(
         "/api/security/setup-initial-admin",
+        headers=initial_admin_setup_headers(),
         json={
             "username": "admin@example.com'; DROP TABLE users; --",
             "password": "correct horse battery staple",
@@ -3323,6 +3392,7 @@ def test_failed_initial_admin_username_validation_does_not_consume_setup(client)
 
     status_response = client.get(
         "/api/security/setup-initial-admin/status",
+        headers=initial_admin_setup_headers(),
     )
 
     assert status_response.status_code == 200
@@ -3332,6 +3402,7 @@ def test_failed_initial_admin_username_validation_does_not_consume_setup(client)
 
     valid_response = client.post(
         "/api/security/setup-initial-admin",
+        headers=initial_admin_setup_headers(),
         json={
             "username": "admin@example.com",
             "password": "correct horse battery staple",
@@ -3347,6 +3418,7 @@ def test_setup_initial_admin_is_disabled_after_user_exists(client):
 
     response = client.post(
         "/api/security/setup-initial-admin",
+        headers=initial_admin_setup_headers(),
         json={
             "username": "new-admin@example.com",
             "password": "correct horse battery staple",
@@ -3360,6 +3432,7 @@ def test_setup_initial_admin_is_disabled_after_user_exists(client):
 def test_setup_initial_admin_rejects_short_password(client):
     response = client.post(
         "/api/security/setup-initial-admin",
+        headers=initial_admin_setup_headers(),
         json={
             "username": "admin@example.com",
             "password": "too-short",

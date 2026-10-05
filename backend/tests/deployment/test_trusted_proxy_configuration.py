@@ -337,6 +337,61 @@ def test_windows_admin_setup_uses_application_host_for_loopback_requests():
     assert "Host = $trustedHostHeader" in content
 
 
+def test_windows_admin_setup_reads_setup_token_from_protected_environment():
+    content = WINDOWS_ADMIN_SETUP.read_text(encoding="utf-8")
+
+    assert (
+        "[string]$EnvironmentFile = "
+        '"C:\\ProgramData\\CareQueue\\Config\\carequeue.env"' in content
+    )
+    assert "function Get-InitialAdminSetupToken" in content
+    assert "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=" in content
+    assert "EnvironmentFilePath" in content
+
+
+def test_windows_admin_setup_requires_valid_setup_token():
+    content = WINDOWS_ADMIN_SETUP.read_text(encoding="utf-8")
+
+    assert "$setupToken.Length -lt 32" in content
+    assert "CareQFlow initial administrator setup authorization is not " in content
+
+
+def test_windows_admin_setup_sends_setup_token_to_status_endpoint():
+    content = WINDOWS_ADMIN_SETUP.read_text(encoding="utf-8")
+
+    status_function = content.split(
+        "function Get-InitialAdminSetupAvailable {",
+        maxsplit=1,
+    )[1].split("function New-SetupPayload {", maxsplit=1,)[0]
+
+    assert '"X-CareQFlow-Setup-Token" = $SetupToken' in status_function
+
+
+def test_windows_admin_setup_sends_setup_token_when_creating_admin():
+    content = WINDOWS_ADMIN_SETUP.read_text(encoding="utf-8")
+
+    create_handler = content.split(
+        "$createButton.Add_Click({",
+        maxsplit=1,
+    )[1]
+
+    assert (
+        '"X-CareQFlow-Setup-Token" = $script:initialAdminSetupToken' in create_handler
+    )
+
+
+def test_windows_admin_setup_does_not_pass_setup_token_on_command_line():
+    content = WINDOWS_ADMIN_SETUP.read_text(encoding="utf-8")
+
+    parameter_block = content.split(
+        ")",
+        maxsplit=1,
+    )[0]
+
+    assert "SetupToken" not in parameter_block
+    assert "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN" not in parameter_block
+
+
 def test_linux_admin_setup_uses_application_host_for_loopback_requests():
     content = LINUX_ADMIN_SETUP.read_text(encoding="utf-8")
 

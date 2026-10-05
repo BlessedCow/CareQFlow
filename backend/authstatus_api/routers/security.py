@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 from ipaddress import ip_address
 
 from fastapi import (
@@ -126,6 +127,8 @@ def _client_ip(request: Request) -> str:
 
 MAX_AUDIT_LOGIN_USERNAME_LENGTH = 254
 
+INITIAL_ADMIN_SETUP_HEADER = "X-CareQFlow-Setup-Token"
+
 
 def _audit_login_username(username: str) -> str:
     return username.strip().lower()[:MAX_AUDIT_LOGIN_USERNAME_LENGTH]
@@ -142,13 +145,33 @@ def _is_loopback_client(request: Request) -> bool:
 
 
 def _require_loopback_initial_setup(request: Request) -> None:
-    if _is_loopback_client(request):
-        return
+    if not _is_loopback_client(request):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Initial admin setup must be completed from the local machine.",
+        )
 
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Initial admin setup must be completed from the local machine.",
+    expected_token = get_settings().initial_admin_setup_token.strip()
+
+    if not expected_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Initial admin setup is not configured.",
+        )
+
+    supplied_token = request.headers.get(
+        INITIAL_ADMIN_SETUP_HEADER,
+        "",
     )
+
+    if not hmac.compare_digest(
+        supplied_token,
+        expected_token,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Initial admin setup authorization failed.",
+        )
 
 
 def _user_response(user: dict) -> UserResponse:

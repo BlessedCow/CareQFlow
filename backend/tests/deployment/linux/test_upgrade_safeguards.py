@@ -160,6 +160,61 @@ def test_linux_installer_persists_installed_release_version():
     assert "CAREQUEUE_PACKAGE_PLATFORM=${RELEASE_PACKAGE_PLATFORM}" in function
 
 
+def test_linux_fresh_install_generates_initial_admin_setup_token():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "create_environment_file",
+    )
+
+    assert 'initial_admin_setup_token="$(generate_random_secret)"' in function
+    assert (
+        "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN="
+        "${initial_admin_setup_token}" in function
+    )
+
+
+def test_linux_existing_environment_preserves_valid_initial_admin_setup_token():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "create_environment_file",
+    )
+
+    assert '"AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN"' in function
+    assert "${#existing_initial_admin_setup_token} >= 32" in function
+    assert (
+        'initial_admin_setup_token="${existing_initial_admin_setup_token}"' in function
+    )
+
+
+def test_linux_existing_environment_replaces_missing_or_short_setup_token():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "create_environment_file",
+    )
+
+    assert 'initial_admin_setup_token="$(generate_random_secret)"' in function
+    assert "/^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=/" in function
+    assert "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=%s" in function
+
+
+def test_linux_environment_file_keeps_protected_permissions():
+    content = _read(LINUX_PRODUCTION_INSTALLER)
+
+    function = _shell_function(
+        content,
+        "create_environment_file",
+    )
+
+    assert 'chown root:"${CAREQUEUE_GROUP}" "${environment_file}"' in function
+    assert 'chmod 0640 "${environment_file}"' in function
+
+
 def test_linux_upgrade_requires_valid_incoming_version():
     content = _read(LINUX_INSTALLER_WRAPPER)
 

@@ -1073,6 +1073,13 @@ try {
             Get-Content `
                 -LiteralPath $environmentFile
         )
+
+        $hasInitialAdminSetupToken = @(
+            $existingEnvironmentLines |
+            Where-Object {
+                $_ -match '^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=.+$'
+            }
+        ).Count -gt 0
     
         $currentCorsOrigins = ConvertTo-Json `
             -InputObject $applicationOrigins `
@@ -1088,7 +1095,8 @@ try {
                 $_ -notmatch (
                     '^AUTHSTATUS_ALLOW_UNSAFE_DATABASE_PATH=' +
                     '|^AUTHSTATUS_ALLOW_UNSAFE_STORAGE_PATHS=' +
-                    '|^AUTHSTATUS_PRODUCTION_DATA_ROOT='
+                    '|^AUTHSTATUS_PRODUCTION_DATA_ROOT=' +
+                    '|^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=\s*$'
                 )
             } |
             ForEach-Object {
@@ -1117,6 +1125,19 @@ try {
         $migratedEnvironmentLines += (
             "AUTHSTATUS_PRODUCTION_DATA_ROOT=$DataDirectory"
         )
+
+        if (-not $hasInitialAdminSetupToken) {
+            Write-Host (
+                "Generating initial administrator setup authorization token..."
+            )
+        
+            $initialAdminSetupToken = New-RandomSecret -ByteCount 48
+        
+            $migratedEnvironmentLines += (
+                "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=" +
+                $initialAdminSetupToken
+            )
+        }
     
         Set-Content `
             -LiteralPath $environmentFile `
@@ -1134,6 +1155,7 @@ try {
         $fieldEncryptionKey = New-FernetKey
         $backupEncryptionKey = New-FernetKey
         $sqlCipherKey = New-RandomSecret -ByteCount 48
+        $initialAdminSetupToken = New-RandomSecret -ByteCount 48
 
         if ($fieldEncryptionKey -eq $backupEncryptionKey) {
             throw "Generated encryption keys must be independent."
@@ -1146,6 +1168,7 @@ try {
         $environmentContent = @"
 AUTHSTATUS_APP_ENVIRONMENT=production
 AUTHSTATUS_ENCRYPTION_KEY=$fieldEncryptionKey
+AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=$initialAdminSetupToken
 AUTHSTATUS_SQLCIPHER_KEY=$sqlCipherKey
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=$backupEncryptionKey
 AUTHSTATUS_DATABASE_PATH=$databasePath

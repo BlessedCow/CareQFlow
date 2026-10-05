@@ -208,6 +208,28 @@ def test_windows_existing_environment_preserves_custom_cors_origin():
     assert replacement_index < else_index < preserve_index
 
 
+def test_windows_fresh_install_generates_initial_admin_setup_token():
+    content = _read(WINDOWS_PRODUCTION_INSTALLER)
+
+    assert "$initialAdminSetupToken = New-RandomSecret -ByteCount 48" in content
+    assert "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=$initialAdminSetupToken" in content
+
+
+def test_windows_existing_environment_preserves_initial_admin_setup_token():
+    content = _read(WINDOWS_PRODUCTION_INSTALLER)
+
+    assert "$hasInitialAdminSetupToken = @(" in content
+    assert "'^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=.+$'" in content
+    assert "if (-not $hasInitialAdminSetupToken)" in content
+
+
+def test_windows_existing_environment_replaces_blank_initial_admin_setup_token():
+    content = _read(WINDOWS_PRODUCTION_INSTALLER)
+
+    assert "'|^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=\\s*$'" in content
+    assert '"AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=" +' in content
+
+
 def test_windows_upgrade_has_verified_pre_upgrade_backup_helper():
     content = _read(WINDOWS_INSTALLER_WRAPPER)
 

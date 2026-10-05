@@ -8,6 +8,8 @@ param(
 
     [string]$ApplicationUrl = "https://careqflow.local",
 
+    [string]$EnvironmentFile = "C:\ProgramData\CareQueue\Config\carequeue.env",
+
     [ValidateRange(1, 60)]
     [int]$HealthAttempts = 5,
 
@@ -22,6 +24,48 @@ $trustedHostHeader = $applicationUri.Authority
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
+
+function Get-InitialAdminSetupToken {
+    param(
+        [Parameter(Mandatory)]
+        [string]$EnvironmentFilePath
+    )
+
+    if (-not (Test-Path -LiteralPath $EnvironmentFilePath -PathType Leaf)) {
+        throw (
+            "CareQFlow initial administrator setup configuration was not found."
+        )
+    }
+
+    $tokenLine = @(
+        Get-Content -LiteralPath $EnvironmentFilePath |
+        Where-Object {
+            $_ -match '^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN='
+        }
+    )
+
+    if ($tokenLine.Count -ne 1) {
+        throw (
+            "CareQFlow initial administrator setup authorization is not " +
+            "configured correctly."
+        )
+    }
+
+    $setupToken = (
+        $tokenLine[0] -replace
+            '^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=',
+            ''
+    ).Trim()
+
+    if ($setupToken.Length -lt 32) {
+        throw (
+            "CareQFlow initial administrator setup authorization is not " +
+            "configured correctly."
+        )
+    }
+
+    return $setupToken
+}
 
 function Test-CareQueueApiReady {
     param(
@@ -64,7 +108,10 @@ function Get-InitialAdminSetupAvailable {
         [string]$Endpoint,
 
         [Parameter(Mandatory)]
-        [string]$HostHeader
+        [string]$HostHeader,
+
+        [Parameter(Mandatory)]
+        [string]$SetupToken
     )
 
     $response = Invoke-RestMethod `
@@ -72,6 +119,7 @@ function Get-InitialAdminSetupAvailable {
         -Uri $Endpoint `
         -Headers @{
             Host = $HostHeader
+            "X-CareQFlow-Setup-Token" = $SetupToken
         } `
         -TimeoutSec 10
 
@@ -232,6 +280,7 @@ $createButton = $window.FindName("CreateButton")
 $cancelButton = $window.FindName("CancelButton")
 
 $script:setupAlreadyComplete = $false
+$script:initialAdminSetupToken = $null
 
 function Set-SetupStatus {
     param(
@@ -287,9 +336,13 @@ function Start-SetupStatusCheck {
                     throw "The local CareQFlow API is not responding on 127.0.0.1:8000."
                 }
 
+                $script:initialAdminSetupToken = Get-InitialAdminSetupToken `
+                    -EnvironmentFilePath $EnvironmentFile
+                
                 $setupAvailable = Get-InitialAdminSetupAvailable `
                     -Endpoint $SetupStatusEndpoint `
-                    -HostHeader $trustedHostHeader
+                    -HostHeader $trustedHostHeader `
+                    -SetupToken $script:initialAdminSetupToken
 
                 if (-not $setupAvailable) {
                     $script:setupAlreadyComplete = $true
@@ -390,6 +443,7 @@ $createButton.Add_Click({
                 -Uri $SetupEndpoint `
                 -Headers @{
                     Host = $trustedHostHeader
+                    "X-CareQFlow-Setup-Token" = $script:initialAdminSetupToken
                 } `
                 -Body $body `
                 -ContentType "application/json" `

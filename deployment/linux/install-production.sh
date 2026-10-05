@@ -567,6 +567,8 @@ create_environment_file() {
     local field_encryption_key
     local backup_encryption_key
     local sqlcipher_key
+    local initial_admin_setup_token
+    local existing_initial_admin_setup_token
     local cors_origins
     local previous_application_origin
     local previous_managed_cors_origins
@@ -598,6 +600,26 @@ create_environment_file() {
         printf '%s\n' \
             'Existing CareQFlow production configuration found. Preserving it.'
 
+        existing_initial_admin_setup_token="$(
+            awk \
+                -F= \
+                '$1 == "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN" {
+                    sub(/^[^=]*=/, "", $0)
+                    print $0
+                    exit
+                }' \
+                "${environment_file}"
+        )"
+
+        if (( ${#existing_initial_admin_setup_token} >= 32 )); then
+            initial_admin_setup_token="${existing_initial_admin_setup_token}"
+        else
+            printf '%s\n' \
+                'Generating initial administrator setup authorization token...'
+
+            initial_admin_setup_token="$(generate_random_secret)"
+        fi
+
         local migrated_environment_file
 
         migrated_environment_file="${environment_file}.tmp"
@@ -613,6 +635,9 @@ create_environment_file() {
                 next
             }
             /^AUTHSTATUS_PRODUCTION_DATA_ROOT=/ {
+                next
+            }
+            /^AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=/ {
                 next
             }
             $0 == "AUTHSTATUS_CORS_ORIGINS=[\"https://carequeue.local\"]" {
@@ -636,6 +661,10 @@ create_environment_file() {
             "${DATA_DIRECTORY}" \
             >> "${migrated_environment_file}"
 
+        printf 'AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=%s\n' \
+            "${initial_admin_setup_token}" \
+            >> "${migrated_environment_file}"
+
         mv \
             "${migrated_environment_file}" \
             "${environment_file}"
@@ -654,6 +683,7 @@ create_environment_file() {
     field_encryption_key="$(generate_fernet_key)"
     backup_encryption_key="$(generate_fernet_key)"
     sqlcipher_key="$(generate_random_secret)"
+    initial_admin_setup_token="$(generate_random_secret)"
 
     if [[ "${field_encryption_key}" == "${backup_encryption_key}" ]]; then
         fail "Generated encryption keys must be independent."
@@ -662,6 +692,7 @@ create_environment_file() {
     cat > "${environment_file}" <<EOF
 AUTHSTATUS_APP_ENVIRONMENT=production
 AUTHSTATUS_ENCRYPTION_KEY=${field_encryption_key}
+AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN=${initial_admin_setup_token}
 AUTHSTATUS_SQLCIPHER_KEY=${sqlcipher_key}
 AUTHSTATUS_BACKUP_ENCRYPTION_KEY=${backup_encryption_key}
 AUTHSTATUS_DATABASE_PATH=${database_path}

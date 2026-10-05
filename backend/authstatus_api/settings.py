@@ -115,6 +115,10 @@ class Settings(BaseSettings):
         default="",
         validation_alias="AUTHSTATUS_ENCRYPTION_KEY",
     )
+    initial_admin_setup_token: str = Field(
+        default="",
+        validation_alias="AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN",
+    )
     previous_encryption_key: str = Field(
         default="",
         validation_alias="AUTHSTATUS_PREVIOUS_ENCRYPTION_KEY",
@@ -379,6 +383,25 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Production requires a valid AUTHSTATUS_ENCRYPTION_KEY."
             ) from exc
+
+        initial_admin_setup_token = self.initial_admin_setup_token.strip()
+
+        if not initial_admin_setup_token:
+            raise ValueError(
+                "Production requires AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN."
+            )
+
+        if len(initial_admin_setup_token) < 32:
+            raise ValueError(
+                "Production AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN must be at least "
+                "32 characters."
+            )
+
+        if is_placeholder_secret(initial_admin_setup_token):
+            raise ValueError(
+                "Production AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN cannot use a "
+                "placeholder value."
+            )
 
         previous_encryption_key = self.previous_encryption_key.strip()
 

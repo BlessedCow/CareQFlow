@@ -6,6 +6,8 @@ SETUP_STATUS_URL="${SETUP_STATUS_URL:-http://127.0.0.1:8000/api/security/setup-i
 SETUP_URL="${SETUP_URL:-http://127.0.0.1:8000/api/security/setup-initial-admin}"
 APPLICATION_ORIGIN="${APPLICATION_ORIGIN:-https://careqflow.local}"
 APPLICATION_HOST_HEADER=""
+ENVIRONMENT_FILE="/etc/carequeue/carequeue.env"
+INITIAL_ADMIN_SETUP_TOKEN=""
 
 fail() {
     printf 'ERROR: %s\n' "$*" >&2
@@ -57,12 +59,40 @@ print(host)
 PY
 }
 
+get_initial_admin_setup_token() {
+    if [[ ! -f "${ENVIRONMENT_FILE}" ]]; then
+        printf '%s\n' \
+            'CareQFlow initial administrator setup configuration was not found.' \
+            >&2
+        return 1
+    fi
+
+    INITIAL_ADMIN_SETUP_TOKEN="$(
+        awk \
+            -F= \
+            '$1 == "AUTHSTATUS_INITIAL_ADMIN_SETUP_TOKEN" {
+                sub(/^[^=]*=/, "", $0)
+                print $0
+                exit
+            }' \
+            "${ENVIRONMENT_FILE}"
+    )"
+
+    if (( ${#INITIAL_ADMIN_SETUP_TOKEN} < 32 )); then
+        printf '%s\n' \
+            'CareQFlow initial administrator setup authorization is not configured correctly.' \
+            >&2
+        return 1
+    fi
+}
+
 get_setup_status() {
     curl \
         --silent \
         --show-error \
         --fail \
         --header "Host: ${APPLICATION_HOST_HEADER}" \
+        --header "X-CareQFlow-Setup-Token: ${INITIAL_ADMIN_SETUP_TOKEN}" \
         "${SETUP_STATUS_URL}"
 }
 
@@ -155,6 +185,7 @@ PY
             --write-out '%{http_code}' \
             --request POST \
             --header "Host: ${APPLICATION_HOST_HEADER}" \
+            --header "X-CareQFlow-Setup-Token: ${INITIAL_ADMIN_SETUP_TOKEN}" \
             --header 'Content-Type: application/json' \
             --data-binary "@${payload_file}" \
             "${SETUP_URL}"
@@ -200,6 +231,9 @@ main() {
 
     APPLICATION_HOST_HEADER="$(get_application_host_header)" \
         || fail "Application origin is not a valid HTTPS origin."
+
+    get_initial_admin_setup_token \
+        || fail "Unable to load initial administrator setup authorization."
 
     if ! setup_is_available; then
         printf 'Initial admin setup is already complete.\n'
