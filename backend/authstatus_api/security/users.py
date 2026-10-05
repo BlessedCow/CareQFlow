@@ -443,13 +443,7 @@ def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
         record_failed_login(user["id"])
         return None
 
-    record_successful_login(user["id"])
-
-    refreshed_user = get_user_by_id(user["id"])
-    if refreshed_user is None:
-        return None
-
-    return refreshed_user
+    return user
 
 
 def get_user_for_session_token(

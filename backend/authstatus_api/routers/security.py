@@ -103,6 +103,7 @@ from authstatus_api.security.users import (
     get_user_by_id,
     get_user_for_session_token,
     list_users,
+    record_successful_login,
     update_user,
     update_user_password,
     update_user_walkthrough_status,
@@ -947,6 +948,11 @@ def _create_authenticated_session_response(
     request: Request,
     response: Response,
 ) -> LoginResponse:
+    record_successful_login(user["id"])
+
+    refreshed_user = get_user_by_id(user["id"])
+    if refreshed_user is not None:
+        user = refreshed_user
     created_session = replace_user_session(
         user["id"],
         ip_address=_client_ip(request),

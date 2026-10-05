@@ -954,6 +954,95 @@ def test_mfa_login_challenge_is_invalidated_after_failed_attempt_limit(client):
     }
 
 
+def test_password_success_does_not_clear_failed_login_state_before_mfa(client):
+    user = create_user(
+        "user@example.com",
+        "correct horse battery staple",
+        role="UR",
+    )
+    secret = pyotp.random_base32()
+
+    assert store_user_mfa_secret(user["id"], secret) is True
+    assert enable_user_mfa(user["id"]) is True
+
+    for _ in range(2):
+        failed_response = client.post(
+            "/api/security/login",
+            json={
+                "username": user["username"],
+                "password": "wrong password",
+            },
+        )
+
+        assert failed_response.status_code == 401
+
+    with get_conn() as conn:
+        before_mfa = conn.execute(
+            """
+            SELECT failed_login_count, locked_until, last_login_at
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert before_mfa is not None
+    assert before_mfa["failed_login_count"] == 2
+    assert before_mfa["locked_until"] is None
+    assert before_mfa["last_login_at"] is None
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": user["username"],
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+    assert login_response.json()["mfa_required"] is True
+
+    with get_conn() as conn:
+        pending_mfa = conn.execute(
+            """
+            SELECT failed_login_count, locked_until, last_login_at
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert pending_mfa is not None
+    assert pending_mfa["failed_login_count"] == 2
+    assert pending_mfa["locked_until"] is None
+    assert pending_mfa["last_login_at"] is None
+
+    verify_response = client.post(
+        "/api/security/login/mfa/verify",
+        json={
+            "challenge_token": login_response.json()["mfa_challenge_token"],
+            "code": pyotp.TOTP(secret).now(),
+        },
+    )
+
+    assert verify_response.status_code == 200
+
+    with get_conn() as conn:
+        completed_login = conn.execute(
+            """
+            SELECT failed_login_count, locked_until, last_login_at
+            FROM users
+            WHERE id = ?
+            """,
+            (user["id"],),
+        ).fetchone()
+
+    assert completed_login is not None
+    assert completed_login["failed_login_count"] == 0
+    assert completed_login["locked_until"] is None
+    assert completed_login["last_login_at"] is not None
+
+
 def test_login_sets_httponly_session_cookie(client):
     create_user(
         "user@example.com",
