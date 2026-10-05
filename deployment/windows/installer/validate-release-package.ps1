@@ -340,10 +340,17 @@ if (-not $contentSecurityPolicy) {
     throw "Frontend response is missing Content-Security-Policy."
 }
 
-if ($contentSecurityPolicy -notmatch "script-src 'self' 'unsafe-inline'") {
+if ($contentSecurityPolicy -notmatch "script-src 'self'") {
     throw (
-        "Content-Security-Policy is not compatible with the packaged " +
-        "single-file frontend. Current value: " +
+        "Content-Security-Policy does not restrict packaged frontend " +
+        "scripts to same-origin assets. Current value: " +
+        $contentSecurityPolicy
+    )
+}
+
+if ($contentSecurityPolicy -match "script-src[^;]*'unsafe-inline'") {
+    throw (
+        "Content-Security-Policy permits inline JavaScript. Current value: " +
         $contentSecurityPolicy
     )
 }

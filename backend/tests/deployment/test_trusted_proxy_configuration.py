@@ -375,6 +375,15 @@ def assert_security_headers(content: str) -> None:
 
     assert "-Server" in content
 
+    assert "script-src 'self'" in content
+
+    script_policy = content.split("script-src", maxsplit=1)[1].split(
+        ";",
+        maxsplit=1,
+    )[0]
+
+    assert "'unsafe-inline'" not in script_policy
+
 
 def test_windows_caddyfile_sets_required_security_headers():
     content = WINDOWS_CADDYFILE.read_text(encoding="utf-8")

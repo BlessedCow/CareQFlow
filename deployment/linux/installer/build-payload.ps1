@@ -264,14 +264,94 @@ if (Test-Path -LiteralPath $packagePath) {
         -Force
 }
 
-& tar.exe `
-    -czf $packagePath `
-    -C $stagingDirectory `
-    .
+$pythonCommand = Get-Command `
+    python `
+    -ErrorAction SilentlyContinue
+
+if (-not $pythonCommand) {
+    throw (
+        "Python is required to create the Linux installer package " +
+        "with normalized archive permissions."
+    )
+}
+
+$tarScript = @'
+from __future__ import annotations
+
+from pathlib import Path, PurePosixPath
+import sys
+import tarfile
+
+source = Path(sys.argv[1]).resolve()
+destination = Path(sys.argv[2]).resolve()
+
+
+def normalize_member(member: tarfile.TarInfo) -> tarfile.TarInfo:
+    path = PurePosixPath(member.name)
+
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"Unsafe archive path: {member.name}")
+
+    if member.issym() or member.islnk():
+        raise ValueError(f"Links are not permitted: {member.name}")
+
+    if not (member.isdir() or member.isfile()):
+        raise ValueError(
+            f"Unsupported archive entry type: {member.name}"
+        )
+
+    member.uid = 0
+    member.gid = 0
+    member.uname = "root"
+    member.gname = "root"
+    member.mode = 0o755 if member.isdir() else 0o644
+
+    return member
+
+
+with tarfile.open(destination, "w:gz") as archive:
+    archive.add(
+        source,
+        arcname=".",
+        recursive=True,
+        filter=normalize_member,
+    )
+
+with tarfile.open(destination, "r:gz") as archive:
+    for member in archive.getmembers():
+        if member.issym() or member.islnk():
+            raise ValueError(
+                f"Archive contains a link: {member.name}"
+            )
+
+        if member.isdir():
+            expected_mode = 0o755
+        elif member.isfile():
+            expected_mode = 0o644
+        else:
+            raise ValueError(
+                "Archive contains an unsupported entry type: "
+                f"{member.name}"
+            )
+
+        actual_mode = member.mode & 0o777
+
+        if actual_mode != expected_mode:
+            raise ValueError(
+                f"Unsafe mode {actual_mode:o} for {member.name}; "
+                f"expected {expected_mode:o}"
+            )
+'@
+
+$tarScript | & $pythonCommand.Source `
+    - `
+    $stagingDirectory `
+    $packagePath
 
 if ($LASTEXITCODE -ne 0) {
     throw (
-        "tar.exe failed with exit code " +
+        "Unable to create a permission-normalized Linux installer package. " +
+        "Python exited with code " +
         $LASTEXITCODE
     )
 }
