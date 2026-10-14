@@ -11,6 +11,7 @@ from authstatus_api.persistence.migration_steps.audit import (
 from authstatus_api.persistence.migration_steps.authorizations import (
     add_authorization_analytics_columns,
     add_core_authorization_columns,
+    add_decision_provenance_columns,
     add_denial_follow_up_columns,
     create_authorization_decision_snapshots_table,
     create_authorization_loc_episodes_table,
@@ -180,6 +181,10 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         migration_id="0012_security_mfa_challenge_failed_attempts",
         apply=add_mfa_challenge_failed_attempts_column,
+    ),
+    Migration(
+        migration_id="0013_decision_provenance_foundation",
+        apply=add_decision_provenance_columns,
     ),
 )
 

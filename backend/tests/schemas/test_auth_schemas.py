@@ -153,3 +153,33 @@ def test_auth_event_update_allows_partial_date_update():
     )
 
     assert update.review_due_date == "2026-07-01"
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "p2p_decided_at",
+        "appeal_decided_at",
+        "retro_decided_at",
+    ],
+)
+def test_auth_create_validates_follow_up_decision_dates(field_name):
+    payload = valid_auth_payload()
+    payload[field_name] = "07/12/2026"
+
+    with pytest.raises(ValidationError, match="YYYY-MM-DD"):
+        AuthCreate.model_validate(payload)
+
+
+def test_auth_update_accepts_follow_up_decision_dates():
+    update = AuthUpdate.model_validate(
+        {
+            "p2p_decided_at": "2026-07-01",
+            "appeal_decided_at": "2026-07-12",
+            "retro_decided_at": "2026-07-20",
+        }
+    )
+
+    assert update.p2p_decided_at == "2026-07-01"
+    assert update.appeal_decided_at == "2026-07-12"
+    assert update.retro_decided_at == "2026-07-20"

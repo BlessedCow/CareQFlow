@@ -96,15 +96,18 @@ class AuthBase(BaseModel):
     p2p_requested: bool = False
     p2p_scheduled_at: str = ""
     p2p_deadline: str = ""
+    p2p_decided_at: str = ""
     p2p_outcome: str = ""
     p2p_reviewer: str = ""
     p2p_notes: str = ""
     appeal_submitted: bool = False
     appeal_deadline: str = ""
+    appeal_decided_at: str = ""
     appeal_outcome: str = ""
     appeal_notes: str = ""
     retro_requested: bool = False
     retro_deadline: str = ""
+    retro_decided_at: str = ""
     retro_outcome: str = ""
     retro_notes: str = ""
 
@@ -116,8 +119,11 @@ class AuthBase(BaseModel):
         "denial_date",
         "denial_through_date",
         "p2p_deadline",
+        "p2p_decided_at",
         "appeal_deadline",
+        "appeal_decided_at",
         "retro_deadline",
+        "retro_decided_at",
         mode="before",
     )
     @classmethod
@@ -204,15 +210,18 @@ class AuthUpdate(BaseModel):
     p2p_requested: bool | None = None
     p2p_scheduled_at: str | None = None
     p2p_deadline: str | None = None
+    p2p_decided_at: str | None = None
     p2p_outcome: str | None = None
     p2p_reviewer: str | None = None
     p2p_notes: str | None = None
     appeal_submitted: bool | None = None
     appeal_deadline: str | None = None
+    appeal_decided_at: str | None = None
     appeal_outcome: str | None = None
     appeal_notes: str | None = None
     retro_requested: bool | None = None
     retro_deadline: str | None = None
+    retro_decided_at: str | None = None
     retro_outcome: str | None = None
     retro_notes: str | None = None
 
@@ -226,8 +235,11 @@ class AuthUpdate(BaseModel):
         "denial_date",
         "denial_through_date",
         "p2p_deadline",
+        "p2p_decided_at",
         "appeal_deadline",
+        "appeal_decided_at",
         "retro_deadline",
+        "retro_decided_at",
         mode="before",
     )
     @classmethod
@@ -491,6 +503,13 @@ class AuthDecisionSnapshotBase(BaseModel):
     days_at_current_loc: int | None = None
     total_treatment_days: int | None = None
     source: str = "manual"
+    snapshot_role: str = "legacy"
+    review_type: str = "unknown"
+    parent_snapshot_id: int | None = None
+    root_snapshot_id: int | None = None
+    follow_up_decision_at: str | None = None
+    context_derivation_version: int = Field(default=1, ge=1)
+    context_provenance: str = "legacy"
 
     model_config = ConfigDict(extra="forbid")
 

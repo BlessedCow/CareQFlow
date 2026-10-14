@@ -98,6 +98,8 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
             else None
         ),
         "source": str(row["source"]),
+        "context_derivation_version": int(row["context_derivation_version"]),
+        "context_provenance": str(row["context_provenance"]),
         "created_at": str(row["created_at"]),
         "updated_at": str(row["updated_at"]),
     }
@@ -116,12 +118,12 @@ def _duration_days(
     return (end - start).days
 
 
-def _calculate_loc_context(
+def _derive_loc_context(
     conn: Any,
     auth_id: int,
     decision_at: str,
-    current_loc: str,
-) -> tuple[int | None, int | None]:
+    fallback_loc: str,
+) -> tuple[str, int | None, int | None, str]:
     decision_dt = _parse_timestamp(
         decision_at,
         "decision_at",
@@ -141,9 +143,10 @@ def _calculate_loc_context(
     ).fetchall()
 
     if not rows:
-        return None, None
+        return fallback_loc, None, None, "auth_loc_fallback"
 
     total_days = 0
+    active_loc: str | None = None
     days_at_current_loc: int | None = None
 
     for row in rows:
@@ -156,11 +159,14 @@ def _calculate_loc_context(
         if start_dt > decision_dt:
             continue
 
-        if row["ended_at"] is None:
+        ended_at = row["ended_at"]
+
+        if ended_at is None:
+            episode_end = None
             effective_end = decision_dt
         else:
             episode_end = _parse_timestamp(
-                str(row["ended_at"]),
+                str(ended_at),
                 "ended_at",
             )
             effective_end = min(
@@ -177,21 +183,23 @@ def _calculate_loc_context(
         )
         total_days += episode_days
 
-        if (
-            str(row["loc"]) == current_loc
-            and start_dt <= decision_dt
-            and (
-                row["ended_at"] is None
-                or _parse_timestamp(
-                    str(row["ended_at"]),
-                    "ended_at",
-                )
-                >= decision_dt
-            )
+        if start_dt <= decision_dt and (
+            episode_end is None or episode_end >= decision_dt
         ):
+            active_loc = str(row["loc"]).strip()
             days_at_current_loc = episode_days
 
-    return days_at_current_loc, total_days
+    if active_loc is None:
+        raise InvalidAuthDecisionSnapshotError(
+            "No LOC episode is active at decision_at."
+        )
+
+    return (
+        active_loc,
+        days_at_current_loc,
+        total_days,
+        "loc_episode",
+    )
 
 
 def _automatic_outcome(auth_record: dict[str, Any]) -> str | None:
@@ -483,7 +491,7 @@ def create_auth_decision_snapshot(
             )
         ).strip()
 
-        loc = str(
+        fallback_loc = str(
             payload.get(
                 "loc",
                 auth_row["loc"],
@@ -500,7 +508,7 @@ def create_auth_decision_snapshot(
         if not facility:
             raise InvalidAuthDecisionSnapshotError("facility is required.")
 
-        if not loc:
+        if not fallback_loc:
             raise InvalidAuthDecisionSnapshotError("loc is required.")
 
         if not auth_type:
@@ -546,11 +554,16 @@ def create_auth_decision_snapshot(
             auth_row["denial_source"],
         )
 
-        days_at_current_loc, total_treatment_days = _calculate_loc_context(
+        (
+            loc,
+            days_at_current_loc,
+            total_treatment_days,
+            context_provenance,
+        ) = _derive_loc_context(
             conn,
             auth_id,
             decision_at,
-            loc,
+            fallback_loc,
         )
 
         cursor = conn.execute(
@@ -573,10 +586,12 @@ def create_auth_decision_snapshot(
                 days_at_current_loc,
                 total_treatment_days,
                 source,
+                context_derivation_version,
+                context_provenance,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 auth_id,
@@ -596,6 +611,8 @@ def create_auth_decision_snapshot(
                 days_at_current_loc,
                 total_treatment_days,
                 source,
+                2,
+                context_provenance,
                 now,
                 now,
             ),

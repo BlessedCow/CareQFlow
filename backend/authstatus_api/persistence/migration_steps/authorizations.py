@@ -156,3 +156,41 @@ def create_authorization_decision_snapshots_table(conn: Any) -> None:
             FOREIGN KEY (auth_event_id) REFERENCES auth_events (id) ON DELETE SET NULL
         )
         """)
+
+
+def add_decision_provenance_columns(conn: Any) -> None:
+    auth_columns = {
+        str(row["name"]) for row in conn.execute("PRAGMA table_info(auths)").fetchall()
+    }
+
+    auth_column_definitions = (
+        ("p2p_decided_at", "TEXT"),
+        ("appeal_decided_at", "TEXT"),
+        ("retro_decided_at", "TEXT"),
+    )
+
+    for column_name, definition in auth_column_definitions:
+        if column_name not in auth_columns:
+            conn.execute(f"ALTER TABLE auths ADD COLUMN {column_name} {definition}")
+
+    snapshot_columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(auth_decision_snapshots)").fetchall()
+    }
+
+    snapshot_column_definitions = (
+        ("snapshot_role", "TEXT NOT NULL DEFAULT 'legacy'"),
+        ("review_type", "TEXT NOT NULL DEFAULT 'unknown'"),
+        ("parent_snapshot_id", "INTEGER"),
+        ("root_snapshot_id", "INTEGER"),
+        ("follow_up_decision_at", "TEXT"),
+        ("context_derivation_version", "INTEGER NOT NULL DEFAULT 1"),
+        ("context_provenance", "TEXT NOT NULL DEFAULT 'legacy'"),
+    )
+
+    for column_name, definition in snapshot_column_definitions:
+        if column_name not in snapshot_columns:
+            conn.execute(
+                f"ALTER TABLE auth_decision_snapshots "
+                f"ADD COLUMN {column_name} {definition}"
+            )

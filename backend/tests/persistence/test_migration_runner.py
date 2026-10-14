@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from sqlcipher3 import IntegrityError
 
 from authstatus_api.database_encryption.sqlcipher_probe import (
     apply_sqlcipher_key,
@@ -20,6 +19,7 @@ from authstatus_api.persistence.migration_steps.audit import (
 )
 from authstatus_api.persistence.migration_steps.authorizations import (
     add_core_authorization_columns,
+    add_decision_provenance_columns,
     add_denial_follow_up_columns,
     create_authorization_decision_snapshots_table,
     create_authorization_loc_episodes_table,
@@ -35,6 +35,9 @@ from authstatus_api.persistence.migration_steps.security import (
     add_authentication_and_session_columns,
     add_walkthrough_columns,
 )
+
+sqlcipher3 = import_sqlcipher()
+IntegrityError = sqlcipher3.IntegrityError
 
 
 def _open_sqlcipher_database(database_path, passphrase):
@@ -322,6 +325,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
+        "0013_decision_provenance_foundation",
     ]
     assert get_applied_migration_ids(conn) == {
         "0001_security_walkthrough_columns",
@@ -336,6 +340,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
+        "0013_decision_provenance_foundation",
     }
 
     governance_triggers = {row["name"] for row in conn.execute("""
@@ -723,6 +728,7 @@ def test_init_db_applies_registered_migrations_in_order(
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
+        "0013_decision_provenance_foundation",
     ]
 
     assert user_row is not None
@@ -994,6 +1000,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
         "0010_clinical_assessments",
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
+        "0013_decision_provenance_foundation",
     ]
 
     assert user_row is not None
@@ -1802,6 +1809,105 @@ def test_denial_follow_up_migration_accepts_current_schema(conn):
     assert columns.count("p2p_requested") == 1
     assert columns.count("appeal_submitted") == 1
     assert columns.count("retro_requested") == 1
+
+
+def test_decision_provenance_migration_adds_auth_and_snapshot_columns(conn):
+    conn.execute("""
+        CREATE TABLE auths (
+            id INTEGER PRIMARY KEY
+        )
+        """)
+
+    conn.execute("""
+        CREATE TABLE auth_decision_snapshots (
+            id INTEGER PRIMARY KEY,
+            auth_id INTEGER NOT NULL
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0013_decision_provenance_foundation",
+                apply=add_decision_provenance_columns,
+            )
+        ],
+    )
+
+    auth_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(auths)").fetchall()
+    }
+
+    snapshot_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(auth_decision_snapshots)").fetchall()
+    }
+
+    assert applied == ["0013_decision_provenance_foundation"]
+
+    assert {
+        "p2p_decided_at",
+        "appeal_decided_at",
+        "retro_decided_at",
+    }.issubset(auth_columns)
+
+    assert {
+        "snapshot_role",
+        "review_type",
+        "parent_snapshot_id",
+        "root_snapshot_id",
+        "follow_up_decision_at",
+        "context_derivation_version",
+        "context_provenance",
+    }.issubset(snapshot_columns)
+
+
+def test_decision_provenance_migration_preserves_existing_snapshot(conn):
+    conn.execute("CREATE TABLE auths (id INTEGER PRIMARY KEY)")
+
+    conn.execute("""
+        CREATE TABLE auth_decision_snapshots (
+            id INTEGER PRIMARY KEY,
+            auth_id INTEGER NOT NULL,
+            outcome TEXT NOT NULL
+        )
+        """)
+
+    conn.execute(
+        """
+        INSERT INTO auth_decision_snapshots (
+            id,
+            auth_id,
+            outcome
+        )
+        VALUES (?, ?, ?)
+        """,
+        (
+            7,
+            1,
+            "P2P Overturned",
+        ),
+    )
+
+    add_decision_provenance_columns(conn)
+
+    row = conn.execute(
+        "SELECT * FROM auth_decision_snapshots WHERE id = ?",
+        (7,),
+    ).fetchone()
+
+    assert row is not None
+    assert row["outcome"] == "P2P Overturned"
+
+    assert row["snapshot_role"] == "legacy"
+    assert row["review_type"] == "unknown"
+    assert row["context_derivation_version"] == 1
+    assert row["context_provenance"] == "legacy"
+
+    assert row["parent_snapshot_id"] is None
+    assert row["root_snapshot_id"] is None
+    assert row["follow_up_decision_at"] is None
 
 
 def test_loc_episode_migration_creates_table(conn):

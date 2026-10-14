@@ -79,15 +79,18 @@ AUTH_TABLE_COLUMNS = {
     "p2p_requested",
     "p2p_scheduled_at",
     "p2p_deadline",
+    "p2p_decided_at",
     "p2p_outcome",
     "p2p_reviewer",
     "p2p_notes",
     "appeal_submitted",
     "appeal_deadline",
+    "appeal_decided_at",
     "appeal_outcome",
     "appeal_notes",
     "retro_requested",
     "retro_deadline",
+    "retro_decided_at",
     "retro_outcome",
     "retro_notes",
     "created_at",
@@ -518,7 +521,9 @@ def create_auth(
     )
     values = [prepared[key] for key in keys]
 
-    with get_conn() as conn:
+    conn = get_conn()
+
+    try:
         cursor = conn.execute(
             insert_sql("auths", keys),
             values,
@@ -540,23 +545,34 @@ def create_auth(
                 auth_row_to_dict(row),
             )
 
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
     created_auth = get_auth(auth_id)
 
-    if created_auth is not None:
-        create_auth_event(
-            auth_id,
-            initial_timeline_event_payload(created_auth),
+    if created_auth is None:
+        raise RuntimeError("Created authorization could not be reloaded.")
+
+    create_auth_event(
+        auth_id,
+        initial_timeline_event_payload(created_auth),
+    )
+
+    final_auth = get_auth(auth_id)
+
+    if final_auth is None:
+        raise RuntimeError(
+            "Created authorization could not be reloaded after timeline setup."
         )
 
-        final_auth = get_auth(auth_id)
+    create_automatic_auth_decision_snapshot(final_auth)
+    create_automatic_follow_up_decision_snapshots(final_auth)
 
-        if final_auth is not None:
-            create_automatic_auth_decision_snapshot(final_auth)
-            create_automatic_follow_up_decision_snapshots(final_auth)
-
-        return final_auth
-
-    return None
+    return final_auth
 
 
 def list_auths() -> list[dict[str, Any]]:

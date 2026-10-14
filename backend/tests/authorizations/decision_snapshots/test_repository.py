@@ -109,8 +109,108 @@ def test_create_auth_decision_snapshot_derives_loc_context():
     )
 
     assert snapshot is not None
+    assert snapshot["loc"] == "PHP"
     assert snapshot["days_at_current_loc"] == 5
     assert snapshot["total_treatment_days"] == 9
+    assert snapshot["context_derivation_version"] == 2
+    assert snapshot["context_provenance"] == "loc_episode"
+
+
+def test_snapshot_uses_loc_active_at_decision_instead_of_current_auth_loc():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "PHP",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "In Progress",
+            "insurance": "Example Health",
+        }
+    )
+
+    create_auth_loc_episode(
+        auth["id"],
+        {
+            "loc": "RTC",
+            "started_at": "2026-06-01T00:00:00+00:00",
+            "ended_at": "2026-06-27T00:00:00+00:00",
+        },
+    )
+
+    create_auth_loc_episode(
+        auth["id"],
+        {
+            "loc": "PHP",
+            "started_at": "2026-06-27T00:00:00+00:00",
+        },
+    )
+
+    snapshot = create_auth_decision_snapshot(
+        auth["id"],
+        {
+            "outcome": "Denied",
+            "decision_at": "2026-06-21T00:00:00+00:00",
+        },
+    )
+
+    assert snapshot is not None
+    assert snapshot["loc"] == "RTC"
+    assert snapshot["days_at_current_loc"] == 20
+    assert snapshot["total_treatment_days"] == 20
+    assert snapshot["context_provenance"] == "loc_episode"
+
+
+def test_snapshot_uses_auth_loc_when_no_loc_episodes_exist():
+    auth = _create_auth()
+
+    snapshot = create_auth_decision_snapshot(
+        auth["id"],
+        {
+            "outcome": "Denied",
+            "decision_at": "2026-09-10T00:00:00+00:00",
+        },
+    )
+
+    assert snapshot is not None
+    assert snapshot["loc"] == "PHP"
+    assert snapshot["days_at_current_loc"] is None
+    assert snapshot["total_treatment_days"] is None
+    assert snapshot["context_derivation_version"] == 2
+    assert snapshot["context_provenance"] == "auth_loc_fallback"
+
+
+def test_snapshot_rejects_decision_outside_existing_loc_episodes():
+    auth = _create_auth()
+
+    create_auth_loc_episode(
+        auth["id"],
+        {
+            "loc": "RTC",
+            "started_at": "2026-09-01T00:00:00+00:00",
+            "ended_at": "2026-09-05T00:00:00+00:00",
+        },
+    )
+
+    create_auth_loc_episode(
+        auth["id"],
+        {
+            "loc": "PHP",
+            "started_at": "2026-09-10T00:00:00+00:00",
+        },
+    )
+
+    with pytest.raises(
+        InvalidAuthDecisionSnapshotError,
+        match="No LOC episode is active at decision_at",
+    ):
+        create_auth_decision_snapshot(
+            auth["id"],
+            {
+                "outcome": "Denied",
+                "decision_at": "2026-09-07T00:00:00+00:00",
+            },
+        )
 
 
 def test_snapshot_values_remain_frozen_after_auth_changes():
