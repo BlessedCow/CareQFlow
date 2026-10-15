@@ -287,13 +287,18 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
             "appeal_notes": "Expedited appeal planned.",
             "retro_requested": True,
             "retro_deadline": "2026-07-05",
-            "retro_outcome": "Pending",
+            "retro_decided_at": "2026-07-04T15:30:00+00:00",
+            "retro_outcome": "Approved",
             "retro_notes": "Retro auth needed for gap days.",
+            "retro_reviewed_from": "2026-06-20",
+            "retro_reviewed_to": "2026-06-23",
+            "retro_reviewed_loc": "RTC",
+            "retro_reason": "Authorization was not obtained before service.",
         },
     )
 
     assert updated is not None
-    assert updated["status"] == "Appealed"
+    assert updated["status"] == "Approved"
     assert updated["denial_reason_category"] == "Medical Necessity"
     assert updated["denial_reason_notes"] == "Payer says RTC criteria not met."
     assert updated["denial_prevention_notes"] == "Document Dimension 3 risks earlier."
@@ -314,8 +319,13 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
     assert updated["appeal_notes"] == "Expedited appeal planned."
     assert updated["retro_requested"] is True
     assert updated["retro_deadline"] == "2026-07-05"
-    assert updated["retro_outcome"] == "Pending"
+    assert updated["retro_decided_at"] == "2026-07-04T15:30:00+00:00"
+    assert updated["retro_outcome"] == "Approved"
     assert updated["retro_notes"] == "Retro auth needed for gap days."
+    assert updated["retro_reviewed_from"] == "2026-06-20"
+    assert updated["retro_reviewed_to"] == "2026-06-23"
+    assert updated["retro_reviewed_loc"] == "RTC"
+    assert updated["retro_reason"] == "Authorization was not obtained before service."
 
     with get_conn() as conn:
         row = conn.execute(
@@ -387,8 +397,8 @@ def test_update_auth_tracks_denial_p2p_appeal_and_retro_pipeline_fields():
     )
 
     assert retro_event is not None
-    assert retro_event["event_date"] == "2026-07-05"
-    assert retro_event["outcome"] == "Pending"
+    assert retro_event["event_date"] == "2026-07-04"
+    assert retro_event["outcome"] == "Approved"
     assert retro_event["review_due_date"] == "2026-07-05"
     assert "Retro auth details recorded." in retro_event["notes"]
     assert "Deadline: 2026-07-05." in retro_event["notes"]
@@ -592,6 +602,8 @@ def test_list_auth_events_returns_events_for_auth_only():
         },
     )
 
+    assert first_event is not None
+
     events = list_auth_events(first_auth["id"])
 
     assert events is not None
@@ -730,8 +742,13 @@ def test_follow_up_lifecycle_preserves_authorization_values(
         "auth_end_date": "2026-09-05",
         "review_due_date": "2026-09-06",
     }
+
     created = create_auth(make_payload() | core | {"status": "Denied"})
+
+    assert created is not None
+
     auth_id = created["id"]
+
     for follow_up_outcome in ("Pending", outcome):
         updated = update_auth(
             auth_id,
@@ -741,7 +758,10 @@ def test_follow_up_lifecycle_preserves_authorization_values(
                 f"{prefix}_outcome": follow_up_outcome,
             },
         )
+
+        assert updated is not None
         assert {key: updated[key] for key in core} == core
+
     assert updated["status"] == "Approved"
 
     note = create_auth_event(
@@ -752,16 +772,27 @@ def test_follow_up_lifecycle_preserves_authorization_values(
             "notes": "Follow-up recorded.",
         },
     )
+
+    assert note is not None
+
     stored = get_auth(auth_id)
+
+    assert stored is not None
     assert {key: stored[key] for key in core} == core
+
     delete_auth_event(auth_id, note["id"])
+
     stored = get_auth(auth_id)
+
+    assert stored is not None
     assert {key: stored[key] for key in core} == core
-    follow_up = next(
-        event
-        for event in list_auth_events(auth_id)
-        if event["event_type"] == event_type
-    )
+
+    events = list_auth_events(auth_id)
+
+    assert events is not None
+
+    follow_up = next(event for event in events if event["event_type"] == event_type)
+
     assert follow_up["review_due_date"] == "2026-09-10"
 
     cleared = update_auth(
@@ -772,6 +803,12 @@ def test_follow_up_lifecycle_preserves_authorization_values(
             f"{prefix}_outcome": "",
         },
     )
+
+    assert cleared is not None
     assert {key: cleared[key] for key in core} == core
     assert cleared["status"] == "Denied"
-    assert all(event["event_type"] != event_type for event in list_auth_events(auth_id))
+
+    events = list_auth_events(auth_id)
+
+    assert events is not None
+    assert all(event["event_type"] != event_type for event in events)

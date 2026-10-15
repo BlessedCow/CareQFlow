@@ -110,6 +110,10 @@ class AuthBase(BaseModel):
     retro_decided_at: str = ""
     retro_outcome: str = ""
     retro_notes: str = ""
+    retro_reviewed_from: str = ""
+    retro_reviewed_to: str = ""
+    retro_reviewed_loc: str = ""
+    retro_reason: str = ""
 
     @field_validator(
         "date_of_birth",
@@ -124,6 +128,8 @@ class AuthBase(BaseModel):
         "appeal_decided_at",
         "retro_deadline",
         "retro_decided_at",
+        "retro_reviewed_from",
+        "retro_reviewed_to",
         mode="before",
     )
     @classmethod
@@ -224,6 +230,10 @@ class AuthUpdate(BaseModel):
     retro_decided_at: str | None = None
     retro_outcome: str | None = None
     retro_notes: str | None = None
+    retro_reviewed_from: str | None = None
+    retro_reviewed_to: str | None = None
+    retro_reviewed_loc: str | None = None
+    retro_reason: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -240,6 +250,8 @@ class AuthUpdate(BaseModel):
         "appeal_decided_at",
         "retro_deadline",
         "retro_decided_at",
+        "retro_reviewed_from",
+        "retro_reviewed_to",
         mode="before",
     )
     @classmethod
@@ -508,6 +520,10 @@ class AuthDecisionSnapshotBase(BaseModel):
     parent_snapshot_id: int | None = None
     root_snapshot_id: int | None = None
     follow_up_decision_at: str | None = None
+    reviewed_from: str | None = None
+    reviewed_to: str | None = None
+    reviewed_loc: str | None = None
+    retro_reason: str | None = None
     context_derivation_version: int = Field(default=1, ge=1)
     context_provenance: str = "legacy"
 

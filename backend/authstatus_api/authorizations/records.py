@@ -93,6 +93,10 @@ AUTH_TABLE_COLUMNS = {
     "retro_decided_at",
     "retro_outcome",
     "retro_notes",
+    "retro_reviewed_from",
+    "retro_reviewed_to",
+    "retro_reviewed_loc",
+    "retro_reason",
     "created_at",
     "updated_at",
 }
@@ -119,6 +123,7 @@ P2P_TIMELINE_FIELDS = {
     "p2p_requested",
     "p2p_scheduled_at",
     "p2p_deadline",
+    "p2p_decided_at",
     "p2p_outcome",
     "p2p_reviewer",
     "p2p_notes",
@@ -127,6 +132,7 @@ P2P_TIMELINE_FIELDS = {
 APPEAL_TIMELINE_FIELDS = {
     "appeal_submitted",
     "appeal_deadline",
+    "appeal_decided_at",
     "appeal_outcome",
     "appeal_notes",
 }
@@ -134,8 +140,13 @@ APPEAL_TIMELINE_FIELDS = {
 RETRO_TIMELINE_FIELDS = {
     "retro_requested",
     "retro_deadline",
+    "retro_decided_at",
     "retro_outcome",
     "retro_notes",
+    "retro_reviewed_from",
+    "retro_reviewed_to",
+    "retro_reviewed_loc",
+    "retro_reason",
 }
 
 
@@ -173,6 +184,7 @@ def _has_p2p_details(auth_record: dict[str, Any]) -> bool:
         bool(auth_record.get("p2p_requested"))
         or bool(str(auth_record.get("p2p_scheduled_at") or "").strip())
         or bool(str(auth_record.get("p2p_deadline") or "").strip())
+        or bool(str(auth_record.get("p2p_decided_at") or "").strip())
         or bool(str(auth_record.get("p2p_outcome") or "").strip())
         or bool(str(auth_record.get("p2p_reviewer") or "").strip())
         or bool(str(auth_record.get("p2p_notes") or "").strip())
@@ -190,6 +202,7 @@ def _has_appeal_details(auth_record: dict[str, Any]) -> bool:
     return (
         bool(auth_record.get("appeal_submitted"))
         or bool(str(auth_record.get("appeal_deadline") or "").strip())
+        or bool(str(auth_record.get("appeal_decided_at") or "").strip())
         or bool(str(auth_record.get("appeal_outcome") or "").strip())
         or bool(str(auth_record.get("appeal_notes") or "").strip())
     )
@@ -206,8 +219,13 @@ def _has_retro_details(auth_record: dict[str, Any]) -> bool:
     return (
         bool(auth_record.get("retro_requested"))
         or bool(str(auth_record.get("retro_deadline") or "").strip())
+        or bool(str(auth_record.get("retro_decided_at") or "").strip())
         or bool(str(auth_record.get("retro_outcome") or "").strip())
         or bool(str(auth_record.get("retro_notes") or "").strip())
+        or bool(str(auth_record.get("retro_reviewed_from") or "").strip())
+        or bool(str(auth_record.get("retro_reviewed_to") or "").strip())
+        or bool(str(auth_record.get("retro_reviewed_loc") or "").strip())
+        or bool(str(auth_record.get("retro_reason") or "").strip())
     )
 
 
@@ -357,6 +375,7 @@ def _p2p_timeline_payload(
         "event_type": P2P_TIMELINE_EVENT_TYPE,
         "event_date": _timeline_date_from(
             auth_record,
+            "p2p_decided_at",
             "p2p_deadline",
             "p2p_scheduled_at",
         ),
@@ -380,6 +399,7 @@ def _appeal_timeline_payload(
         "event_type": APPEAL_TIMELINE_EVENT_TYPE,
         "event_date": _timeline_date_from(
             auth_record,
+            "appeal_decided_at",
             "appeal_deadline",
         ),
         "event_time": "",
@@ -402,6 +422,7 @@ def _retro_timeline_payload(
         "event_type": RETRO_TIMELINE_EVENT_TYPE,
         "event_date": _timeline_date_from(
             auth_record,
+            "retro_decided_at",
             "retro_deadline",
         ),
         "event_time": "",
@@ -615,7 +636,11 @@ def update_auth(
     now = current_timestamp()
     prepared["updated_at"] = now
 
-    if not existing_auth.get("decision_at") and has_decision(prepared):
+    if (
+        not existing_auth.get("decision_at")
+        and has_decision(prepared)
+        and not prepared.get("decision_at")
+    ):
         prepared["decision_at"] = now
     elif not prepared.get("decision_at"):
         prepared.pop("decision_at", None)

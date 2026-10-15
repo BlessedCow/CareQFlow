@@ -377,6 +377,10 @@ def test_create_auth_automatically_creates_denied_snapshot():
     assert len(snapshots) == 1
     assert snapshots[0]["outcome"] == "Denied"
     assert snapshots[0]["source"] == "automatic"
+    assert snapshots[0]["snapshot_role"] == "root"
+    assert snapshots[0]["root_snapshot_id"] == snapshots[0]["id"]
+    assert snapshots[0]["parent_snapshot_id"] is None
+    assert snapshots[0]["follow_up_decision_at"] is None
 
 
 def test_create_auth_automatically_creates_partial_snapshot():
@@ -468,7 +472,7 @@ def test_nondecision_auth_does_not_create_automatic_snapshot():
     assert snapshots == []
 
 
-def test_p2p_outcome_creates_automatic_snapshot():
+def test_p2p_outcome_creates_linked_automatic_snapshot():
     auth = create_auth(
         {
             "facility": "Facility A",
@@ -479,7 +483,9 @@ def test_p2p_outcome_creates_automatic_snapshot():
             "status": "Denied",
             "insurance": "Example Health",
             "requested_days": 5,
+            "approved_days": 0,
             "denied_days": 5,
+            "decision_at": "2026-09-10T12:00:00+00:00",
         }
     )
 
@@ -492,6 +498,8 @@ def test_p2p_outcome_creates_automatic_snapshot():
         {
             "p2p_requested": True,
             "p2p_scheduled_at": "2026-09-15T14:00:00+00:00",
+            "p2p_deadline": "2026-09-16",
+            "p2p_decided_at": "2026-09-15T16:30:00+00:00",
             "p2p_outcome": "Overturned",
         },
     )
@@ -499,23 +507,31 @@ def test_p2p_outcome_creates_automatic_snapshot():
     snapshots = list_auth_decision_snapshots(auth["id"])
 
     assert snapshots is not None
+    assert len(snapshots) == 2
 
-    p2p_snapshots = [item for item in snapshots if item["outcome"] == "P2P Overturned"]
-
-    assert len(p2p_snapshots) == 1
-
-    p2p_snapshot = p2p_snapshots[0]
+    root = next(item for item in snapshots if item["snapshot_role"] == "root")
+    p2p_snapshot = next(
+        item for item in snapshots if item["outcome"] == "P2P Overturned"
+    )
 
     assert p2p_snapshot["source"] == "automatic"
-    assert p2p_snapshot["decision_at"] == "2026-09-15T14:00:00+00:00"
-    assert p2p_snapshot["requested_days"] == 5
-    assert p2p_snapshot["approved_days"] == 0
-    assert p2p_snapshot["denied_days"] == 5
+    assert p2p_snapshot["snapshot_role"] == "follow_up"
+    assert p2p_snapshot["review_type"] == "p2p"
+    assert p2p_snapshot["parent_snapshot_id"] == root["id"]
+    assert p2p_snapshot["root_snapshot_id"] == root["id"]
 
-    assert not any(
-        item["outcome"] == "Approved" and item["source"] == "automatic"
-        for item in snapshots
-    )
+    assert p2p_snapshot["decision_at"] == root["decision_at"]
+    assert p2p_snapshot["follow_up_decision_at"] == "2026-09-15T16:30:00+00:00"
+
+    assert p2p_snapshot["requested_days"] == root["requested_days"]
+    assert p2p_snapshot["approved_days"] == root["approved_days"]
+    assert p2p_snapshot["denied_days"] == root["denied_days"]
+
+    assert p2p_snapshot["loc"] == root["loc"]
+    assert p2p_snapshot["insurance"] == root["insurance"]
+    assert p2p_snapshot["insurance_plan"] == root["insurance_plan"]
+
+    assert p2p_snapshot["context_provenance"] == "inherited_root"
 
     events = list_auth_events(auth["id"])
 
@@ -524,9 +540,76 @@ def test_p2p_outcome_creates_automatic_snapshot():
     p2p_event = next(event for event in events if event["event_type"] == "Peer Review")
 
     assert p2p_snapshot["auth_event_id"] == p2p_event["id"]
+    assert p2p_event["event_date"] == "2026-09-15"
 
 
-def test_appeal_outcome_creates_automatic_snapshot():
+def test_appeal_outcome_links_to_upheld_p2p_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "Denied",
+            "insurance": "Example Health",
+            "requested_days": 5,
+            "approved_days": 0,
+            "denied_days": 5,
+            "decision_at": "2026-09-10T12:00:00+00:00",
+        }
+    )
+
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    update_auth(
+        auth["id"],
+        {
+            "p2p_requested": True,
+            "p2p_decided_at": "2026-09-15T12:00:00+00:00",
+            "p2p_outcome": "Upheld",
+        },
+    )
+
+    update_auth(
+        auth["id"],
+        {
+            "appeal_submitted": True,
+            "appeal_deadline": "2026-09-20",
+            "appeal_decided_at": "2026-09-18T13:00:00+00:00",
+            "appeal_outcome": "Overturned",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+
+    root = next(item for item in snapshots if item["snapshot_role"] == "root")
+    p2p = next(item for item in snapshots if item["outcome"] == "P2P Upheld")
+    appeal = next(item for item in snapshots if item["outcome"] == "Appeal Overturned")
+
+    assert p2p["parent_snapshot_id"] == root["id"]
+    assert p2p["root_snapshot_id"] == root["id"]
+
+    assert appeal["snapshot_role"] == "follow_up"
+    assert appeal["review_type"] == "appeal"
+    assert appeal["parent_snapshot_id"] == p2p["id"]
+    assert appeal["root_snapshot_id"] == root["id"]
+
+    assert appeal["decision_at"] == root["decision_at"]
+    assert appeal["follow_up_decision_at"] == "2026-09-18T13:00:00+00:00"
+
+    assert appeal["loc"] == root["loc"]
+    assert appeal["requested_days"] == root["requested_days"]
+    assert appeal["approved_days"] == root["approved_days"]
+    assert appeal["denied_days"] == root["denied_days"]
+    assert appeal["context_provenance"] == "inherited_root"
+
+
+def test_final_p2p_without_decided_at_does_not_create_snapshot():
     auth = create_auth(
         {
             "facility": "Facility A",
@@ -538,6 +621,7 @@ def test_appeal_outcome_creates_automatic_snapshot():
             "insurance": "Example Health",
             "requested_days": 5,
             "denied_days": 5,
+            "decision_at": "2026-09-10T12:00:00+00:00",
         }
     )
 
@@ -548,37 +632,107 @@ def test_appeal_outcome_creates_automatic_snapshot():
     update_auth(
         auth["id"],
         {
-            "appeal_submitted": True,
-            "appeal_deadline": "2026-09-18",
-            "appeal_outcome": "Upheld",
+            "p2p_requested": True,
+            "p2p_scheduled_at": "2026-09-15T14:00:00+00:00",
+            "p2p_deadline": "2026-09-16",
+            "p2p_outcome": "Overturned",
         },
     )
 
     snapshots = list_auth_decision_snapshots(auth["id"])
 
     assert snapshots is not None
-    assert any(
-        item["outcome"] == "Appeal Upheld" and item["source"] == "automatic"
-        for item in snapshots
+
+    assert not any(item["review_type"] == "p2p" for item in snapshots)
+
+
+def test_appeal_inherits_root_loc_after_auth_steps_down():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "In Progress",
+            "insurance": "Example Health",
+            "insurance_plan": "Gold PPO",
+            "requested_days": 5,
+        }
     )
 
-    events = list_auth_events(auth["id"])
+    assert auth is not None
 
-    assert events is not None
-
-    appeal_event = next(event for event in events if event["event_type"] == "Appeal")
-
-    appeal_snapshot = next(
-        item for item in snapshots if item["outcome"] == "Appeal Upheld"
+    create_auth_loc_episode(
+        auth["id"],
+        {
+            "loc": "RTC",
+            "started_at": "2026-06-01T00:00:00+00:00",
+            "ended_at": "2026-06-27T00:00:00+00:00",
+        },
     )
-    assert appeal_snapshot["decision_at"] == "2026-09-18"
-    assert appeal_snapshot["requested_days"] == 5
-    assert appeal_snapshot["approved_days"] == 0
-    assert appeal_snapshot["denied_days"] == 5
-    assert appeal_snapshot["auth_event_id"] == appeal_event["id"]
+
+    create_auth_loc_episode(
+        auth["id"],
+        {
+            "loc": "PHP",
+            "started_at": "2026-06-27T00:00:00+00:00",
+        },
+    )
+
+    from authstatus_api.authorizations.records import update_auth
+
+    denied = update_auth(
+        auth["id"],
+        {
+            "status": "Denied",
+            "denied_days": 5,
+            "decision_at": "2026-06-21T00:00:00+00:00",
+        },
+    )
+
+    assert denied is not None
+
+    stepped_down = update_auth(
+        auth["id"],
+        {
+            "loc": "PHP",
+        },
+    )
+
+    assert stepped_down is not None
+
+    update_auth(
+        auth["id"],
+        {
+            "appeal_submitted": True,
+            "appeal_decided_at": "2026-07-12T00:00:00+00:00",
+            "appeal_outcome": "Overturned",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+
+    root = next(item for item in snapshots if item["snapshot_role"] == "root")
+    appeal = next(item for item in snapshots if item["review_type"] == "appeal")
+
+    assert root["loc"] == "RTC"
+    assert root["days_at_current_loc"] == 20
+    assert root["total_treatment_days"] == 20
+
+    assert appeal["loc"] == "RTC"
+    assert appeal["days_at_current_loc"] == 20
+    assert appeal["total_treatment_days"] == 20
+
+    assert appeal["parent_snapshot_id"] == root["id"]
+    assert appeal["root_snapshot_id"] == root["id"]
+    assert appeal["decision_at"] == "2026-06-21T00:00:00+00:00"
+    assert appeal["follow_up_decision_at"] == "2026-07-12T00:00:00+00:00"
 
 
-def test_retro_partial_outcome_creates_automatic_snapshot():
+def test_retro_without_prior_decision_creates_root_snapshot():
     auth = create_auth(
         {
             "facility": "Facility A",
@@ -601,17 +755,45 @@ def test_retro_partial_outcome_creates_automatic_snapshot():
         {
             "retro_requested": True,
             "retro_deadline": "2026-09-20",
+            "retro_decided_at": "2026-09-18T15:00:00+00:00",
             "retro_outcome": "Partially Approved",
+            "retro_reviewed_from": "2026-09-01",
+            "retro_reviewed_to": "2026-09-10",
+            "retro_reviewed_loc": "RTC",
+            "retro_reason": "Authorization was not obtained before service.",
         },
     )
 
     snapshots = list_auth_decision_snapshots(auth["id"])
 
     assert snapshots is not None
-    assert any(
-        item["outcome"] == "Retro Partially Approved" and item["source"] == "automatic"
-        for item in snapshots
+    assert len(snapshots) == 1
+
+    retro_snapshot = snapshots[0]
+
+    assert retro_snapshot["outcome"] == "Retro Partially Approved"
+    assert retro_snapshot["source"] == "automatic"
+    assert retro_snapshot["snapshot_role"] == "root"
+    assert retro_snapshot["review_type"] == "retro"
+    assert retro_snapshot["parent_snapshot_id"] is None
+    assert retro_snapshot["root_snapshot_id"] == retro_snapshot["id"]
+    assert retro_snapshot["follow_up_decision_at"] is None
+
+    assert retro_snapshot["decision_at"] == "2026-09-18T15:00:00+00:00"
+    assert retro_snapshot["loc"] == "RTC"
+
+    assert retro_snapshot["reviewed_from"] == "2026-09-01"
+    assert retro_snapshot["reviewed_to"] == "2026-09-10"
+    assert retro_snapshot["reviewed_loc"] == "RTC"
+    assert (
+        retro_snapshot["retro_reason"]
+        == "Authorization was not obtained before service."
     )
+
+    assert retro_snapshot["days_at_current_loc"] is None
+    assert retro_snapshot["total_treatment_days"] is None
+    assert retro_snapshot["context_derivation_version"] == 2
+    assert retro_snapshot["context_provenance"] == "retro_review_context"
 
     events = list_auth_events(auth["id"])
 
@@ -619,13 +801,103 @@ def test_retro_partial_outcome_creates_automatic_snapshot():
 
     retro_event = next(event for event in events if event["event_type"] == "Retro Auth")
 
-    retro_snapshot = next(
-        item for item in snapshots if item["outcome"] == "Retro Partially Approved"
+    assert retro_snapshot["auth_event_id"] == retro_event["id"]
+
+
+def test_retro_after_denial_creates_follow_up_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "RTC",
+            "submission_methods": "Fax",
+            "auth_type": "Concurrent",
+            "status": "Denied",
+            "insurance": "Example Health",
+            "requested_days": 5,
+            "approved_days": 0,
+            "denied_days": 5,
+            "decision_at": "2026-09-10T12:00:00+00:00",
+        }
     )
 
-    assert retro_snapshot["decision_at"] == "2026-09-20"
-    assert retro_snapshot["requested_days"] == 10
-    assert retro_snapshot["auth_event_id"] == retro_event["id"]
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    update_auth(
+        auth["id"],
+        {
+            "retro_requested": True,
+            "retro_deadline": "2026-09-25",
+            "retro_decided_at": "2026-09-22T14:00:00+00:00",
+            "retro_outcome": "Approved",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+    assert len(snapshots) == 2
+
+    root = next(item for item in snapshots if item["snapshot_role"] == "root")
+    retro = next(item for item in snapshots if item["review_type"] == "retro")
+
+    assert retro["outcome"] == "Retro Approved"
+    assert retro["source"] == "automatic"
+    assert retro["snapshot_role"] == "follow_up"
+    assert retro["parent_snapshot_id"] == root["id"]
+    assert retro["root_snapshot_id"] == root["id"]
+
+    assert retro["decision_at"] == root["decision_at"]
+    assert retro["follow_up_decision_at"] == "2026-09-22T14:00:00+00:00"
+
+    assert retro["facility"] == root["facility"]
+    assert retro["insurance"] == root["insurance"]
+    assert retro["insurance_plan"] == root["insurance_plan"]
+    assert retro["loc"] == root["loc"]
+    assert retro["requested_days"] == root["requested_days"]
+    assert retro["approved_days"] == root["approved_days"]
+    assert retro["denied_days"] == root["denied_days"]
+
+    assert retro["context_provenance"] == "inherited_root"
+
+
+def test_final_retro_without_decided_at_does_not_create_snapshot():
+    auth = create_auth(
+        {
+            "facility": "Facility A",
+            "client_name": "Test Client",
+            "loc": "PHP",
+            "submission_methods": "Fax",
+            "auth_type": "Retro",
+            "status": "In Progress",
+            "insurance": "Example Health",
+            "requested_days": 10,
+        }
+    )
+
+    assert auth is not None
+
+    from authstatus_api.authorizations.records import update_auth
+
+    update_auth(
+        auth["id"],
+        {
+            "retro_requested": True,
+            "retro_deadline": "2026-09-20",
+            "retro_outcome": "Approved",
+            "retro_reviewed_from": "2026-09-01",
+            "retro_reviewed_to": "2026-09-10",
+            "retro_reviewed_loc": "RTC",
+            "retro_reason": "Authorization was not obtained before service.",
+        },
+    )
+
+    snapshots = list_auth_decision_snapshots(auth["id"])
+
+    assert snapshots is not None
+    assert not any(item["review_type"] == "retro" for item in snapshots)
 
 
 def test_pending_follow_up_does_not_create_decision_snapshot():
@@ -671,13 +943,14 @@ def test_follow_up_snapshot_helper_creates_p2p_snapshot():
             "insurance": "Example Health",
             "requested_days": 5,
             "denied_days": 5,
+            "decision_at": "2026-09-10T12:00:00+00:00",
         }
     )
 
     assert auth is not None
 
     auth["p2p_outcome"] = "Overturned"
-    auth["p2p_scheduled_at"] = "2026-09-15T14:00:00+00:00"
+    auth["p2p_decided_at"] = "2026-09-15T14:00:00+00:00"
 
     from authstatus_api.authorizations.decision_snapshots import (
         create_automatic_follow_up_decision_snapshots,
@@ -688,3 +961,6 @@ def test_follow_up_snapshot_helper_creates_p2p_snapshot():
     assert len(created) == 1
     assert created[0]["outcome"] == "P2P Overturned"
     assert created[0]["source"] == "automatic"
+    assert created[0]["snapshot_role"] == "follow_up"
+    assert created[0]["review_type"] == "p2p"
+    assert created[0]["follow_up_decision_at"] == "2026-09-15T14:00:00+00:00"

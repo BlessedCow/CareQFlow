@@ -194,3 +194,39 @@ def add_decision_provenance_columns(conn: Any) -> None:
                 f"ALTER TABLE auth_decision_snapshots "
                 f"ADD COLUMN {column_name} {definition}"
             )
+
+
+def add_retro_review_context_columns(conn: Any) -> None:
+    auth_columns = {
+        str(row["name"]) for row in conn.execute("PRAGMA table_info(auths)").fetchall()
+    }
+
+    auth_column_definitions = (
+        ("retro_reviewed_from", "TEXT"),
+        ("retro_reviewed_to", "TEXT"),
+        ("retro_reviewed_loc", "TEXT"),
+        ("retro_reason", "TEXT"),
+    )
+
+    for column_name, definition in auth_column_definitions:
+        if column_name not in auth_columns:
+            conn.execute(f"ALTER TABLE auths ADD COLUMN {column_name} {definition}")
+
+    snapshot_columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(auth_decision_snapshots)").fetchall()
+    }
+
+    snapshot_column_definitions = (
+        ("reviewed_from", "TEXT"),
+        ("reviewed_to", "TEXT"),
+        ("reviewed_loc", "TEXT"),
+        ("retro_reason", "TEXT"),
+    )
+
+    for column_name, definition in snapshot_column_definitions:
+        if column_name not in snapshot_columns:
+            conn.execute(
+                f"ALTER TABLE auth_decision_snapshots "
+                f"ADD COLUMN {column_name} {definition}"
+            )

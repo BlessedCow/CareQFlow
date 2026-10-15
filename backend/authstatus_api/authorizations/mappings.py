@@ -56,6 +56,10 @@ OPTIONAL_AUTH_TEXT_FIELDS = {
     "retro_decided_at",
     "retro_outcome",
     "retro_notes",
+    "retro_reviewed_from",
+    "retro_reviewed_to",
+    "retro_reviewed_loc",
+    "retro_reason",
 }
 
 OPTIONAL_EVENT_DATE_FIELDS = {

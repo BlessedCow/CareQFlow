@@ -21,6 +21,7 @@ from authstatus_api.persistence.migration_steps.authorizations import (
     add_core_authorization_columns,
     add_decision_provenance_columns,
     add_denial_follow_up_columns,
+    add_retro_review_context_columns,
     create_authorization_decision_snapshots_table,
     create_authorization_loc_episodes_table,
     create_clinical_assessments_table,
@@ -326,6 +327,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
+        "0014_retro_review_context",
     ]
     assert get_applied_migration_ids(conn) == {
         "0001_security_walkthrough_columns",
@@ -341,6 +343,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
+        "0014_retro_review_context",
     }
 
     governance_triggers = {row["name"] for row in conn.execute("""
@@ -729,6 +732,7 @@ def test_init_db_applies_registered_migrations_in_order(
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
+        "0014_retro_review_context",
     ]
 
     assert user_row is not None
@@ -1001,6 +1005,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
         "0011_authorization_decision_snapshots",
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
+        "0014_retro_review_context",
     ]
 
     assert user_row is not None
@@ -1908,6 +1913,56 @@ def test_decision_provenance_migration_preserves_existing_snapshot(conn):
     assert row["parent_snapshot_id"] is None
     assert row["root_snapshot_id"] is None
     assert row["follow_up_decision_at"] is None
+
+
+def test_retro_review_context_migration_adds_auth_and_snapshot_columns(conn):
+    conn.execute("""
+        CREATE TABLE auths (
+            id INTEGER PRIMARY KEY
+        )
+        """)
+
+    conn.execute("""
+        CREATE TABLE auth_decision_snapshots (
+            id INTEGER PRIMARY KEY,
+            auth_id INTEGER NOT NULL
+        )
+        """)
+
+    applied = run_migrations(
+        conn,
+        [
+            Migration(
+                migration_id="0014_retro_review_context",
+                apply=add_retro_review_context_columns,
+            )
+        ],
+    )
+
+    auth_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(auths)").fetchall()
+    }
+
+    snapshot_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(auth_decision_snapshots)").fetchall()
+    }
+
+    assert applied == ["0014_retro_review_context"]
+
+    assert {
+        "retro_reviewed_from",
+        "retro_reviewed_to",
+        "retro_reviewed_loc",
+        "retro_reason",
+    }.issubset(auth_columns)
+
+    assert {
+        "reviewed_from",
+        "reviewed_to",
+        "reviewed_loc",
+        "retro_reason",
+    }.issubset(snapshot_columns)
 
 
 def test_loc_episode_migration_creates_table(conn):

@@ -183,3 +183,34 @@ def test_auth_update_accepts_follow_up_decision_dates():
     assert update.p2p_decided_at == "2026-07-01"
     assert update.appeal_decided_at == "2026-07-12"
     assert update.retro_decided_at == "2026-07-20"
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "retro_reviewed_from",
+        "retro_reviewed_to",
+    ],
+)
+def test_auth_create_validates_retro_review_dates(field_name):
+    payload = valid_auth_payload()
+    payload[field_name] = "07/12/2026"
+
+    with pytest.raises(ValidationError, match="YYYY-MM-DD"):
+        AuthCreate.model_validate(payload)
+
+
+def test_auth_update_accepts_retro_review_context():
+    update = AuthUpdate.model_validate(
+        {
+            "retro_reviewed_from": "2026-06-01",
+            "retro_reviewed_to": "2026-06-10",
+            "retro_reviewed_loc": "RTC",
+            "retro_reason": "Authorization not obtained before service.",
+        }
+    )
+
+    assert update.retro_reviewed_from == "2026-06-01"
+    assert update.retro_reviewed_to == "2026-06-10"
+    assert update.retro_reviewed_loc == "RTC"
+    assert update.retro_reason == "Authorization not obtained before service."

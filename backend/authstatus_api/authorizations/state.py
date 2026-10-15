@@ -59,6 +59,20 @@ def initial_timeline_event_payload(
 
 def sync_auth_timeline_fields(auth_id: int) -> None:
     with get_conn() as conn:
+        auth_row = conn.execute(
+            """
+            SELECT decision_at
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        existing_decision_at = (
+            str(auth_row["decision_at"]).strip()
+            if auth_row is not None and auth_row["decision_at"] is not None
+            else ""
+        )
         rows = conn.execute(
             """
             SELECT *
@@ -83,7 +97,7 @@ def sync_auth_timeline_fields(auth_id: int) -> None:
         if submitted_at is None and events:
             submitted_at = event_datetime_value(events[0]) or None
 
-        decision_at = next(
+        timeline_decision_at = next(
             (
                 event_datetime_value(event)
                 for event in events
@@ -91,6 +105,8 @@ def sync_auth_timeline_fields(auth_id: int) -> None:
             ),
             None,
         )
+
+        decision_at = existing_decision_at or timeline_decision_at
 
         snapshot = current_auth_snapshot(events)
 

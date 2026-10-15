@@ -68,6 +68,10 @@ def initialize_authorization_tables(conn: Any) -> None:
             retro_decided_at TEXT,
             retro_outcome TEXT,
             retro_notes TEXT,
+            retro_reviewed_from TEXT,
+            retro_reviewed_to TEXT,
+            retro_reviewed_loc TEXT,
+            retro_reason TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
