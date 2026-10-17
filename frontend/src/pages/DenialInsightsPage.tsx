@@ -6,6 +6,7 @@ import {
   type DenialInsightsResponse,
 } from "../api/denialInsights";
 import { cn } from "../utils/cn";
+import { OutcomeMetricsSections } from "./denialInsights/OutcomeMetricsSections";
 
 interface DenialInsightsPageProps {
   darkMode: boolean;
@@ -324,6 +325,12 @@ export function DenialInsightsPage({
               </div>
             ))}
           </section>
+
+          <OutcomeMetricsSections
+            darkMode={darkMode}
+            followUpMetrics={result.follow_up_metrics}
+            retroRootMetrics={result.retro_root_metrics}
+          />
 
           <section
             className={cn(

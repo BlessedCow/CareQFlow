@@ -36,6 +36,25 @@ export interface DenialInsightsSummary {
   denied_days: number;
 }
 
+export interface FollowUpMetricSummary {
+  eligible_count: number;
+  initiated_count: number;
+  pending_count: number;
+  resolved_count: number;
+  approved_count: number;
+  denied_count: number;
+  upheld_count: number;
+  overturned_count: number;
+  partially_approved_count: number;
+  overturn_rate: number | null;
+}
+
+export interface DenialInsightsFollowUpMetrics {
+  p2p: FollowUpMetricSummary;
+  appeal: FollowUpMetricSummary;
+  retro: FollowUpMetricSummary;
+}
+
 export interface DenialInsightsGroup extends DenialInsightsSummary {
   dimensions: Record<string, string>;
   sample_state: "insufficient" | "preliminary" | "standard";
@@ -105,6 +124,8 @@ export interface DenialInsightsResponse {
   start_at: string | null;
   end_at: string | null;
   summary: DenialInsightsSummary;
+  follow_up_metrics: DenialInsightsFollowUpMetrics;
+  retro_root_metrics: DenialInsightsSummary;
   baseline: DenialInsightsGroup;
   groups: DenialInsightsGroup[];
   evaluations: DenialInsightsEvaluation[];

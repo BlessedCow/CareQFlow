@@ -150,6 +150,10 @@ def test_admin_and_ur_can_query_denial_insights(
     assert data["follow_up_metrics"]["p2p"]["resolved_count"] == 0
     assert data["follow_up_metrics"]["appeal"]["resolved_count"] == 0
     assert data["follow_up_metrics"]["retro"]["resolved_count"] == 0
+    assert data["retro_root_metrics"]["decision_count"] == 0
+    assert data["retro_root_metrics"]["approved_count"] == 0
+    assert data["retro_root_metrics"]["partial_count"] == 0
+    assert data["retro_root_metrics"]["denied_count"] == 0
     assert data["baseline"]["decision_count"] == 10
     assert len(data["groups"]) == 2
     assert len(data["evaluations"]) == 2

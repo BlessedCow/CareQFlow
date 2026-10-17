@@ -2,6 +2,7 @@ import type { AuthEvent } from "../api/authEvents";
 import type { AuthRequest } from "../types/auth";
 import { cn } from "../utils/cn";
 import { AuthorizationDocumentsSection } from "./AuthorizationDocumentsSection";
+import { DecisionHistorySection } from "./DecisionHistorySection";
 import {
   formatEventTimestamp,
   sortAuthEventsNewestFirst,
@@ -289,6 +290,15 @@ export function AuthorizationReadOnlyView({
         authId={auth.id}
         darkMode={darkMode}
         canManage={canEdit}
+      />
+
+      <div
+        className={cn("my-5 h-px", darkMode ? "bg-gray-800" : "bg-gray-200")}
+      />
+
+      <DecisionHistorySection
+        authId={auth.id}
+        darkMode={darkMode}
       />
 
       <div

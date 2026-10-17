@@ -31,6 +31,58 @@ function responseFor(dimensions: string[] = ["insurance"]) {
       approved_days: 30,
       denied_days: 20,
     },
+    follow_up_metrics: {
+      p2p: {
+        eligible_count: 5,
+        initiated_count: 4,
+        pending_count: 1,
+        resolved_count: 3,
+        approved_count: 0,
+        denied_count: 0,
+        upheld_count: 2,
+        overturned_count: 1,
+        partially_approved_count: 0,
+        overturn_rate: 1 / 3,
+      },
+      appeal: {
+        eligible_count: 3,
+        initiated_count: 2,
+        pending_count: 0,
+        resolved_count: 2,
+        approved_count: 0,
+        denied_count: 1,
+        upheld_count: 0,
+        overturned_count: 1,
+        partially_approved_count: 0,
+        overturn_rate: 0.5,
+      },
+      retro: {
+        eligible_count: 2,
+        initiated_count: 1,
+        pending_count: 0,
+        resolved_count: 1,
+        approved_count: 1,
+        denied_count: 0,
+        upheld_count: 0,
+        overturned_count: 0,
+        partially_approved_count: 0,
+        overturn_rate: null,
+      },
+    },
+    retro_root_metrics: {
+      decision_count: 3,
+      approved_count: 1,
+      partial_count: 1,
+      denied_count: 1,
+      adverse_count: 2,
+      unclassified_count: 0,
+      observed_denial_rate: 1 / 3,
+      observed_partial_rate: 1 / 3,
+      observed_adverse_rate: 2 / 3,
+      requested_days: 15,
+      approved_days: 5,
+      denied_days: 5,
+    },
     baseline: {
       dimensions: {},
       decision_count: 10,
@@ -302,4 +354,23 @@ describe("DenialInsightsPage", () => {
 
     expect(screen.getByText(/Calculation version:/)).toBeInTheDocument();
   });
+
+  it("shows follow-up and standalone Retro metrics", async () => {
+    render(<DenialInsightsPage darkMode={false} />);
+
+    expect(
+      await screen.findByText("Follow-up outcomes")
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("Peer to Peer")).toBeInTheDocument();
+    expect(screen.getByText("Appeal")).toBeInTheDocument();
+    expect(screen.getByText("Retro Follow-up")).toBeInTheDocument();
+
+    expect(
+      screen.getByText("Standalone Retro decisions")
+    ).toBeInTheDocument();
+
+    expect(screen.getByText("33.3%")).toBeInTheDocument();
+  });
+
 });

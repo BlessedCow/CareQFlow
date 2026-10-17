@@ -9,6 +9,7 @@ from authstatus_api.authorizations.denial_insights.repository import (
     InvalidDenialInsightsFilterError,
     build_denial_insights,
     list_decision_snapshots,
+    list_retro_root_snapshots,
 )
 from authstatus_api.authorizations.records import (
     create_auth,
@@ -204,6 +205,113 @@ def test_list_decision_snapshots_excludes_retro_roots():
     records = list_decision_snapshots()
 
     assert records == []
+
+
+def test_list_retro_root_snapshots_contains_only_retro_roots():
+    retro_auth = _create_auth(
+        insurance="Payer A",
+        insurance_plan="Gold",
+        loc="RTC",
+    )
+
+    retro_snapshot = create_auth_decision_snapshot(
+        retro_auth["id"],
+        {
+            "facility": "Facility A",
+            "insurance": "Payer A",
+            "insurance_plan": "Gold",
+            "loc": "RTC",
+            "auth_type": "Retro",
+            "outcome": "Retro Approved",
+            "decision_at": "2026-09-10T12:00:00+00:00",
+            "snapshot_role": "root",
+            "review_type": "retro",
+        },
+    )
+
+    assert retro_snapshot is not None
+
+    clinical_snapshot = _create_snapshot(
+        insurance="Payer A",
+        insurance_plan="Gold",
+        loc="RTC",
+        outcome="Denied",
+        decision_at="2026-09-11T12:00:00+00:00",
+    )
+
+    assert clinical_snapshot is not None
+
+    records = list_retro_root_snapshots()
+
+    assert len(records) == 1
+    assert records[0]["id"] == retro_snapshot["id"]
+    assert records[0]["review_type"] == "retro"
+    assert records[0]["snapshot_role"] == "root"
+
+
+def test_build_denial_insights_reports_standalone_retro_metrics():
+    outcomes = (
+        "Approved",
+        "Partially Approved",
+        "Denied",
+    )
+
+    for index, outcome in enumerate(
+        outcomes,
+        start=1,
+    ):
+        auth = create_auth(
+            {
+                "facility": "Facility A",
+                "client_name": f"Retro Client {index}",
+                "loc": "PHP",
+                "submission_methods": "Fax",
+                "auth_type": "Retro",
+                "status": "In Progress",
+                "insurance": "Payer A",
+                "requested_days": 5,
+            }
+        )
+
+        assert auth is not None
+
+        updated = update_auth(
+            auth["id"],
+            {
+                "retro_requested": True,
+                "retro_decided_at": (f"2026-09-{10 + index:02d}T12:00:00+00:00"),
+                "retro_outcome": outcome,
+                "retro_reviewed_from": "2026-09-01",
+                "retro_reviewed_to": "2026-09-05",
+                "retro_reviewed_loc": "PHP",
+                "retro_reason": ("Authorization was not obtained before service."),
+            },
+        )
+
+        assert updated is not None
+
+    result = build_denial_insights(
+        dimensions=["insurance"],
+    )
+
+    retro = result["retro_root_metrics"]
+
+    assert retro["decision_count"] == 3
+    assert retro["approved_count"] == 1
+    assert retro["partial_count"] == 1
+    assert retro["denied_count"] == 1
+    assert retro["adverse_count"] == 2
+
+    assert retro["observed_denial_rate"] == pytest.approx(
+        1 / 3,
+        abs=0.0001,
+    )
+    assert retro["observed_partial_rate"] == pytest.approx(
+        1 / 3,
+        abs=0.0001,
+    )
+
+    assert result["summary"]["decision_count"] == 0
 
 
 def test_list_decision_snapshots_preserves_legacy_snapshots():

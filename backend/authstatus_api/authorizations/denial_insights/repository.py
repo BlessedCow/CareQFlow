@@ -126,24 +126,22 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     }
 
 
-def list_decision_snapshots(
+def _list_snapshot_population(
     *,
+    population_clause: str,
     start_at: str | None = None,
     end_at: str | None = None,
     filters: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     init_db()
 
-    clauses: list[str] = ["""
-        (
-            snapshot_role = 'legacy'
-            OR (
-                snapshot_role = 'root'
-                AND LOWER(TRIM(review_type)) != 'retro'
-            )
-        )
-        """]
+    clauses: list[str] = [
+        population_clause,
+    ]
     params: list[Any] = []
+
+    normalized_start: str | None = None
+    normalized_end: str | None = None
 
     if start_at is not None:
         normalized_start = _parse_timestamp(
@@ -162,8 +160,8 @@ def list_decision_snapshots(
         params.append(normalized_end)
 
     if (
-        start_at is not None
-        and end_at is not None
+        normalized_start is not None
+        and normalized_end is not None
         and datetime.fromisoformat(normalized_end)
         < datetime.fromisoformat(normalized_start)
     ):
@@ -190,9 +188,7 @@ def list_decision_snapshots(
         FROM auth_decision_snapshots
     """
 
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
-
+    query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY decision_at, id"
 
     with get_conn() as conn:
@@ -202,6 +198,45 @@ def list_decision_snapshots(
         ).fetchall()
 
     return [_row_to_dict(row) for row in rows]
+
+
+def list_decision_snapshots(
+    *,
+    start_at: str | None = None,
+    end_at: str | None = None,
+    filters: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    return _list_snapshot_population(
+        population_clause="""
+            (
+                snapshot_role = 'legacy'
+                OR (
+                    snapshot_role = 'root'
+                    AND LOWER(TRIM(review_type)) != 'retro'
+                )
+            )
+        """,
+        start_at=start_at,
+        end_at=end_at,
+        filters=filters,
+    )
+
+
+def list_retro_root_snapshots(
+    *,
+    start_at: str | None = None,
+    end_at: str | None = None,
+    filters: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    return _list_snapshot_population(
+        population_clause="""
+            snapshot_role = 'root'
+            AND LOWER(TRIM(review_type)) = 'retro'
+        """,
+        start_at=start_at,
+        end_at=end_at,
+        filters=filters,
+    )
 
 
 def _list_follow_up_snapshots(
@@ -489,6 +524,13 @@ def build_denial_insights(
     )
     follow_up_metrics = _build_follow_up_metrics(records)
 
+    retro_root_records = list_retro_root_snapshots(
+        start_at=start_at,
+        end_at=end_at,
+        filters=filters,
+    )
+    retro_root_metrics = summarize_decisions(retro_root_records)
+
     groups = add_sample_states(
         group_decisions(
             records,
@@ -537,6 +579,7 @@ def build_denial_insights(
         "end_at": end_at,
         "summary": summarize_decisions(records),
         "follow_up_metrics": follow_up_metrics,
+        "retro_root_metrics": retro_root_metrics,
         "baseline": baseline,
         "groups": groups,
         "evaluations": evaluations,
