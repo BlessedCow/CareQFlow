@@ -165,6 +165,80 @@ def _percentage(
     )
 
 
+def summarize_follow_up_cases(
+    cases: Iterable[dict[str, Any]],
+    *,
+    review_type: str,
+) -> dict[str, Any]:
+    records = [record for record in cases if bool(record.get("eligible"))]
+
+    initiated_count = 0
+    pending_count = 0
+    resolved_count = 0
+    approved_count = 0
+    denied_count = 0
+    upheld_count = 0
+    overturned_count = 0
+    partially_approved_count = 0
+
+    normalized_review_type = _normalize_text(review_type)
+
+    for record in records:
+        initiated = bool(record.get("initiated"))
+        pending = bool(record.get("pending"))
+        resolved = bool(record.get("resolved"))
+
+        initiated_count += int(initiated)
+        pending_count += int(pending)
+        resolved_count += int(resolved)
+
+        if not resolved:
+            continue
+
+        outcome = _normalize_text(record.get("outcome"))
+
+        prefix = f"{normalized_review_type} "
+
+        if outcome.startswith(prefix):
+            outcome = outcome[len(prefix) :]
+
+        if outcome == "approved":
+            approved_count += 1
+        elif outcome == "denied":
+            denied_count += 1
+        elif outcome == "upheld":
+            upheld_count += 1
+        elif outcome == "overturned":
+            overturned_count += 1
+        elif outcome in {
+            "partially approved",
+            "partial",
+            "partial approval",
+        }:
+            partially_approved_count += 1
+
+    if normalized_review_type in {"p2p", "appeal"}:
+        overturn_rate = _percentage(
+            overturned_count,
+            resolved_count,
+        )
+    else:
+        overturn_rate = None
+
+    return {
+        "eligible_count": len(records),
+        "initiated_count": initiated_count,
+        "pending_count": pending_count,
+        "resolved_count": resolved_count,
+        "approved_count": approved_count,
+        "denied_count": denied_count,
+        "upheld_count": upheld_count,
+        "overturned_count": overturned_count,
+        "partially_approved_count": partially_approved_count,
+        "overturn_rate": overturn_rate,
+    }
+
+
 def summarize_decisions(
     snapshots: Iterable[dict[str, Any]],
 ) -> dict[str, Any]:

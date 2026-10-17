@@ -65,6 +65,7 @@ class DenialInsightsResponse(BaseModel):
     start_at: str | None
     end_at: str | None
     summary: dict[str, Any]
+    follow_up_metrics: dict[str, dict[str, Any]]
     baseline: dict[str, Any]
     groups: list[dict[str, Any]]
     evaluations: list[dict[str, Any]]

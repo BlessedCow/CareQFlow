@@ -5,8 +5,10 @@ from typing import Any
 
 from authstatus_api.authorizations.denial_insights.aggregation import (
     add_sample_states,
+    classify_decision,
     group_decisions,
     summarize_decisions,
+    summarize_follow_up_cases,
 )
 from authstatus_api.authorizations.denial_insights.clinical_context import (
     enrich_snapshots_with_clinical_context,
@@ -104,6 +106,23 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         "source": str(row["source"]),
         "created_at": str(row["created_at"]),
         "updated_at": str(row["updated_at"]),
+        "snapshot_role": str(row["snapshot_role"]),
+        "review_type": str(row["review_type"]),
+        "parent_snapshot_id": (
+            int(row["parent_snapshot_id"])
+            if row["parent_snapshot_id"] is not None
+            else None
+        ),
+        "root_snapshot_id": (
+            int(row["root_snapshot_id"])
+            if row["root_snapshot_id"] is not None
+            else None
+        ),
+        "follow_up_decision_at": (
+            str(row["follow_up_decision_at"])
+            if row["follow_up_decision_at"] is not None
+            else None
+        ),
     }
 
 
@@ -115,7 +134,15 @@ def list_decision_snapshots(
 ) -> list[dict[str, Any]]:
     init_db()
 
-    clauses: list[str] = []
+    clauses: list[str] = ["""
+        (
+            snapshot_role = 'legacy'
+            OR (
+                snapshot_role = 'root'
+                AND LOWER(TRIM(review_type)) != 'retro'
+            )
+        )
+        """]
     params: list[Any] = []
 
     if start_at is not None:
@@ -177,6 +204,262 @@ def list_decision_snapshots(
     return [_row_to_dict(row) for row in rows]
 
 
+def _list_follow_up_snapshots(
+    root_snapshot_ids: list[int],
+) -> list[dict[str, Any]]:
+    if not root_snapshot_ids:
+        return []
+
+    placeholders = ", ".join("?" for _ in root_snapshot_ids)
+
+    query = f"""
+        SELECT *
+        FROM auth_decision_snapshots
+        WHERE
+            snapshot_role = 'follow_up'
+            AND root_snapshot_id IN ({placeholders})
+        ORDER BY
+            COALESCE(follow_up_decision_at, decision_at),
+            id
+    """
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            query,
+            root_snapshot_ids,
+        ).fetchall()
+
+    return [_row_to_dict(row) for row in rows]
+
+
+def _list_follow_up_auth_states(
+    auth_ids: list[int],
+) -> dict[int, dict[str, Any]]:
+    if not auth_ids:
+        return {}
+
+    placeholders = ", ".join("?" for _ in auth_ids)
+
+    query = f"""
+        SELECT
+            id,
+            p2p_requested,
+            p2p_decided_at,
+            p2p_outcome,
+            appeal_submitted,
+            appeal_decided_at,
+            appeal_outcome,
+            retro_requested,
+            retro_decided_at,
+            retro_outcome
+        FROM auths
+        WHERE id IN ({placeholders})
+    """
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            query,
+            auth_ids,
+        ).fetchall()
+
+    return {
+        int(row["id"]): {
+            "p2p_requested": bool(row["p2p_requested"]),
+            "p2p_decided_at": str(row["p2p_decided_at"] or "").strip(),
+            "p2p_outcome": str(row["p2p_outcome"] or "").strip(),
+            "appeal_submitted": bool(row["appeal_submitted"]),
+            "appeal_decided_at": str(row["appeal_decided_at"] or "").strip(),
+            "appeal_outcome": str(row["appeal_outcome"] or "").strip(),
+            "retro_requested": bool(row["retro_requested"]),
+            "retro_decided_at": str(row["retro_decided_at"] or "").strip(),
+            "retro_outcome": str(row["retro_outcome"] or "").strip(),
+        }
+        for row in rows
+    }
+
+
+def _resolved_follow_up_by_root(
+    snapshots: list[dict[str, Any]],
+) -> dict[tuple[int, str], dict[str, Any]]:
+    resolved: dict[
+        tuple[int, str],
+        dict[str, Any],
+    ] = {}
+
+    for snapshot in snapshots:
+        root_snapshot_id = snapshot.get("root_snapshot_id")
+        review_type = str(snapshot.get("review_type") or "").strip().lower()
+
+        if root_snapshot_id is None or not review_type:
+            continue
+
+        resolved[
+            (
+                int(root_snapshot_id),
+                review_type,
+            )
+        ] = snapshot
+
+    return resolved
+
+
+def _follow_up_is_successful(
+    snapshot: dict[str, Any] | None,
+) -> bool:
+    if snapshot is None:
+        return False
+
+    outcome = str(snapshot.get("outcome") or "").strip().lower()
+
+    return outcome.endswith(
+        (
+            " approved",
+            " overturned",
+        )
+    )
+
+
+def _build_follow_up_metrics(
+    records: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    roots = [
+        record
+        for record in records
+        if record.get("snapshot_role") == "root"
+        and record.get("review_type") != "retro"
+        and classify_decision(record).adverse
+    ]
+
+    root_snapshot_ids = [int(record["id"]) for record in roots]
+    auth_ids = sorted({int(record["auth_id"]) for record in roots})
+
+    follow_up_snapshots = _list_follow_up_snapshots(root_snapshot_ids)
+    auth_states = _list_follow_up_auth_states(auth_ids)
+    resolved_by_root = _resolved_follow_up_by_root(follow_up_snapshots)
+
+    cases: dict[str, list[dict[str, Any]]] = {
+        "p2p": [],
+        "appeal": [],
+        "retro": [],
+    }
+
+    for root in roots:
+        root_snapshot_id = int(root["id"])
+        auth_id = int(root["auth_id"])
+
+        auth_state = auth_states.get(
+            auth_id,
+            {},
+        )
+
+        p2p_snapshot = resolved_by_root.get(
+            (
+                root_snapshot_id,
+                "p2p",
+            )
+        )
+        appeal_snapshot = resolved_by_root.get(
+            (
+                root_snapshot_id,
+                "appeal",
+            )
+        )
+        retro_snapshot = resolved_by_root.get(
+            (
+                root_snapshot_id,
+                "retro",
+            )
+        )
+
+        p2p_resolved = p2p_snapshot is not None
+        p2p_pending = (
+            not p2p_resolved
+            and bool(auth_state.get("p2p_requested"))
+            and not bool(auth_state.get("p2p_decided_at"))
+        )
+        p2p_initiated = (
+            p2p_resolved or p2p_pending or bool(auth_state.get("p2p_requested"))
+        )
+
+        cases["p2p"].append(
+            {
+                "eligible": True,
+                "initiated": p2p_initiated,
+                "pending": p2p_pending,
+                "resolved": p2p_resolved,
+                "outcome": (
+                    p2p_snapshot["outcome"] if p2p_snapshot is not None else None
+                ),
+            }
+        )
+
+        appeal_eligible = not p2p_pending and not _follow_up_is_successful(p2p_snapshot)
+
+        appeal_resolved = appeal_snapshot is not None
+        appeal_pending = (
+            appeal_eligible
+            and not appeal_resolved
+            and bool(auth_state.get("appeal_submitted"))
+            and not bool(auth_state.get("appeal_decided_at"))
+        )
+        appeal_initiated = (
+            appeal_resolved
+            or appeal_pending
+            or (appeal_eligible and bool(auth_state.get("appeal_submitted")))
+        )
+
+        cases["appeal"].append(
+            {
+                "eligible": appeal_eligible,
+                "initiated": appeal_initiated,
+                "pending": appeal_pending,
+                "resolved": appeal_resolved,
+                "outcome": (
+                    appeal_snapshot["outcome"] if appeal_snapshot is not None else None
+                ),
+            }
+        )
+
+        retro_eligible = (
+            appeal_eligible
+            and not appeal_pending
+            and not _follow_up_is_successful(appeal_snapshot)
+        )
+
+        retro_resolved = retro_snapshot is not None
+        retro_pending = (
+            retro_eligible
+            and not retro_resolved
+            and bool(auth_state.get("retro_requested"))
+            and not bool(auth_state.get("retro_decided_at"))
+        )
+        retro_initiated = (
+            retro_resolved
+            or retro_pending
+            or (retro_eligible and bool(auth_state.get("retro_requested")))
+        )
+
+        cases["retro"].append(
+            {
+                "eligible": retro_eligible,
+                "initiated": retro_initiated,
+                "pending": retro_pending,
+                "resolved": retro_resolved,
+                "outcome": (
+                    retro_snapshot["outcome"] if retro_snapshot is not None else None
+                ),
+            }
+        )
+
+    return {
+        review_type: summarize_follow_up_cases(
+            review_cases,
+            review_type=review_type,
+        )
+        for review_type, review_cases in cases.items()
+    }
+
+
 def build_denial_insights(
     *,
     dimensions: list[str],
@@ -204,6 +487,7 @@ def build_denial_insights(
             filters=baseline_filters,
         )
     )
+    follow_up_metrics = _build_follow_up_metrics(records)
 
     groups = add_sample_states(
         group_decisions(
@@ -252,6 +536,7 @@ def build_denial_insights(
         "start_at": start_at,
         "end_at": end_at,
         "summary": summarize_decisions(records),
+        "follow_up_metrics": follow_up_metrics,
         "baseline": baseline,
         "groups": groups,
         "evaluations": evaluations,

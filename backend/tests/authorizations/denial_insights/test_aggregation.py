@@ -8,6 +8,7 @@ from authstatus_api.authorizations.denial_insights.aggregation import (
     group_decisions,
     sample_state,
     summarize_decisions,
+    summarize_follow_up_cases,
 )
 
 
@@ -122,6 +123,116 @@ def test_summarize_decisions_keeps_partial_separate_from_denial():
     assert summary["requested_days"] == 15
     assert summary["approved_days"] == 7
     assert summary["denied_days"] == 8
+
+
+def test_summarize_p2p_uses_resolved_cases_for_overturn_rate():
+    summary = summarize_follow_up_cases(
+        [
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": False,
+                "resolved": True,
+                "outcome": "P2P Overturned",
+            },
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": False,
+                "resolved": True,
+                "outcome": "P2P Upheld",
+            },
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": True,
+                "resolved": False,
+                "outcome": None,
+            },
+            {
+                "eligible": True,
+                "initiated": False,
+                "pending": False,
+                "resolved": False,
+                "outcome": None,
+            },
+        ],
+        review_type="p2p",
+    )
+
+    assert summary["eligible_count"] == 4
+    assert summary["initiated_count"] == 3
+    assert summary["pending_count"] == 1
+    assert summary["resolved_count"] == 2
+    assert summary["upheld_count"] == 1
+    assert summary["overturned_count"] == 1
+    assert summary["overturn_rate"] == 0.5
+
+
+def test_summarize_appeal_counts_final_outcomes():
+    summary = summarize_follow_up_cases(
+        [
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": False,
+                "resolved": True,
+                "outcome": "Appeal Approved",
+            },
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": False,
+                "resolved": True,
+                "outcome": "Appeal Denied",
+            },
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": False,
+                "resolved": True,
+                "outcome": "Appeal Overturned",
+            },
+        ],
+        review_type="appeal",
+    )
+
+    assert summary["resolved_count"] == 3
+    assert summary["approved_count"] == 1
+    assert summary["denied_count"] == 1
+    assert summary["overturned_count"] == 1
+    assert summary["overturn_rate"] == pytest.approx(
+        1 / 3,
+        abs=0.0001,
+    )
+
+
+def test_summarize_retro_does_not_report_overturn_rate():
+    summary = summarize_follow_up_cases(
+        [
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": False,
+                "resolved": True,
+                "outcome": "Retro Partially Approved",
+            },
+            {
+                "eligible": True,
+                "initiated": True,
+                "pending": False,
+                "resolved": True,
+                "outcome": "Retro Denied",
+            },
+        ],
+        review_type="retro",
+    )
+
+    assert summary["resolved_count"] == 2
+    assert summary["partially_approved_count"] == 1
+    assert summary["denied_count"] == 1
+    assert summary["overturned_count"] == 0
+    assert summary["overturn_rate"] is None
 
 
 def test_group_decisions_by_payer_and_loc():
