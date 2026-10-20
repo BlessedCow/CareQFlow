@@ -52,10 +52,13 @@ EXPECTED_API_ENDPOINTS = {
     ("POST", "/api/admin/system/backups/verify"),
     ("POST", "/api/auths"),
     ("POST", "/api/auths/{auth_id}/clinical-assessments"),
+    ("POST", "/api/auths/{auth_id}/delete-challenge"),
     ("POST", "/api/auths/{auth_id}/decision-snapshots"),
     ("POST", "/api/auths/{auth_id}/documents"),
     ("POST", "/api/auths/{auth_id}/events"),
     ("POST", "/api/auths/{auth_id}/loc-episodes"),
+    ("POST", "/api/auths/{auth_id}/restore"),
+    ("POST", "/api/auths/{auth_id}/void"),
     ("POST", "/api/denial-insights/query"),
     ("POST", "/api/governance/attestations"),
     ("POST", "/api/security/session/activity"),
@@ -71,6 +74,7 @@ EXPECTED_API_ENDPOINTS = {
     ("POST", "/api/security/session/renew"),
     ("POST", "/api/security/setup-initial-admin"),
     ("POST", "/api/security/users"),
+    ("POST", "/api/security/users/{user_id}/request-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-password"),
     ("POST", "/api/security/users/{user_id}/walkthrough/restart"),
@@ -120,7 +124,6 @@ READ_ONLY_SAFE_GET_ENDPOINTS = {
 }
 
 ADMIN_UR_ENDPOINTS = {
-    ("DELETE", "/api/auths/{auth_id}"),
     ("DELETE", "/api/auths/{auth_id}/clinical-assessments/{assessment_id}"),
     ("DELETE", "/api/auths/{auth_id}/documents/{document_id}"),
     ("DELETE", "/api/auths/{auth_id}/events/{event_id}"),
@@ -135,12 +138,14 @@ ADMIN_UR_ENDPOINTS = {
     ("POST", "/api/auths/{auth_id}/documents"),
     ("POST", "/api/auths/{auth_id}/events"),
     ("POST", "/api/auths/{auth_id}/loc-episodes"),
+    ("POST", "/api/auths/{auth_id}/void"),
     ("POST", "/api/denial-insights/query"),
     ("POST", "/api/pdf-intake/preview"),
 }
 
 ADMIN_ENDPOINTS = {
     ("DELETE", "/api/admin/system/backups/recovery"),
+    ("DELETE", "/api/auths/{auth_id}"),
     ("DELETE", "/api/registered-options/{option_id}"),
     ("GET", "/api/admin/system/backups"),
     ("GET", "/api/admin/system/backups/recovery"),
@@ -154,10 +159,13 @@ ADMIN_ENDPOINTS = {
     ("POST", "/api/admin/system/backups"),
     ("POST", "/api/admin/system/backups/recovery/stage"),
     ("POST", "/api/admin/system/backups/verify"),
+    ("POST", "/api/auths/{auth_id}/delete-challenge"),
+    ("POST", "/api/auths/{auth_id}/restore"),
     ("POST", "/api/governance/attestations"),
     ("POST", "/api/registered-options"),
     ("POST", "/api/security/audit-events/verify-integrity"),
     ("POST", "/api/security/users"),
+    ("POST", "/api/security/users/{user_id}/request-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-password"),
     ("POST", "/api/security/users/{user_id}/walkthrough/restart"),

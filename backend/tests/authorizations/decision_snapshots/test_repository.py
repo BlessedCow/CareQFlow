@@ -4,7 +4,10 @@ import pytest
 
 from authstatus_api.authorizations.decision_snapshots import (
     InvalidAuthDecisionSnapshotError,
+    _create_automatic_follow_up_snapshot,
     create_auth_decision_snapshot,
+    create_automatic_auth_decision_snapshot,
+    create_automatic_follow_up_decision_snapshots,
     get_auth_decision_snapshot,
     list_auth_decision_snapshots,
 )
@@ -13,8 +16,14 @@ from authstatus_api.authorizations.events import (
     list_auth_events,
 )
 from authstatus_api.authorizations.loc_episodes import create_auth_loc_episode
-from authstatus_api.authorizations.records import create_auth
+from authstatus_api.authorizations.records import (
+    create_auth,
+    get_auth,
+    void_auth,
+)
+from authstatus_api.authorizations.state import VoidedAuthorizationError
 from authstatus_api.crypto import generate_encryption_key
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.settings import get_settings
 
 
@@ -964,3 +973,101 @@ def test_follow_up_snapshot_helper_creates_p2p_snapshot():
     assert created[0]["snapshot_role"] == "follow_up"
     assert created[0]["review_type"] == "p2p"
     assert created[0]["follow_up_decision_at"] == "2026-09-15T14:00:00+00:00"
+
+
+def test_voided_auth_rejects_manual_decision_snapshot():
+    auth = _create_auth()
+    auth_id = auth["id"]
+    with get_conn() as conn:
+        initial_snapshot_count = conn.execute(
+            "SELECT COUNT(*) FROM auth_decision_snapshots WHERE auth_id = ?",
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    with pytest.raises(
+        VoidedAuthorizationError,
+        match="Voided authorizations cannot be modified",
+    ):
+        create_auth_decision_snapshot(
+            auth_id,
+            {
+                "outcome": "Approved",
+                "decision_at": "2026-10-20T12:00:00+00:00",
+            },
+        )
+
+    with get_conn() as conn:
+        count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert count == initial_snapshot_count
+
+
+def test_voided_auth_skips_automatic_decision_snapshots():
+    auth = _create_auth()
+    auth_id = auth["id"]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    record = get_auth(auth_id)
+    assert record is not None
+    assert record["is_voided"] is True
+
+    assert create_automatic_auth_decision_snapshot(record) is None
+    assert create_automatic_follow_up_decision_snapshots(record) == []
+
+
+def test_automatic_follow_up_insert_rechecks_void_state():
+    auth = _create_auth()
+    auth_id = auth["id"]
+    with get_conn() as conn:
+        initial_snapshot_count = conn.execute(
+            "SELECT COUNT(*) FROM auth_decision_snapshots WHERE auth_id = ?",
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    with pytest.raises(
+        VoidedAuthorizationError,
+        match="Voided authorizations cannot be modified",
+    ):
+        _create_automatic_follow_up_snapshot(
+            auth_id,
+            review_type="p2p",
+            outcome="Approved",
+            follow_up_decision_at="2026-10-20T12:00:00+00:00",
+            auth_event_id=None,
+        )
+
+    with get_conn() as conn:
+        count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert count == initial_snapshot_count

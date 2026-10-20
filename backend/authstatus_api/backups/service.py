@@ -121,6 +121,9 @@ def _create_sqlcipher_snapshot(
         snapshot_conn = sqlcipher3.connect(str(snapshot_path))
         apply_sqlcipher_key(snapshot_conn, passphrase)
 
+        if source_conn is None or snapshot_conn is None:
+            raise BackupError("SQLCipher database connections were not initialized.")
+
         source_conn.backup(snapshot_conn)
     except Exception as exc:
         if isinstance(exc, BackupConfigError):

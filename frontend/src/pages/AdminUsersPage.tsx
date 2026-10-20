@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   createUser,
   fetchUsers,
+  requestUserMfaAgain,
   resetUserMfa,
   resetUserPassword,
   restartUserWalkthrough,
@@ -37,6 +38,7 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
   const [resettingMfaUserId, setResettingMfaUserId] = useState<number | null>(
     null
   );
+  const [requestingMfaUserId, setRequestingMfaUserId] = useState<number | null>(null);
   const [restartingWalkthroughUserId, setRestartingWalkthroughUserId] =
     useState<number | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
@@ -163,6 +165,21 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
       );
     } finally {
       setResettingUserId(null);
+    }
+  };
+
+  const handleRequestMfaAgain = async (user: CurrentUser) => {
+    if (!window.confirm(`Require MFA verification at the next login for ${user.username}? Existing authenticator enrollment will be retained.`)) {
+      return;
+    }
+    setRequestingMfaUserId(user.id);
+    setUsersError(null);
+    try {
+      await requestUserMfaAgain(user.id);
+    } catch (error) {
+      setUsersError(error instanceof Error ? error.message : "Unable to request MFA verification.");
+    } finally {
+      setRequestingMfaUserId(null);
     }
   };
 
@@ -656,6 +673,28 @@ export function AdminUsersPage({ darkMode, currentUser }: AdminUsersPageProps) {
                               : "Reset password"}
                           </button>
 
+                          <button
+                            type="button"
+                            disabled={
+                              isUpdating ||
+                              resettingUserId !== null ||
+                              resettingMfaUserId !== null ||
+                              requestingMfaUserId !== null ||
+                              !user.is_active ||
+                              !user.mfa_enabled
+                            }
+                            onClick={() => void handleRequestMfaAgain(user)}
+                            className={cn(
+                              "rounded-lg border px-3 py-2 text-sm font-medium",
+                              darkMode
+                                ? "border-gray-700 text-gray-200 hover:bg-gray-800"
+                                : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            {requestingMfaUserId === user.id
+                              ? "Requesting..."
+                              : "Request MFA again"}
+                          </button>
                           <button
                             type="button"
                             disabled={

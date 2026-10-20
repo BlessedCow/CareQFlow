@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import pyotp
 import pytest
 from fastapi.testclient import TestClient
 
@@ -13,6 +14,11 @@ from authstatus_api.governance.repository import (
 from authstatus_api.main import create_app
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.routers import auths as auths_router
+from authstatus_api.security.mfa import (
+    enable_user_mfa,
+    generate_totp_secret,
+    store_user_mfa_secret,
+)
 from authstatus_api.security.users import create_user, get_user_by_username
 from authstatus_api.settings import get_settings
 
@@ -247,28 +253,42 @@ def test_get_auth_endpoint_returns_404_for_missing_record(client, auth_headers):
     assert response.json() == {"detail": "Auth record not found."}
 
 
-def test_delete_auth_endpoint_removes_record(client, auth_headers):
+def test_ur_cannot_delete_auth(client, auth_headers):
     create_response = client.post(
-        "/api/auths", json=make_payload(), headers=auth_headers
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
     )
 
     assert create_response.status_code == 201
 
-    delete_response = client.delete("/api/auths/1", headers=auth_headers)
+    auth_id = create_response.json()["id"]
 
-    assert delete_response.status_code == 200
-    assert delete_response.json() == {"deleted": True, "id": 1}
+    response = client.delete(
+        f"/api/auths/{auth_id}",
+        headers=auth_headers,
+    )
 
-    get_response = client.get("/api/auths/1", headers=auth_headers)
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Operation not permitted for this role.",
+    }
 
-    assert get_response.status_code == 404
+    get_response = client.get(
+        f"/api/auths/{auth_id}",
+        headers=auth_headers,
+    )
+
+    assert get_response.status_code == 200
 
 
-def test_delete_auth_endpoint_returns_404_for_missing_record(client, auth_headers):
-    response = client.delete("/api/auths/999", headers=auth_headers)
+def test_ur_cannot_delete_missing_auth(client, auth_headers):
+    response = client.delete(
+        "/api/auths/999",
+        headers=auth_headers,
+    )
 
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Auth record not found."}
+    assert response.status_code == 403
 
 
 def test_create_auth_endpoint_rejects_unknown_fields(client, auth_headers):
@@ -804,29 +824,9 @@ def test_update_auth_rolls_back_when_audit_write_fails(
     assert after_update_audit_count == before_update_audit_count
 
 
-def test_delete_auth_writes_audit_event(client, auth_headers):
-    create_response = client.post(
-        "/api/auths", json=make_payload(), headers=auth_headers
-    )
-
-    assert create_response.status_code == 201
-
-    response = client.delete("/api/auths/1", headers=auth_headers)
-
-    assert response.status_code == 200
-
-    rows = audit_rows()
-
-    assert rows[-1]["action"] == "auth.delete"
-    assert rows[-1]["resource_type"] == "auth"
-    assert rows[-1]["resource_id"] == 1
-    assert rows[-1]["username"] == "ur@example.com"
-
-
-def test_delete_auth_rolls_back_when_audit_write_fails(
+def test_ur_delete_rejection_preserves_auth_and_audit(
     client,
     auth_headers,
-    monkeypatch,
 ):
     create_response = client.post(
         "/api/auths",
@@ -839,24 +839,6 @@ def test_delete_auth_rolls_back_when_audit_write_fails(
     auth_id = create_response.json()["id"]
 
     with get_conn() as conn:
-        before_auth_count = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM auths
-            WHERE id = ?
-            """,
-            (auth_id,),
-        ).fetchone()["count"]
-
-        before_event_count = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM auth_events
-            WHERE auth_id = ?
-            """,
-            (auth_id,),
-        ).fetchone()["count"]
-
         before_snapshot_count = conn.execute(
             """
             SELECT COUNT(*) AS count
@@ -866,38 +848,15 @@ def test_delete_auth_rolls_back_when_audit_write_fails(
             (auth_id,),
         ).fetchone()["count"]
 
-        before_delete_audit_count = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM audit_events
-            WHERE action = 'auth.delete'
-              AND resource_id = ?
-            """,
-            (auth_id,),
-        ).fetchone()["count"]
-
-    assert before_auth_count == 1
-
-    def fail_audit_write(**kwargs):
-        raise RuntimeError("Synthetic audit write failure.")
-
-    monkeypatch.setattr(
-        auths_router,
-        "record_audit_event",
-        fail_audit_write,
+    response = client.delete(
+        f"/api/auths/{auth_id}",
+        headers=auth_headers,
     )
 
-    with pytest.raises(
-        RuntimeError,
-        match="Synthetic audit write failure.",
-    ):
-        client.delete(
-            f"/api/auths/{auth_id}",
-            headers=auth_headers,
-        )
+    assert response.status_code == 403
 
     with get_conn() as conn:
-        after_auth_count = conn.execute(
+        auth_count = conn.execute(
             """
             SELECT COUNT(*) AS count
             FROM auths
@@ -906,16 +865,7 @@ def test_delete_auth_rolls_back_when_audit_write_fails(
             (auth_id,),
         ).fetchone()["count"]
 
-        after_event_count = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM auth_events
-            WHERE auth_id = ?
-            """,
-            (auth_id,),
-        ).fetchone()["count"]
-
-        after_snapshot_count = conn.execute(
+        snapshot_count = conn.execute(
             """
             SELECT COUNT(*) AS count
             FROM auth_decision_snapshots
@@ -924,7 +874,7 @@ def test_delete_auth_rolls_back_when_audit_write_fails(
             (auth_id,),
         ).fetchone()["count"]
 
-        after_delete_audit_count = conn.execute(
+        deletion_audit_count = conn.execute(
             """
             SELECT COUNT(*) AS count
             FROM audit_events
@@ -934,10 +884,9 @@ def test_delete_auth_rolls_back_when_audit_write_fails(
             (auth_id,),
         ).fetchone()["count"]
 
-    assert after_auth_count == before_auth_count
-    assert after_event_count == before_event_count
-    assert after_snapshot_count == before_snapshot_count
-    assert after_delete_audit_count == before_delete_audit_count
+    assert auth_count == 1
+    assert snapshot_count == before_snapshot_count
+    assert deletion_audit_count == 0
 
 
 def test_auth_routes_require_authentication(client):
@@ -1821,3 +1770,829 @@ def test_sparse_seeded_auths_serialize_with_nullable_database_text(
         auth = data["auths"][0] if url == "/api/auths" else data
         assert all(auth[field] == "" for field in optional_fields)
         assert auth["requested_days"] == 5
+
+
+def test_ur_cannot_create_auth_delete_challenge(client, auth_headers):
+    create_response = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    auth_id = create_response.json()["id"]
+
+    response = client.post(
+        f"/api/auths/{auth_id}/delete-challenge",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+
+
+def test_unauthenticated_user_cannot_create_delete_challenge(client):
+    response = client.post(
+        "/api/auths/42/delete-challenge",
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.fixture
+def admin_delete_session(client):
+    user = create_user(
+        "delete-admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "delete-admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    csrf_token = client.cookies.get("carequeue_csrf")
+    assert csrf_token
+
+    if not is_governance_attestation_current():
+        create_governance_attestation(
+            organization_name="Test Facility",
+            deployment_mode="self_hosted",
+            accepted_by_user_id=user["id"],
+            app_version=get_settings().app_version,
+        )
+
+    secret = generate_totp_secret()
+
+    assert store_user_mfa_secret(user["id"], secret)
+    assert enable_user_mfa(user["id"])
+
+    return {
+        "user": user,
+        "secret": secret,
+        "headers": {"X-CSRF-Token": csrf_token},
+    }
+
+
+def test_admin_can_create_auth_delete_challenge(
+    client,
+    admin_delete_session,
+):
+    headers = admin_delete_session["headers"]
+
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/auths/{auth_id}/delete-challenge",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["challenge_token"]
+    assert data["expires_at"]
+    assert "no-store" in response.headers["cache-control"].lower()
+
+
+def test_admin_delete_requires_enrolled_mfa(client):
+    user = create_user(
+        "no-mfa-delete-admin@example.com",
+        "correct horse battery staple",
+        role="Admin",
+    )
+
+    login_response = client.post(
+        "/api/security/login",
+        json={
+            "username": "no-mfa-delete-admin@example.com",
+            "password": "correct horse battery staple",
+        },
+    )
+    assert login_response.status_code == 200
+
+    if not is_governance_attestation_current():
+        create_governance_attestation(
+            organization_name="Test Facility",
+            deployment_mode="self_hosted",
+            accepted_by_user_id=user["id"],
+            app_version=get_settings().app_version,
+        )
+
+    headers = {
+        "X-CSRF-Token": client.cookies.get("carequeue_csrf"),
+    }
+
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    challenge_response = client.post(
+        f"/api/auths/{auth_id}/delete-challenge",
+        headers=headers,
+    )
+
+    assert challenge_response.status_code == 403
+
+    delete_response = client.request(
+        "DELETE",
+        f"/api/auths/{auth_id}",
+        json={
+            "challenge_token": "invalid",
+            "code": "123456",
+            "reason": "Created in error",
+        },
+        headers=headers,
+    )
+
+    assert delete_response.status_code == 403
+
+
+def test_admin_delete_requires_valid_single_use_mfa(
+    client,
+    admin_delete_session,
+):
+    headers = admin_delete_session["headers"]
+    secret = admin_delete_session["secret"]
+
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    challenge_response = client.post(
+        f"/api/auths/{auth_id}/delete-challenge",
+        headers=headers,
+    )
+    assert challenge_response.status_code == 200
+
+    token = challenge_response.json()["challenge_token"]
+
+    payload = {
+        "challenge_token": token,
+        "code": pyotp.TOTP(secret).now(),
+        "reason": "Duplicate authorization",
+    }
+
+    response = client.request(
+        "DELETE",
+        f"/api/auths/{auth_id}",
+        json=payload,
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "deleted": True,
+        "id": auth_id,
+    }
+
+    with get_conn() as conn:
+        remaining = conn.execute(
+            "SELECT id FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+        audit = conn.execute(
+            """
+            SELECT metadata
+            FROM audit_events
+            WHERE action = 'auth.delete'
+              AND resource_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        verified_mfa_events = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM audit_events
+            WHERE action = 'security.auth_delete_mfa_verified'
+              AND resource_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert remaining is None
+    assert audit is not None
+    assert verified_mfa_events == 1
+
+    metadata = json.loads(audit["metadata"])
+    assert metadata["reason"] == "Duplicate authorization"
+    assert metadata["mfa_verified"] is True
+    assert payload["code"] not in audit["metadata"]
+    assert token not in audit["metadata"]
+
+    replay_response = client.request(
+        "DELETE",
+        f"/api/auths/{auth_id}",
+        json=payload,
+        headers=headers,
+    )
+
+    assert replay_response.status_code == 401
+
+
+def test_admin_delete_failed_mfa_is_audited(
+    client,
+    admin_delete_session,
+    monkeypatch,
+):
+    headers = admin_delete_session["headers"]
+    user = admin_delete_session["user"]
+
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    challenge_response = client.post(
+        f"/api/auths/{auth_id}/delete-challenge",
+        headers=headers,
+    )
+    assert challenge_response.status_code == 200
+
+    token = challenge_response.json()["challenge_token"]
+
+    monkeypatch.setattr(
+        "authstatus_api.routers.auths.find_auth_delete_totp_step",
+        lambda secret, code: None,
+    )
+
+    payload = {
+        "challenge_token": token,
+        "code": "123456",
+        "reason": "Duplicate authorization",
+    }
+
+    for _ in range(5):
+        response = client.request(
+            "DELETE",
+            f"/api/auths/{auth_id}",
+            json=payload,
+            headers=headers,
+        )
+
+        assert response.status_code == 401
+
+    with get_conn() as conn:
+        events = conn.execute(
+            """
+            SELECT action, metadata
+            FROM audit_events
+            WHERE user_id = ?
+              AND resource_id = ?
+              AND action IN (
+                  'security.auth_delete_mfa_failed',
+                  'security.auth_delete_mfa_locked'
+              )
+            ORDER BY id
+            """,
+            (user["id"], auth_id),
+        ).fetchall()
+
+        auth = conn.execute(
+            "SELECT id FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+    assert auth is not None
+
+    actions = [event["action"] for event in events]
+
+    assert actions.count("security.auth_delete_mfa_failed") == 5
+    assert actions.count("security.auth_delete_mfa_locked") == 1
+
+    for event in events:
+        assert token not in event["metadata"]
+        assert payload["code"] not in event["metadata"]
+
+
+def test_admin_delete_mfa_failure_rolls_back_when_audit_fails(
+    client,
+    admin_delete_session,
+    monkeypatch,
+):
+    headers = admin_delete_session["headers"]
+
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    challenge_response = client.post(
+        f"/api/auths/{auth_id}/delete-challenge",
+        headers=headers,
+    )
+    assert challenge_response.status_code == 200
+
+    token = challenge_response.json()["challenge_token"]
+
+    monkeypatch.setattr(
+        auths_router,
+        "find_auth_delete_totp_step",
+        lambda secret, code: None,
+    )
+
+    def fail_audit_write(**kwargs):
+        raise RuntimeError("Synthetic deletion MFA audit failure.")
+
+    monkeypatch.setattr(
+        auths_router,
+        "record_audit_event",
+        fail_audit_write,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Synthetic deletion MFA audit failure.",
+    ):
+        client.request(
+            "DELETE",
+            f"/api/auths/{auth_id}",
+            json={
+                "challenge_token": token,
+                "code": "123456",
+                "reason": "Duplicate authorization",
+            },
+            headers=headers,
+        )
+
+    with get_conn() as conn:
+        failure_count = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM auth_delete_failed_attempts
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["total"]
+
+        challenge = conn.execute(
+            """
+            SELECT failed_attempts, consumed_at
+            FROM auth_delete_challenges
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        auth = conn.execute(
+            "SELECT id FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+    assert failure_count == 0
+    assert challenge is not None
+    assert challenge["failed_attempts"] == 0
+    assert challenge["consumed_at"] is None
+    assert auth is not None
+
+
+def test_ur_can_void_auth_and_preserve_history(client, auth_headers):
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Duplicate authorization"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "voided": True,
+        "id": auth_id,
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT status, is_voided, void_reason,
+                   voided_by_user_id, voided_at
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        audit = conn.execute(
+            """
+            SELECT metadata
+            FROM audit_events
+            WHERE action = 'auth.void'
+              AND resource_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (auth_id,),
+        ).fetchone()
+
+    assert row is not None
+    assert row["status"] == created.json()["status"]
+    assert row["is_voided"] == 1
+    assert row["void_reason"] == "Duplicate authorization"
+    assert row["voided_by_user_id"] is not None
+    assert row["voided_at"] is not None
+
+    assert audit is not None
+    assert json.loads(audit["metadata"])["reason"] == "Duplicate authorization"
+
+    assert (
+        client.get(
+            f"/api/auths/{auth_id}",
+            headers=auth_headers,
+        ).status_code
+        == 200
+    )
+
+
+def test_void_auth_rejects_duplicate_action(client, auth_headers):
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+    path = f"/api/auths/{auth_id}/void"
+
+    first = client.post(
+        path,
+        json={"reason": "Entered in error"},
+        headers=auth_headers,
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        path,
+        json={"reason": "Second attempt"},
+        headers=auth_headers,
+    )
+    assert second.status_code == 409
+
+    with get_conn() as conn:
+        audit_count = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM audit_events
+            WHERE action = 'auth.void'
+              AND resource_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["total"]
+
+    assert audit_count == 1
+
+
+def test_void_auth_rejects_invalid_reason(client, auth_headers):
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": " "},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT is_voided FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+    assert row["is_voided"] == 0
+
+
+def test_voided_auth_is_exposed_in_api_responses(client, auth_headers):
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    voided = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Duplicate authorization"},
+        headers=auth_headers,
+    )
+    assert voided.status_code == 200
+
+    response = client.get(
+        f"/api/auths/{auth_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+
+    record = response.json()
+
+    assert record["is_voided"] is True
+    assert record["voided_at"] is not None
+    assert record["voided_by_user_id"] is not None
+    assert record["void_reason"] == "Duplicate authorization"
+    assert record["status"] == created.json()["status"]
+
+    list_response = client.get(
+        "/api/auths",
+        headers=auth_headers,
+    )
+    assert list_response.status_code == 200
+
+    listed = next(
+        auth for auth in list_response.json()["auths"] if auth["id"] == auth_id
+    )
+
+    assert listed["is_voided"] is True
+    assert listed["void_reason"] == "Duplicate authorization"
+
+
+def test_voided_auth_cannot_be_updated(client, auth_headers):
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+    original_status = created.json()["status"]
+
+    voided = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Entered in error"},
+        headers=auth_headers,
+    )
+    assert voided.status_code == 200
+
+    response = client.patch(
+        f"/api/auths/{auth_id}",
+        json={"status": "Approved"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == ("Voided authorizations cannot be modified.")
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT status, is_voided, void_reason
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+    assert row is not None
+    assert row["status"] == original_status
+    assert row["is_voided"] == 1
+    assert row["void_reason"] == "Entered in error"
+
+
+def test_ur_cannot_restore_voided_auth(client, auth_headers):
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    voided = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Entered in error"},
+        headers=auth_headers,
+    )
+    assert voided.status_code == 200
+
+    response = client.post(
+        f"/api/auths/{auth_id}/restore",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT is_voided FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+    assert row["is_voided"] == 1
+
+
+def test_admin_can_restore_voided_auth(
+    client,
+    admin_delete_session,
+):
+    headers = admin_delete_session["headers"]
+
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+    original_status = created.json()["status"]
+
+    voided = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Duplicate authorization"},
+        headers=headers,
+    )
+    assert voided.status_code == 200
+
+    response = client.post(
+        f"/api/auths/{auth_id}/restore",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "restored": True,
+        "id": auth_id,
+    }
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT status, is_voided, voided_at,
+                   voided_by_user_id, void_reason
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        actions = [
+            event["action"]
+            for event in conn.execute(
+                """
+                SELECT action
+                FROM audit_events
+                WHERE resource_id = ?
+                  AND action IN ('auth.void', 'auth.restore')
+                ORDER BY id
+                """,
+                (auth_id,),
+            ).fetchall()
+        ]
+
+    assert row["status"] == original_status
+    assert row["is_voided"] == 0
+    assert row["voided_at"] is None
+    assert row["voided_by_user_id"] is None
+    assert row["void_reason"] is None
+    assert actions == ["auth.void", "auth.restore"]
+
+
+def test_restore_requires_voided_authorization(
+    client,
+    admin_delete_session,
+):
+    headers = admin_delete_session["headers"]
+
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=headers,
+    )
+    assert created.status_code == 201
+
+    response = client.post(
+        f"/api/auths/{created.json()['id']}/restore",
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+
+
+@pytest.mark.parametrize("operation", ["create", "update", "delete"])
+def test_voided_auth_event_mutations_return_conflict(
+    client,
+    auth_headers,
+    operation,
+):
+    created = client.post(
+        "/api/auths",
+        json=make_payload(),
+        headers=auth_headers,
+    )
+    assert created.status_code == 201
+
+    auth_id = created.json()["id"]
+
+    event_response = client.post(
+        f"/api/auths/{auth_id}/events",
+        json=make_event_payload(),
+        headers=auth_headers,
+    )
+    assert event_response.status_code == 201
+
+    event_id = event_response.json()["id"]
+
+    voided = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Duplicate authorization"},
+        headers=auth_headers,
+    )
+    assert voided.status_code == 200
+
+    event_url = f"/api/auths/{auth_id}/events/{event_id}"
+
+    if operation == "create":
+        response = client.post(
+            f"/api/auths/{auth_id}/events",
+            json=make_event_payload(),
+            headers=auth_headers,
+        )
+    elif operation == "update":
+        response = client.patch(
+            event_url,
+            json={"notes": "Unauthorized modification"},
+            headers=auth_headers,
+        )
+    else:
+        response = client.delete(
+            event_url,
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == ("Voided authorizations cannot be modified.")
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT is_voided
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        stored_event = conn.execute(
+            """
+            SELECT id
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+    assert row is not None
+    assert row["is_voided"] == 1
+    assert stored_event is not None

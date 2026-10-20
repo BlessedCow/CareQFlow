@@ -30,6 +30,10 @@ export type DenialReason =
 
 export interface AuthRequest {
   id: string;
+  isVoided?: boolean;
+  voidedAt?: string | null;
+  voidedByUserId?: number | null;
+  voidReason?: string | null;
   patientId: string;
   memberId: string;
   authNumber: string;

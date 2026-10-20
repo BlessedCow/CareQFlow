@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from sqlcipher3 import IntegrityError
 
+from authstatus_api.database_encryption.sqlcipher_probe import import_sqlcipher
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 from authstatus_api.settings import get_settings
@@ -141,6 +141,21 @@ def test_init_db_creates_sessions_table():
     }.issubset(table_columns("sessions"))
 
 
+def test_init_db_creates_auth_delete_challenges_table():
+    init_db()
+
+    assert {
+        "id",
+        "user_id",
+        "auth_id",
+        "token_hash",
+        "created_at",
+        "expires_at",
+        "consumed_at",
+        "failed_attempts",
+    }.issubset(table_columns("auth_delete_challenges"))
+
+
 def test_init_db_creates_trusted_devices_table():
     init_db()
 
@@ -160,7 +175,7 @@ def test_init_db_creates_trusted_devices_table():
 def test_user_role_constraint_rejects_unknown_role():
     init_db()
 
-    with pytest.raises(IntegrityError):
+    with pytest.raises(import_sqlcipher().IntegrityError):
         with get_conn() as conn:
             conn.execute(
                 """

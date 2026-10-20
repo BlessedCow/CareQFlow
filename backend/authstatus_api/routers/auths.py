@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -45,8 +46,11 @@ from authstatus_api.authorizations.records import (
     delete_auth,
     get_auth,
     list_auths,
+    restore_voided_auth,
     update_auth,
+    void_auth,
 )
+from authstatus_api.authorizations.state import VoidedAuthorizationError
 from authstatus_api.pdf_intake.request_body import (
     PdfRequestBodyTooLargeError,
     read_pdf_request_body,
@@ -56,6 +60,7 @@ from authstatus_api.schemas import (
     AuthDecisionSnapshotCreate,
     AuthDecisionSnapshotListResponse,
     AuthDecisionSnapshotRecord,
+    AuthDeleteRequest,
     AuthDocumentListResponse,
     AuthDocumentRecord,
     AuthEventCreate,
@@ -69,17 +74,28 @@ from authstatus_api.schemas import (
     AuthLocEpisodeUpdate,
     AuthRecord,
     AuthUpdate,
+    AuthVoidRequest,
     ClinicalAssessmentCreate,
     ClinicalAssessmentListResponse,
     ClinicalAssessmentRecord,
     ClinicalAssessmentUpdate,
     DeleteResponse,
 )
+from authstatus_api.security.auth_delete_challenges import (
+    AuthDeleteChallengeError,
+    authorize_auth_delete_in_transaction,
+    create_auth_delete_challenge,
+    find_auth_delete_totp_step,
+    get_active_auth_delete_challenge,
+    record_failed_auth_delete_attempt,
+)
 from authstatus_api.security.dependencies import get_current_user, require_role
+from authstatus_api.security.mfa import get_user_mfa_secret
 
 router = APIRouter(prefix="/api/auths", tags=["auths"])
 ReadAuthUser = Depends(get_current_user)
 WriteAuthUser = Depends(require_role("Admin", "UR"))
+AdminAuthUser = Depends(require_role("Admin"))
 
 
 NO_STORE_HEADERS = {
@@ -149,7 +165,9 @@ def read_auths(
         request=request,
     )
 
-    return AuthListResponse(auths=records)
+    return AuthListResponse(
+        auths=[AuthRecord.model_validate(record) for record in records]
+    )
 
 
 @router.post("", response_model=AuthRecord, status_code=status.HTTP_201_CREATED)
@@ -299,6 +317,12 @@ async def create_auth_document_record(
             detail="The uploaded document must be a PDF.",
         )
 
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
     if document is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -362,11 +386,17 @@ def delete_auth_document_record(
             conn=conn,
         )
 
-    deleted = delete_auth_document(
-        auth_id,
-        document_id,
-        before_commit=audit_delete_document,
-    )
+    try:
+        deleted = delete_auth_document(
+            auth_id,
+            document_id,
+            before_commit=audit_delete_document,
+        )
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     if not deleted:
         raise HTTPException(
@@ -400,11 +430,17 @@ def update_auth_record(
             conn=conn,
         )
 
-    record = update_auth(
-        auth_id,
-        payload_data,
-        before_commit=audit_update,
-    )
+    try:
+        record = update_auth(
+            auth_id,
+            payload_data,
+            before_commit=audit_update,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     if record is None:
         raise HTTPException(
@@ -473,11 +509,17 @@ def create_auth_event_record(
             conn=conn,
         )
 
-    event = create_auth_event(
-        auth_id,
-        payload_data,
-        before_commit=audit_create_event,
-    )
+    try:
+        event = create_auth_event(
+            auth_id,
+            payload_data,
+            before_commit=audit_create_event,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     if event is None:
         raise HTTPException(
@@ -515,12 +557,18 @@ def update_auth_event_record(
             conn=conn,
         )
 
-    event = update_auth_event(
-        auth_id,
-        event_id,
-        payload_data,
-        before_commit=audit_update_event,
-    )
+    try:
+        event = update_auth_event(
+            auth_id,
+            event_id,
+            payload_data,
+            before_commit=audit_update_event,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     if event is None:
         raise HTTPException(
@@ -549,11 +597,17 @@ def delete_auth_event_record(
             conn=conn,
         )
 
-    deleted = delete_auth_event(
-        auth_id,
-        event_id,
-        before_commit=audit_delete_event,
-    )
+    try:
+        deleted = delete_auth_event(
+            auth_id,
+            event_id,
+            before_commit=audit_delete_event,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     if not deleted:
         raise HTTPException(
@@ -644,6 +698,12 @@ def create_auth_loc_episode_record(
             detail=str(exc),
         ) from exc
 
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
     if episode is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -701,6 +761,12 @@ def update_auth_loc_episode_record(
             detail=str(exc),
         ) from exc
 
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
     if episode is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -731,11 +797,17 @@ def delete_auth_loc_episode_record(
             conn=conn,
         )
 
-    deleted = delete_auth_loc_episode(
-        auth_id,
-        episode_id,
-        before_commit=audit_delete_loc_episode,
-    )
+    try:
+        deleted = delete_auth_loc_episode(
+            auth_id,
+            episode_id,
+            before_commit=audit_delete_loc_episode,
+        )
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     if not deleted:
         raise HTTPException(
@@ -826,6 +898,12 @@ def create_clinical_assessment_record(
             detail=str(exc),
         ) from exc
 
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
     if assessment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -878,6 +956,12 @@ def update_clinical_assessment_record(
             detail=str(exc),
         ) from exc
 
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
     if assessment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -908,11 +992,17 @@ def delete_clinical_assessment_record(
             conn=conn,
         )
 
-    deleted = delete_clinical_assessment(
-        auth_id,
-        assessment_id,
-        before_commit=audit_delete_clinical_assessment,
-    )
+    try:
+        deleted = delete_clinical_assessment(
+            auth_id,
+            assessment_id,
+            before_commit=audit_delete_clinical_assessment,
+        )
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
 
     if not deleted:
         raise HTTPException(
@@ -1001,6 +1091,12 @@ def create_auth_decision_snapshot_record(
             detail=str(exc),
         ) from exc
 
+    except VoidedAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
     if snapshot is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1010,26 +1106,276 @@ def create_auth_decision_snapshot_record(
     return AuthDecisionSnapshotRecord(**snapshot)
 
 
+@router.post(
+    "/{auth_id}/delete-challenge",
+    response_model=dict[str, str],
+)
+def create_auth_delete_challenge_endpoint(
+    auth_id: int,
+    response: Response,
+    current_user: dict = AdminAuthUser,
+) -> dict[str, str]:
+    response.headers.update(NO_STORE_HEADERS)
+
+    if not current_user["mfa_enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Multi-factor authentication is required to delete authorizations.",
+        )
+
+    if get_user_mfa_secret(current_user["id"]) is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Multi-factor authentication is unavailable for this account.",
+        )
+
+    if get_auth(auth_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auth record not found.",
+        )
+
+    try:
+        challenge = create_auth_delete_challenge(
+            user_id=current_user["id"],
+            auth_id=auth_id,
+        )
+    except AuthDeleteChallengeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "challenge_token": challenge["token"],
+        "expires_at": challenge["expires_at"],
+    }
+
+
+@router.post("/{auth_id}/void", response_model=dict[str, bool | int])
+def void_auth_record(
+    auth_id: int,
+    payload: AuthVoidRequest,
+    request: Request,
+    current_user: dict = WriteAuthUser,
+) -> dict[str, bool | int]:
+    def audit_void(conn: object) -> None:
+        record_audit_event(
+            action="auth.void",
+            resource_type="auth",
+            resource_id=auth_id,
+            user=current_user,
+            metadata={
+                "reason": payload.reason.strip(),
+            },
+            request=request,
+            conn=conn,
+        )
+
+    try:
+        voided = void_auth(
+            auth_id,
+            user_id=current_user["id"],
+            reason=payload.reason,
+            before_commit=audit_void,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    if not voided:
+        if get_auth(auth_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Auth record not found.",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Authorization is already voided.",
+        )
+
+    return {"voided": True, "id": auth_id}
+
+
+@router.post("/{auth_id}/restore", response_model=dict[str, bool | int])
+def restore_voided_auth_record(
+    auth_id: int,
+    request: Request,
+    current_user: dict = AdminAuthUser,
+) -> dict[str, bool | int]:
+    def audit_restore(conn: Any) -> None:
+        row = conn.execute(
+            """
+            SELECT status, is_voided
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+        record_audit_event(
+            action="auth.restore",
+            resource_type="auth",
+            resource_id=auth_id,
+            user=current_user,
+            metadata={
+                "original_status": row["status"],
+                "restored_from_void": True,
+            },
+            request=request,
+            conn=conn,
+        )
+
+    restored = restore_voided_auth(
+        auth_id,
+        before_commit=audit_restore,
+    )
+
+    if not restored:
+        if get_auth(auth_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Auth record not found.",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Authorization is not voided.",
+        )
+
+    return {"restored": True, "id": auth_id}
+
+
 @router.delete("/{auth_id}", response_model=DeleteResponse)
 def delete_auth_record(
     auth_id: int,
+    payload: AuthDeleteRequest,
     request: Request,
-    current_user: dict = WriteAuthUser,
+    current_user: dict = AdminAuthUser,
 ) -> DeleteResponse:
+    if not current_user["mfa_enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Multi-factor authentication is required to delete authorizations.",
+        )
+
+    secret = get_user_mfa_secret(current_user["id"])
+
+    if secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Multi-factor authentication is unavailable for this account.",
+        )
+
+    challenge = get_active_auth_delete_challenge(
+        payload.challenge_token,
+        current_user["id"],
+        auth_id,
+    )
+
+    if challenge is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authorization deletion challenge.",
+        )
+
+    time_step = find_auth_delete_totp_step(secret, payload.code)
+
+    if time_step is None:
+
+        def audit_failed_attempt(conn: object, locked: bool) -> None:
+            record_audit_event(
+                action="security.auth_delete_mfa_failed",
+                resource_type="auth",
+                resource_id=auth_id,
+                user=current_user,
+                metadata={
+                    "operation": "auth.delete",
+                    "verification": "totp",
+                },
+                request=request,
+                conn=conn,
+            )
+
+            if locked:
+                record_audit_event(
+                    action="security.auth_delete_mfa_locked",
+                    resource_type="auth",
+                    resource_id=auth_id,
+                    user=current_user,
+                    metadata={
+                        "operation": "auth.delete",
+                        "reason": "failed_mfa_attempt_limit",
+                        "window_minutes": 15,
+                    },
+                    request=request,
+                    conn=conn,
+                )
+
+        recorded = record_failed_auth_delete_attempt(
+            payload.challenge_token,
+            current_user["id"],
+            auth_id,
+            on_recorded=audit_failed_attempt,
+        )
+
+        if not recorded:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Deletion MFA verification is unavailable or temporarily limited.",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication code.",
+        )
+
     def audit_delete(conn: object) -> None:
+        authorize_auth_delete_in_transaction(
+            conn,
+            token=payload.challenge_token,
+            user_id=current_user["id"],
+            auth_id=auth_id,
+            time_step=time_step,
+        )
+        record_audit_event(
+            action="security.auth_delete_mfa_verified",
+            resource_type="auth",
+            resource_id=auth_id,
+            user=current_user,
+            metadata={
+                "operation": "auth.delete",
+                "verification": "totp",
+            },
+            request=request,
+            conn=conn,
+        )
         record_audit_event(
             action="auth.delete",
             resource_type="auth",
             resource_id=auth_id,
             user=current_user,
+            metadata={
+                "reason": payload.reason,
+                "mfa_verified": True,
+            },
             request=request,
             conn=conn,
         )
 
-    deleted = delete_auth(
-        auth_id,
-        before_commit=audit_delete,
-    )
+    try:
+        deleted = delete_auth(
+            auth_id,
+            before_commit=audit_delete,
+        )
+    except AuthDeleteChallengeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+        ) from exc
 
     if not deleted:
         raise HTTPException(

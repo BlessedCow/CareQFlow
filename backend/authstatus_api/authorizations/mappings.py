@@ -10,6 +10,7 @@ from authstatus_api.crypto import (
 )
 
 BOOLEAN_FIELDS = {
+    "is_voided",
     "care_manager_enabled",
     "discharge_clinical_needed",
     "no_pa_required",

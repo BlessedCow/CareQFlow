@@ -8,6 +8,10 @@ function mapApiAuthToAuthRequest(item: any): AuthRequest {
 
   return {
     id: String(item.id),
+    isVoided: Boolean(item.is_voided),
+    voidedAt: item.voided_at ?? null,
+    voidedByUserId: item.voided_by_user_id ?? null,
+    voidReason: item.void_reason ?? null,
     patientId: item.client_name ?? "Unknown Client",
     memberId: item.member_id ?? "",
     authNumber: item.auth_number ?? "",
@@ -74,16 +78,54 @@ export async function fetchAuthRequests(): Promise<AuthRequest[]> {
   return data.auths.map(mapApiAuthToAuthRequest);
 }
 
-export async function deleteAuthRequest(id: string): Promise<void> {
+async function authorizationAction(
+  id: string,
+  action: "void" | "restore",
+  body?: { reason: string }
+): Promise<void> {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/auths/${id}/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!response.ok) {
+    throw new Error(`Unable to ${action} authorization (${response.status}).`);
+  }
+}
+
+export function voidAuthRequest(id: string, reason: string): Promise<void> {
+  return authorizationAction(id, "void", { reason });
+}
+
+export function restoreAuthRequest(id: string): Promise<void> {
+  return authorizationAction(id, "restore");
+}
+
+export async function deleteAuthRequest(
+  id: string,
+  payload: { reason: string; code: string; challenge_token: string }
+): Promise<void> {
   const response = await authenticatedFetch(`${API_BASE_URL}/api/auths/${id}`, {
     method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
-
   if (!response.ok) {
-    throw new Error(
-      `Failed to delete authorization record: ${response.status}`
-    );
+    throw new Error(`Unable to delete authorization (${response.status}).`);
   }
+}
+
+export async function requestAuthDeleteChallenge(
+  id: string
+): Promise<{ challenge_token: string; expires_at: string }> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/auths/${id}/delete-challenge`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(`Unable to request deletion MFA (${response.status}).`);
+  }
+  return response.json();
 }
 
 export interface CreateAuthRequestPayload {

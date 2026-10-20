@@ -103,11 +103,14 @@ export function useAuthorizationMutations() {
     }
   };
 
-  const removeAuthorization = async (auth: AuthRequest) => {
+  const removeAuthorization = async (
+    auth: AuthRequest,
+    payload: { reason: string; code: string; challenge_token: string }
+  ) => {
     setDeletingAuthId(auth.id);
 
     try {
-      await deleteAuthRequest(auth.id);
+      await deleteAuthRequest(auth.id, payload);
     } finally {
       setDeletingAuthId(null);
     }

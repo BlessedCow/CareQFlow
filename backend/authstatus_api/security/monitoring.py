@@ -14,6 +14,8 @@ SECURITY_FAILURE_ACTIONS = (
     "security.login_locked",
     "security.login_mfa_failed",
     "security.login_mfa_challenge_invalid",
+    "security.auth_delete_mfa_failed",
+    "security.auth_delete_mfa_locked",
 )
 
 
@@ -70,11 +72,49 @@ def get_security_monitoring_summary(
             ),
         ).fetchone()["total"]
 
+        verified_login_mfa = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM audit_events
+            WHERE action = ? AND created_at >= ?
+            """,
+            ("security.login_mfa_verified", since),
+        ).fetchone()["total"]
+
+        verified_delete_mfa = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM audit_events
+            WHERE action = ? AND created_at >= ?
+            """,
+            ("security.auth_delete_mfa_verified", since),
+        ).fetchone()["total"]
+
+        failed_delete_mfa = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM audit_events
+            WHERE action = ?
+              AND created_at >= ?
+            """,
+            ("security.auth_delete_mfa_failed", since),
+        ).fetchone()["total"]
+
+        locked_deletions = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM audit_events
+            WHERE action = ?
+              AND created_at >= ?
+            """,
+            ("security.auth_delete_mfa_locked", since),
+        ).fetchone()["total"]
+
         distinct_failure_ips = conn.execute(
             """
             SELECT COUNT(DISTINCT ip_address) AS total
             FROM audit_events
-            WHERE action IN (?, ?, ?, ?)
+            WHERE action IN (?, ?, ?, ?, ?, ?)
               AND created_at >= ?
               AND ip_address != ''
             """,
@@ -88,7 +128,7 @@ def get_security_monitoring_summary(
             """
             SELECT COUNT(DISTINCT username) AS total
             FROM audit_events
-            WHERE action IN (?, ?, ?, ?)
+            WHERE action IN (?, ?, ?, ?, ?, ?)
               AND created_at >= ?
               AND username IS NOT NULL
               AND username != ''
@@ -103,7 +143,7 @@ def get_security_monitoring_summary(
             """
             SELECT COUNT(*) AS total
             FROM audit_events
-            WHERE action IN (?, ?, ?, ?)
+            WHERE action IN (?, ?, ?, ?, ?, ?)
               AND created_at >= ?
               AND username IS NOT NULL
               AND username != ''
@@ -121,7 +161,7 @@ def get_security_monitoring_summary(
             """
             SELECT COUNT(*) AS total
             FROM audit_events
-            WHERE action IN (?, ?, ?, ?)
+            WHERE action IN (?, ?, ?, ?, ?, ?)
               AND created_at >= ?
               AND ip_address != ''
             GROUP BY ip_address
@@ -145,11 +185,21 @@ def get_security_monitoring_summary(
         else 0
     )
 
-    total_failures = failed_logins + locked_logins + failed_mfa
+    total_failures = (
+        failed_logins
+        + locked_logins
+        + failed_mfa
+        + failed_delete_mfa
+        + locked_deletions
+    )
 
-    if locked_logins > 0 or max_failures_single_username >= FAILED_LOGIN_LOCK_THRESHOLD:
+    if (
+        locked_logins > 0
+        or locked_deletions > 0
+        or max_failures_single_username >= FAILED_LOGIN_LOCK_THRESHOLD
+    ):
         severity = "high"
-    elif failed_mfa >= FAILED_LOGIN_LOCK_THRESHOLD:
+    elif failed_mfa + failed_delete_mfa >= FAILED_LOGIN_LOCK_THRESHOLD:
         severity = "elevated"
     else:
         severity = "normal"
@@ -159,6 +209,10 @@ def get_security_monitoring_summary(
         "failed_logins": failed_logins,
         "locked_logins": locked_logins,
         "failed_mfa": failed_mfa,
+        "verified_login_mfa": verified_login_mfa,
+        "verified_delete_mfa": verified_delete_mfa,
+        "failed_delete_mfa": failed_delete_mfa,
+        "locked_deletions": locked_deletions,
         "total_failures": total_failures,
         "distinct_failure_ips": distinct_failure_ips,
         "distinct_failure_usernames": distinct_failure_usernames,

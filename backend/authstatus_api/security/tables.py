@@ -61,6 +61,49 @@ def initialize_security_tables(conn: Any) -> None:
         """)
 
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_delete_challenges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            auth_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            consumed_at TEXT,
+            failed_attempts INTEGER NOT NULL DEFAULT 0,
+            CHECK (failed_attempts >= 0),
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+        """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_delete_totp_uses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            time_step INTEGER NOT NULL,
+            used_at TEXT NOT NULL,
+            UNIQUE (user_id, time_step),
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+        """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS auth_delete_failed_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            auth_id INTEGER NOT NULL,
+            challenge_id INTEGER NOT NULL,
+            attempted_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+        """)
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS
+            idx_auth_delete_failed_attempts_user_time
+        ON auth_delete_failed_attempts (user_id, attempted_at)
+        """)
+
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS trusted_devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,

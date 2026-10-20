@@ -65,6 +65,7 @@ ADMIN_ENDPOINTS = {
     ("POST", "/api/registered-options"),
     ("POST", "/api/security/audit-events/verify-integrity"),
     ("POST", "/api/security/users"),
+    ("POST", "/api/security/users/{user_id}/request-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-mfa"),
     ("POST", "/api/security/users/{user_id}/reset-password"),
 }

@@ -11,6 +11,8 @@ interface DataTableProps {
   onView?: (auth: AuthRequest) => void;
   onEdit?: (auth: AuthRequest) => void;
   onDelete?: (auth: AuthRequest) => void;
+  onVoid?: (auth: AuthRequest) => void;
+  onRestore?: (auth: AuthRequest) => void;
   deletingId?: string | null;
   showActions?: boolean;
   workflowViewMode?: WorkflowViewMode;
@@ -290,6 +292,8 @@ export function DataTable({
   onView,
   onEdit,
   onDelete,
+  onVoid,
+  onRestore,
   deletingId,
   showActions = true,
   workflowViewMode = "relaxed",
@@ -655,6 +659,20 @@ export function DataTable({
                         </button>
                       )}
 
+                      {onVoid && !row.isVoided && (
+                        <button type="button" onClick={() => onVoid(row)}
+                          className="text-amber-600 hover:underline"
+                          aria-label={`Void authorization record for ${row.patientId}`}>
+                          Void
+                        </button>
+                      )}
+                      {onRestore && row.isVoided && (
+                        <button type="button" onClick={() => onRestore(row)}
+                          className="text-blue-600 hover:underline"
+                          aria-label={`Restore authorization record for ${row.patientId}`}>
+                          Restore
+                        </button>
+                      )}
                       {onDelete &&
                         (confirmingDeleteId === row.id ? (
                           <div className="flex items-center gap-2">

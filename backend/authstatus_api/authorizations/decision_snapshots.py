@@ -4,7 +4,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from authstatus_api.authorizations.state import current_timestamp
+from authstatus_api.authorizations.state import (
+    current_timestamp,
+    require_writable_auth,
+)
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 
@@ -425,6 +428,9 @@ def _create_automatic_follow_up_snapshot(
     init_db()
 
     with get_conn() as conn:
+        if not require_writable_auth(conn, auth_id):
+            return None
+
         parent = _find_follow_up_parent_snapshot(
             conn,
             auth_id,
@@ -687,6 +693,8 @@ def create_automatic_follow_up_decision_snapshots(
     auth_record: dict[str, Any],
 ) -> list[dict[str, Any]]:
     auth_id = int(auth_record["id"])
+    if auth_record.get("is_voided"):
+        return []
 
     follow_up_decisions = (
         (
@@ -824,6 +832,8 @@ def create_automatic_auth_decision_snapshot(
     auth_record: dict[str, Any],
 ) -> dict[str, Any] | None:
     auth_id = int(auth_record["id"])
+    if auth_record.get("is_voided"):
+        return None
 
     auth_type = str(auth_record.get("auth_type") or "").strip().lower()
 
@@ -953,6 +963,9 @@ def create_auth_decision_snapshot(
     now = current_timestamp()
 
     with get_conn() as conn:
+        if not require_writable_auth(conn, auth_id):
+            return None
+
         auth_row = conn.execute(
             """
             SELECT

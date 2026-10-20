@@ -99,6 +99,10 @@ export interface SecurityMonitoringSummaryResponse {
   failed_logins: number;
   locked_logins: number;
   failed_mfa: number;
+  verified_login_mfa: number;
+  verified_delete_mfa: number;
+  failed_delete_mfa: number;
+  locked_deletions: number;
   total_failures: number;
   distinct_failure_ips: number;
   distinct_failure_usernames: number;

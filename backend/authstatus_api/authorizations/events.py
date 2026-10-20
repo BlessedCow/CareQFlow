@@ -87,9 +87,6 @@ def create_auth_event(
 ) -> dict[str, Any] | None:
     init_db()
 
-    if not _auth_exists(auth_id):
-        return None
-
     now = current_timestamp()
     prepared = prepare_auth_event_payload(payload)
     prepared["auth_id"] = auth_id
@@ -104,11 +101,26 @@ def create_auth_event(
     values = [prepared[key] for key in keys]
 
     with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+
+        parent = conn.execute(
+            "SELECT is_voided FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+        if parent is None:
+            return None
+
+        if parent["is_voided"]:
+            raise ValueError("Voided authorizations cannot be modified.")
+
         cursor = conn.execute(
             insert_sql("auth_events", keys),
             values,
         )
         event_id = int(cursor.lastrowid)
+
+        sync_auth_timeline_fields(auth_id, conn=conn)
 
         row = conn.execute(
             """
@@ -127,9 +139,7 @@ def create_auth_event(
         if before_commit is not None:
             before_commit(conn, event)
 
-    sync_auth_timeline_fields(auth_id)
-
-    return get_auth_event(auth_id, event_id)
+    return event
 
 
 def list_auth_events(
@@ -185,9 +195,6 @@ def update_auth_event(
 ) -> dict[str, Any] | None:
     init_db()
 
-    if get_auth_event(auth_id, event_id) is None:
-        return None
-
     prepared = prepare_auth_event_payload(payload)
     prepared["updated_at"] = current_timestamp()
 
@@ -197,23 +204,39 @@ def update_auth_event(
         {"id", "auth_id", "created_at"},
     )
 
-    if not keys:
-        event = get_auth_event(auth_id, event_id)
-
-        if event is not None and before_commit is not None:
-            with get_conn() as conn:
-                before_commit(conn, event)
-
-        sync_auth_timeline_fields(auth_id)
-
-        return event
-
     with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+
+        parent = conn.execute(
+            "SELECT is_voided FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+        if parent is None:
+            return None
+
+        if parent["is_voided"]:
+            raise ValueError("Voided authorizations cannot be modified.")
+
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM auth_events
+            WHERE auth_id = ? AND id = ?
+            """,
+            (auth_id, event_id),
+        ).fetchone()
+
+        if existing is None:
+            return None
+
         for key in keys:
             conn.execute(
                 AUTH_EVENT_UPDATE_QUERIES[key],
                 (prepared[key], auth_id, event_id),
             )
+
+        sync_auth_timeline_fields(auth_id, conn=conn)
 
         row = conn.execute(
             """
@@ -232,9 +255,7 @@ def update_auth_event(
         if before_commit is not None:
             before_commit(conn, event)
 
-    sync_auth_timeline_fields(auth_id)
-
-    return get_auth_event(auth_id, event_id)
+    return event
 
 
 def delete_auth_event(
@@ -246,6 +267,19 @@ def delete_auth_event(
     init_db()
 
     with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+
+        parent = conn.execute(
+            "SELECT is_voided FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+        if parent is None:
+            return False
+
+        if parent["is_voided"]:
+            raise ValueError("Voided authorizations cannot be modified.")
+
         cursor = conn.execute(
             """
             DELETE FROM auth_events
@@ -253,12 +287,13 @@ def delete_auth_event(
             """,
             (auth_id, event_id),
         )
+
         deleted = cursor.rowcount > 0
 
-        if deleted and before_commit is not None:
-            before_commit(conn)
+        if deleted:
+            sync_auth_timeline_fields(auth_id, conn=conn)
 
-    if deleted:
-        sync_auth_timeline_fields(auth_id)
+            if before_commit is not None:
+                before_commit(conn)
 
     return deleted

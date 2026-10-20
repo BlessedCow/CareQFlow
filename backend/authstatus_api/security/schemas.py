@@ -197,6 +197,10 @@ class SecurityMonitoringSummaryResponse(BaseModel):
     failed_logins: int
     locked_logins: int
     failed_mfa: int
+    verified_login_mfa: int
+    verified_delete_mfa: int
+    failed_delete_mfa: int
+    locked_deletions: int
     total_failures: int
     distinct_failure_ips: int
     distinct_failure_usernames: int

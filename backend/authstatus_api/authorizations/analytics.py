@@ -49,6 +49,7 @@ def get_analytics_summary() -> dict[str, Any]:
         rows = conn.execute("""
             SELECT *
             FROM auths
+            WHERE is_voided = 0
             ORDER BY auth_start_date, client_name
             """).fetchall()
 

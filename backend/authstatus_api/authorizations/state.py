@@ -35,6 +35,27 @@ def has_decision(payload: dict[str, Any]) -> bool:
         return False
 
 
+class VoidedAuthorizationError(ValueError):
+    pass
+
+
+def require_writable_auth(conn: Any, auth_id: int) -> bool:
+    conn.execute("BEGIN IMMEDIATE")
+
+    row = conn.execute(
+        "SELECT is_voided FROM auths WHERE id = ?",
+        (auth_id,),
+    ).fetchone()
+
+    if row is None:
+        return False
+
+    if row["is_voided"]:
+        raise VoidedAuthorizationError("Voided authorizations cannot be modified.")
+
+    return True
+
+
 def initial_timeline_event_payload(
     auth_record: dict[str, Any],
 ) -> dict[str, Any]:
@@ -57,61 +78,70 @@ def initial_timeline_event_payload(
     }
 
 
-def sync_auth_timeline_fields(auth_id: int) -> None:
-    with get_conn() as conn:
-        auth_row = conn.execute(
-            """
+def sync_auth_timeline_fields(
+    auth_id: int,
+    *,
+    conn: Any | None = None,
+) -> None:
+    if conn is None:
+        with get_conn() as connection:
+            _sync_auth_timeline_fields(auth_id, connection)
+        return
+
+    _sync_auth_timeline_fields(auth_id, conn)
+
+
+def _sync_auth_timeline_fields(auth_id: int, conn: Any) -> None:
+    auth_row = conn.execute(
+        """
             SELECT decision_at
             FROM auths
             WHERE id = ?
+              AND is_voided = 0
             """,
-            (auth_id,),
-        ).fetchone()
+        (auth_id,),
+    ).fetchone()
 
-        existing_decision_at = (
-            str(auth_row["decision_at"]).strip()
-            if auth_row is not None and auth_row["decision_at"] is not None
-            else ""
-        )
-        rows = conn.execute(
-            """
+    existing_decision_at = (
+        str(auth_row["decision_at"]).strip()
+        if auth_row is not None and auth_row["decision_at"] is not None
+        else ""
+    )
+    rows = conn.execute(
+        """
             SELECT *
             FROM auth_events
             WHERE auth_id = ?
             ORDER BY event_date, event_time, id
             """,
-            (auth_id,),
-        ).fetchall()
+        (auth_id,),
+    ).fetchall()
 
-        events = [auth_event_row_to_dict(row) for row in rows]
+    events = [auth_event_row_to_dict(row) for row in rows]
 
-        submitted_at = next(
-            (
-                event_datetime_value(event)
-                for event in events
-                if is_request_submitted_event(event)
-            ),
-            None,
-        )
+    submitted_at = next(
+        (
+            event_datetime_value(event)
+            for event in events
+            if is_request_submitted_event(event)
+        ),
+        None,
+    )
 
-        if submitted_at is None and events:
-            submitted_at = event_datetime_value(events[0]) or None
+    if submitted_at is None and events:
+        submitted_at = event_datetime_value(events[0]) or None
 
-        timeline_decision_at = next(
-            (
-                event_datetime_value(event)
-                for event in events
-                if is_terminal_event(event)
-            ),
-            None,
-        )
+    timeline_decision_at = next(
+        (event_datetime_value(event) for event in events if is_terminal_event(event)),
+        None,
+    )
 
-        decision_at = existing_decision_at or timeline_decision_at
+    decision_at = existing_decision_at or timeline_decision_at
 
-        snapshot = current_auth_snapshot(events)
+    snapshot = current_auth_snapshot(events)
 
-        conn.execute(
-            """
+    conn.execute(
+        """
             UPDATE auths
             SET
                 submitted_at = ?,
@@ -124,17 +154,18 @@ def sync_auth_timeline_fields(auth_id: int) -> None:
                 review_due_date = ?,
                 updated_at = ?
             WHERE id = ?
+              AND is_voided = 0
             """,
-            (
-                submitted_at,
-                decision_at,
-                snapshot["status"],
-                snapshot["requested_days"],
-                snapshot["approved_days"],
-                snapshot["auth_start_date"],
-                snapshot["auth_end_date"],
-                snapshot["review_due_date"],
-                current_timestamp(),
-                auth_id,
-            ),
-        )
+        (
+            submitted_at,
+            decision_at,
+            snapshot["status"],
+            snapshot["requested_days"],
+            snapshot["approved_days"],
+            snapshot["auth_start_date"],
+            snapshot["auth_end_date"],
+            snapshot["review_due_date"],
+            current_timestamp(),
+            auth_id,
+        ),
+    )

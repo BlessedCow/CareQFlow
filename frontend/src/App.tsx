@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 
 // API
-import { fetchAuthRequests } from "./api/authStatus";
+import {
+  fetchAuthRequests,
+  voidAuthRequest,
+  restoreAuthRequest,
+  requestAuthDeleteChallenge,
+} from "./api/authStatus";
 import {
   broadcastSessionLogout,
   subscribeToSessionExpiration,
@@ -34,6 +45,7 @@ import { Walkthrough } from "./components/walkthrough/Walkthrough";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AuthorizationsPage } from "./pages/AuthorizationsPage";
+import { VoidedAuthorizationsPage } from "./pages/VoidedAuthorizationsPage";
 import { CalendarRoutePage } from "./pages/CalendarRoutePage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminAuditPage } from "./pages/AdminAuditPage";
@@ -64,6 +76,8 @@ import { AuthRequest } from "./types/auth";
 function App() {
   const { darkMode, setDarkMode } = useThemePreference();
   const [activePage, setActivePage] = useState<AppPage>("dashboard");
+  const [detailsReturnPage, setDetailsReturnPage] =
+    useState<AppPage>("authorizations");
   const [selectedDenialFollowUpAuthId, setSelectedDenialFollowUpAuthId] =
     useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -74,9 +88,7 @@ function App() {
     useState<GovernanceStatus | null>(null);
   const [governanceError, setGovernanceError] = useState<string | null>(null);
 
-  useSessionActivity(
-    currentUser !== null && !sessionWarningVisible
-  );
+  useSessionActivity(currentUser !== null && !sessionWarningVisible);
 
   const {
     dashboardCardSettings,
@@ -84,6 +96,18 @@ function App() {
     handleResetDashboardCards,
   } = useDashboardCardSettings();
   const [authRequests, setAuthRequests] = useState<AuthRequest[]>([]);
+  const activeAuthRequests = useMemo(
+    () => authRequests.filter((record) => !record.isVoided),
+    [authRequests]
+  );
+  const [pendingAction, setPendingAction] = useState<{
+    type: "void" | "delete";
+    auth: AuthRequest;
+  } | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [actionMfaCode, setActionMfaCode] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const {
     registeredFacilities,
     registeredInsurances,
@@ -143,7 +167,7 @@ function App() {
     comparisonPeriodLabel,
     handleClearFilters,
   } = useAuthorizationFilters({
-    authRequests,
+    authRequests: activeAuthRequests,
     facilityOptions,
     insuranceOptions,
   });
@@ -358,22 +382,77 @@ function App() {
     }
   };
 
-  const handleDeleteAuth = async (auth: AuthRequest) => {
-    setAuthsError(null);
+  const openAuthorizationAction = (
+    type: "void" | "delete",
+    auth: AuthRequest
+  ) => {
+    if (type === "delete" && currentUser?.role !== "Admin") return;
+    if (
+      type === "void" &&
+      (auth.isVoided || !["Admin", "UR"].includes(currentUser?.role ?? ""))
+    )
+      return;
+    setPendingAction({ type, auth });
+    setActionReason("");
+    setActionMfaCode("");
+    setActionError(null);
+  };
 
+  const handleAuthorizationAction = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+    if (!pendingAction || actionBusy) return;
+    const reason = actionReason.trim();
+    if (reason.length < 3 || reason.length > 500) {
+      setActionError("Reason must be 3 to 500 characters.");
+      return;
+    }
+    setActionBusy(true);
+    setActionError(null);
     try {
-      await removeAuthorization(auth);
-
-      setAuthRequests((currentAuths) =>
-        currentAuths.filter((item) => item.id !== auth.id)
-      );
-      handleAuthDeleted(auth.id, authEvents);
+      if (pendingAction.type === "void") {
+        await voidAuthRequest(pendingAction.auth.id, reason);
+      } else {
+        if (currentUser?.role !== "Admin")
+          throw new Error("Admin access required.");
+        if (!/^\d{6}$/.test(actionMfaCode))
+          throw new Error("Enter a six-digit MFA code.");
+        const challenge = await requestAuthDeleteChallenge(
+          pendingAction.auth.id
+        );
+        await removeAuthorization(pendingAction.auth, {
+          reason,
+          code: actionMfaCode,
+          challenge_token: challenge.challenge_token,
+        });
+        handleAuthDeleted(pendingAction.auth.id, authEvents);
+      }
+      await refreshAuthRequests();
+      setPendingAction(null);
+      setActionMfaCode("");
+      setActionReason("");
     } catch (error) {
-      const message =
+      setActionError(
+        error instanceof Error ? error.message : "Authorization action failed."
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleRestoreAuth = async (auth: AuthRequest) => {
+    if (currentUser?.role !== "Admin") return;
+    setAuthsError(null);
+    try {
+      await restoreAuthRequest(auth.id);
+      await refreshAuthRequests();
+    } catch (error) {
+      setAuthsError(
         error instanceof Error
           ? error.message
-          : "Unable to delete authorization.";
-      setAuthsError(message);
+          : "Unable to restore authorization."
+      );
     }
   };
 
@@ -399,8 +478,14 @@ function App() {
   ]);
 
   const handleOpenAuthDetails = async (auth: AuthRequest) => {
+    setDetailsReturnPage(activePage);
     setActivePage("authorizations");
     await handleStartViewAuth(auth);
+  };
+
+  const handleBackFromAuthDetails = () => {
+    handleCloseViewAuth();
+    setActivePage(detailsReturnPage);
   };
 
   const handleOpenDenialFollowUp = (auth: AuthRequest) => {
@@ -755,14 +840,19 @@ function App() {
             deletingAuthId={deletingAuthId}
             onShowAddAuthForm={handleShowAddAuthForm}
             onCancelAuthForm={handleCancelAuthForm}
-            onCloseViewAuth={handleCloseViewAuth}
+            onCloseViewAuth={handleBackFromAuthDetails}
             onStartLocChangeAuthorization={handleStartLocChangeAuthorization}
             onFieldChange={handleNewAuthFieldChange}
             onSubmitAuth={handleCreateAuth}
-            onViewAuth={handleStartViewAuth}
+            onViewAuth={(auth) => {
+              setDetailsReturnPage("authorizations");
+              void handleStartViewAuth(auth);
+            }}
             onEditAuth={handleStartEditAuth}
             onManageDenialFollowUp={handleOpenDenialFollowUp}
-            onDeleteAuth={handleDeleteAuth}
+            onDeleteAuth={(auth) => openAuthorizationAction("delete", auth)}
+            onVoidAuth={(auth) => openAuthorizationAction("void", auth)}
+            canDeleteAuthorizations={canManageUsers}
             onTimelineEventFieldChange={handleTimelineEventFieldChange}
             onAddTimelineEvent={async () => {
               if (!editingAuthId) {
@@ -823,7 +913,7 @@ function App() {
 
         {activePage === "denials-pipeline" && (
           <DenialsPipelinePage
-            data={authRequests}
+            data={activeAuthRequests}
             darkMode={darkMode}
             selectedAuthId={selectedDenialFollowUpAuthId}
             canManageAuthorizations={canManageAuthorizations}
@@ -851,6 +941,22 @@ function App() {
           />
         )}
 
+        {(activePage === "voided-authorizations" ||
+          (activePage === "authorizations" &&
+            detailsReturnPage === "voided-authorizations")) && (
+          <div hidden={activePage !== "voided-authorizations"}>
+            <VoidedAuthorizationsPage
+              records={authRequests}
+              darkMode={darkMode}
+              isAdmin={canManageUsers}
+              onView={handleOpenAuthDetails}
+              onRestore={(auth) => {
+                void handleRestoreAuth(auth);
+              }}
+              onDelete={(auth) => openAuthorizationAction("delete", auth)}
+            />
+          </div>
+        )}
         {activePage === "settings" && (
           <SettingsPage
             darkMode={darkMode}
@@ -900,6 +1006,95 @@ function App() {
           <AdminSystemPage darkMode={darkMode} />
         )}
       </AppShell>
+
+      {pendingAction && (
+        <div
+          role="presentation"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <form
+            onSubmit={(event) => {
+              void handleAuthorizationAction(event);
+            }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${pendingAction.type} authorization`}
+            className={`w-full max-w-md space-y-4 rounded-lg border p-6 shadow-xl ${
+              darkMode
+                ? "border-gray-700 bg-gray-900 text-white"
+                : "border-gray-200 bg-white text-gray-900"
+            }`}
+          >
+            <h2 className="text-xl font-semibold">
+              {pendingAction.type === "void"
+                ? "Void authorization"
+                : "Permanently delete authorization"}
+            </h2>
+            <p className="text-sm">
+              {pendingAction.auth.patientId} · {pendingAction.auth.facility}
+            </p>
+            {pendingAction.type === "delete" && (
+              <p className="text-sm text-red-500">
+                This permanently removes the record and its related data. This
+                action cannot be undone.
+              </p>
+            )}
+            <label className="block space-y-1 text-sm">
+              Reason
+              <textarea
+                required
+                minLength={3}
+                maxLength={500}
+                value={actionReason}
+                onChange={(event) => setActionReason(event.target.value)}
+                className="w-full rounded border border-gray-400 bg-transparent p-2"
+                rows={3}
+              />
+            </label>
+            {pendingAction.type === "delete" && (
+              <label className="block space-y-1 text-sm">
+                Six-digit authenticator code
+                <input
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  value={actionMfaCode}
+                  onChange={(event) => setActionMfaCode(event.target.value)}
+                  className="w-full rounded border border-gray-400 bg-transparent p-2"
+                />
+              </label>
+            )}
+            {actionError && (
+              <p role="alert" className="text-sm text-red-500">
+                {actionError}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={actionBusy}
+                className="rounded border px-4 py-2"
+                onClick={() => setPendingAction(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={actionBusy}
+                className="rounded bg-red-700 px-4 py-2 text-white disabled:opacity-50"
+              >
+                {actionBusy
+                  ? "Working..."
+                  : pendingAction.type === "void"
+                  ? "Confirm void"
+                  : "Verify MFA and delete"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {currentUser.walkthrough_status === "pending" && (
         <Walkthrough

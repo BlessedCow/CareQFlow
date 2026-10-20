@@ -119,6 +119,25 @@ export async function resetUserPassword(
   return (await response.json()) as AdminPasswordResetResponse;
 }
 
+export async function requestUserMfaAgain(
+  userId: number
+): Promise<{ mfa_requested: boolean; trusted_devices_revoked: number }> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/security/users/${userId}/request-mfa`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      detail?: string;
+    };
+    throw new Error(body.detail ?? "Unable to request MFA verification.");
+  }
+  return (await response.json()) as {
+    mfa_requested: boolean;
+    trusted_devices_revoked: number;
+  };
+}
+
 export async function resetUserMfa(
   userId: number
 ): Promise<AdminMfaResetResponse> {

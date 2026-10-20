@@ -1264,7 +1264,7 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                     darkMode ? "text-gray-400" : "text-gray-600"
                   )}
                 >
-                  Review recent authentication and MFA failure activity.
+                  Review recent authentication and MFA verification activity.
                 </p>
               </div>
             </div>
@@ -1380,6 +1380,60 @@ export function AdminSystemPage({ darkMode }: AdminSystemPageProps) {
                   {securityMonitoring.failed_mfa}
                 </dd>
               </div>
+
+              <div>
+                <dt className={cn(
+                  "text-sm font-medium",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}>
+                  Successful login MFA
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.verified_login_mfa}
+                </dd>
+              </div>
+
+              <div>
+                <dt className={cn(
+                  "text-sm font-medium",
+                  darkMode ? "text-gray-400" : "text-gray-600"
+                )}>
+                  Successful deletion MFA
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.verified_delete_mfa}
+                </dd>
+              </div>
+
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Deletion MFA failures
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.failed_delete_mfa}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className={cn(
+                    "text-sm font-medium",
+                    darkMode ? "text-gray-400" : "text-gray-600"
+                  )}
+                >
+                  Deletion lockouts
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {securityMonitoring.locked_deletions}
+                </dd>
+              </div>
+
 
               <div>
                 <dt

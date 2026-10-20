@@ -5,6 +5,7 @@ import {
   Bell,
   CalendarDays,
   FileText,
+  Archive,
   LayoutDashboard,
   LogOut,
   Moon,
@@ -44,6 +45,11 @@ const navigationItems: {
     page: "authorizations",
     label: "Authorizations",
     icon: FileText,
+  },
+  {
+    page: "voided-authorizations",
+    label: "Voided Authorizations",
+    icon: Archive,
   },
   {
     page: "denials-pipeline",
@@ -99,6 +105,7 @@ const adminNavigationItems: {
 const PAGE_TITLES: Record<AppPage, string> = {
   dashboard: "Dashboard",
   authorizations: "Authorizations",
+  "voided-authorizations": "Voided Authorizations",
   "denials-pipeline": "Denials / P2P / Retro",
   calendar: "Calendar",
   settings: "Settings",
@@ -111,6 +118,7 @@ const PAGE_TITLES: Record<AppPage, string> = {
 const PAGE_DESCRIPTIONS: Record<AppPage, string> = {
   dashboard: "Authorization performance and workload overview",
   authorizations: "View and manage authorization records",
+  "voided-authorizations": "Search voided records and review preserved history",
   "denials-pipeline":
     "Track denials, peer reviews, appeals, and retro auth follow-up",
   calendar: "Track review dates and LCDs",

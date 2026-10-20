@@ -649,3 +649,55 @@ def test_upload_auth_document_returns_safe_storage_limit_error(
         "detail": "Authorization document storage limit exceeded."
     }
     assert response.headers["cache-control"] == "no-store, private"
+
+
+@pytest.mark.parametrize("operation", ["upload", "delete"])
+def test_voided_auth_document_mutations_return_conflict(
+    client,
+    auth_headers,
+    operation,
+):
+    auth = create_auth_record(client, auth_headers)
+    auth_id = auth["id"]
+
+    upload = client.post(
+        f"/api/auths/{auth_id}/documents" "?document_type=other&filename=letter.pdf",
+        content=b"%PDF-1.7\noriginal",
+        headers=pdf_headers(auth_headers),
+    )
+    assert upload.status_code == 201
+
+    document_id = upload.json()["id"]
+
+    void_response = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Duplicate authorization"},
+        headers=auth_headers,
+    )
+    assert void_response.status_code == 200
+
+    if operation == "upload":
+        response = client.post(
+            f"/api/auths/{auth_id}/documents"
+            "?document_type=other&filename=another.pdf",
+            content=b"%PDF-1.7\nanother",
+            headers=pdf_headers(auth_headers),
+        )
+    else:
+        response = client.delete(
+            f"/api/auths/{auth_id}/documents/{document_id}",
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == ("Voided authorizations cannot be modified.")
+
+    documents = client.get(
+        f"/api/auths/{auth_id}/documents",
+        headers=auth_headers,
+    )
+    assert documents.status_code == 200
+
+    stored = documents.json()["documents"]
+    assert len(stored) == 1
+    assert stored[0]["id"] == document_id

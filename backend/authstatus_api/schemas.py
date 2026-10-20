@@ -288,6 +288,10 @@ class AuthUpdate(BaseModel):
 
 class AuthRecord(AuthBase):
     id: int
+    is_voided: bool = False
+    voided_at: str | None = None
+    voided_by_user_id: int | None = None
+    void_reason: str | None = None
     care_manager_enabled: bool = Field(default=False)
     discharge_clinical_needed: bool = Field(default=False)
     no_pa_required: bool = Field(default=False)
@@ -543,6 +547,20 @@ class AuthDecisionSnapshotRecord(AuthDecisionSnapshotBase):
 
 class AuthDecisionSnapshotListResponse(BaseModel):
     snapshots: list[AuthDecisionSnapshotRecord]
+
+
+class AuthVoidRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AuthDeleteRequest(BaseModel):
+    challenge_token: str = Field(min_length=1, max_length=512)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+    reason: str = Field(min_length=3, max_length=500)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class DeleteResponse(BaseModel):

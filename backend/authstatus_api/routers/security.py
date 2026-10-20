@@ -16,6 +16,7 @@ from sqlcipher3 import IntegrityError
 
 from authstatus_api.audit.service import list_audit_events, record_audit_event
 from authstatus_api.audit.verification import verify_audit_chain
+from authstatus_api.persistence.connections import get_conn
 from authstatus_api.security.csrf import (
     generate_csrf_token,
     validate_csrf_request,
@@ -26,6 +27,7 @@ from authstatus_api.security.dependencies import (
     extract_session_token,
     require_role,
 )
+from authstatus_api.security.mappings import format_datetime
 from authstatus_api.security.mfa import (
     build_totp_provisioning_uri,
     clear_user_mfa,
@@ -85,6 +87,7 @@ from authstatus_api.security.sessions import (
     replace_user_session,
     revoke_session,
     revoke_user_sessions,
+    utc_now,
 )
 from authstatus_api.security.temporary_passwords import (
     generate_temporary_password,
@@ -718,6 +721,61 @@ def reset_managed_user_password(
         sessions_revoked=sessions_revoked,
         must_change_password=True,
     )
+
+
+@router.post(
+    "/users/{user_id}/request-mfa",
+    response_model=dict[str, int | bool],
+)
+def request_managed_user_mfa(
+    user_id: int,
+    request: Request,
+    current_user: dict = AdminUserDependency,
+) -> dict[str, int | bool]:
+    target_user = get_user_by_id(user_id)
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+    if not target_user["is_active"] or not target_user["mfa_enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User must be active with MFA enabled.",
+        )
+
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT is_active, mfa_enabled FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if row is None or not row["is_active"] or not row["mfa_enabled"]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User must be active with MFA enabled.",
+            )
+
+        cursor = conn.execute(
+            """
+            UPDATE trusted_devices
+            SET revoked_at = ?
+            WHERE user_id = ? AND revoked_at IS NULL
+            """,
+            (format_datetime(utc_now()), user_id),
+        )
+        devices_revoked = cursor.rowcount
+        record_audit_event(
+            action="user.mfa_reverification_requested",
+            resource_type="user",
+            resource_id=user_id,
+            user=current_user,
+            metadata={"trusted_devices_revoked": devices_revoked},
+            request=request,
+            conn=conn,
+        )
+
+    return {"mfa_requested": True, "trusted_devices_revoked": devices_revoked}
 
 
 @router.post(

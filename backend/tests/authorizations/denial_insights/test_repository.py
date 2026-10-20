@@ -14,6 +14,7 @@ from authstatus_api.authorizations.denial_insights.repository import (
 from authstatus_api.authorizations.records import (
     create_auth,
     update_auth,
+    void_auth,
 )
 from authstatus_api.crypto import generate_encryption_key
 from authstatus_api.settings import get_settings
@@ -612,3 +613,65 @@ def test_build_denial_insights_supports_filtered_baseline():
 
     assert result["baseline"]["decision_count"] == 5
     assert result["baseline"]["observed_denial_rate"] == 0.0
+
+
+def test_denial_insights_excludes_voided_root_decisions():
+    active = _create_snapshot(
+        insurance="Payer A",
+        insurance_plan="Gold",
+        loc="RTC",
+        outcome="Approved",
+        decision_at="2026-09-01T12:00:00+00:00",
+    )
+    voided = _create_snapshot(
+        insurance="Payer B",
+        insurance_plan="Silver",
+        loc="PHP",
+        outcome="Denied",
+        decision_at="2026-09-02T12:00:00+00:00",
+    )
+
+    assert len(list_decision_snapshots()) == 2
+
+    assert void_auth(
+        voided["auth_id"],
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    snapshots = list_decision_snapshots()
+
+    assert len(snapshots) == 1
+    assert snapshots[0]["id"] == active["id"]
+
+
+def test_denial_insights_excludes_voided_retro_roots():
+    auth = _create_auth(
+        insurance="Payer A",
+        insurance_plan="Gold",
+        loc="RTC",
+    )
+
+    snapshot = create_auth_decision_snapshot(
+        auth["id"],
+        {
+            "facility": "Facility A",
+            "insurance": "Payer A",
+            "insurance_plan": "Gold",
+            "loc": "RTC",
+            "auth_type": "Concurrent",
+            "outcome": "Approved",
+            "review_type": "retro",
+            "decision_at": "2026-09-01T12:00:00+00:00",
+        },
+    )
+    assert snapshot is not None
+    assert any(item["id"] == snapshot["id"] for item in list_retro_root_snapshots())
+
+    assert void_auth(
+        auth["id"],
+        user_id=1,
+        reason="Entered in error",
+    )
+
+    assert all(item["id"] != snapshot["id"] for item in list_retro_root_snapshots())

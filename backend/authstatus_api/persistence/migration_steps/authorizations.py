@@ -94,6 +94,26 @@ def add_authorization_analytics_columns(conn: Any) -> None:
             conn.execute(f"ALTER TABLE auths ADD COLUMN {column_name} {definition}")
 
 
+def add_authorization_void_columns(conn: Any) -> None:
+    existing_columns = {
+        str(row["name"]) for row in conn.execute("PRAGMA table_info(auths)").fetchall()
+    }
+
+    column_definitions = (
+        (
+            "is_voided",
+            "INTEGER NOT NULL DEFAULT 0 CHECK (is_voided IN (0, 1))",
+        ),
+        ("voided_at", "TEXT"),
+        ("voided_by_user_id", "INTEGER"),
+        ("void_reason", "TEXT"),
+    )
+
+    for column_name, definition in column_definitions:
+        if column_name not in existing_columns:
+            conn.execute(f"ALTER TABLE auths ADD COLUMN {column_name} {definition}")
+
+
 def create_authorization_loc_episodes_table(conn: Any) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS auth_loc_episodes (

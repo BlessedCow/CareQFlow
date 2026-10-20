@@ -1,6 +1,7 @@
 export type AppPage =
   | "dashboard"
   | "authorizations"
+  | "voided-authorizations"
   | "calendar"
   | "settings"
   | "adminUsers"

@@ -403,3 +403,44 @@ def test_read_only_user_cannot_create_snapshot(
     )
 
     assert response.status_code == 403
+
+
+def test_voided_auth_snapshot_creation_returns_conflict(
+    client,
+    auth_headers,
+):
+    auth_id = _create_auth(client, auth_headers)
+
+    void_response = client.post(
+        f"/api/auths/{auth_id}/void",
+        json={"reason": "Duplicate authorization"},
+        headers=auth_headers,
+    )
+    assert void_response.status_code == 200
+
+    response = client.post(
+        f"/api/auths/{auth_id}/decision-snapshots",
+        json={
+            "facility": "Facility A",
+            "loc": "RTC",
+            "auth_type": "Concurrent",
+            "outcome": "Approved",
+            "decision_at": "2026-10-20T12:00:00+00:00",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == ("Voided authorizations cannot be modified.")
+
+    with get_conn() as conn:
+        count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM auth_decision_snapshots
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert count == 0

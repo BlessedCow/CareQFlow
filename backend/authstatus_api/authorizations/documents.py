@@ -6,7 +6,10 @@ from typing import Any, Literal
 from cryptography.fernet import InvalidToken
 
 from authstatus_api.authorizations.records import get_auth
-from authstatus_api.authorizations.state import current_timestamp
+from authstatus_api.authorizations.state import (
+    current_timestamp,
+    require_writable_auth,
+)
 from authstatus_api.crypto import (
     DecryptionError,
     get_fernet,
@@ -253,6 +256,9 @@ def create_auth_document(
     file_size_bytes = len(pdf_bytes)
 
     with get_conn() as conn:
+        if not require_writable_auth(conn, auth_id):
+            return None
+
         validate_auth_document_storage_limits(
             conn,
             auth_id,
@@ -365,6 +371,9 @@ def delete_auth_document(
     init_db()
 
     with get_conn() as conn:
+        if not require_writable_auth(conn, auth_id):
+            return False
+
         cursor = conn.execute(
             """
             DELETE FROM auth_documents

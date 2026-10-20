@@ -3604,3 +3604,48 @@ def test_setup_initial_admin_rejects_short_password(client):
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Password must be at least 12 characters."}
+
+
+def test_admin_requests_mfa_without_resetting_enrollment(client):
+    from authstatus_api.security.trusted_devices import (
+        create_trusted_device,
+        get_active_trusted_device_by_token,
+    )
+
+    admin = create_user("mfa-admin@example.com", "correct horse battery staple", role="Admin")
+    target = create_user("mfa-target@example.com", "correct horse battery staple", role="UR")
+    secret = pyotp.random_base32()
+    assert store_user_mfa_secret(target["id"], secret)
+    assert enable_user_mfa(target["id"])
+    trusted = create_trusted_device(target["id"])
+    headers = auth_headers_for(client, admin["username"], "correct horse battery staple")
+
+    response = client.post(
+        f"/api/security/users/{target['id']}/request-mfa",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json() == {"mfa_requested": True, "trusted_devices_revoked": 1}
+    assert get_active_trusted_device_by_token(trusted["token"]) is None
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT mfa_enabled, mfa_secret FROM users WHERE id = ?", (target["id"],)
+        ).fetchone()
+        event = conn.execute(
+            "SELECT resource_id, action FROM audit_events WHERE action = ?",
+            ("user.mfa_reverification_requested",),
+        ).fetchone()
+    assert row is not None
+    assert row["mfa_enabled"] == 1
+    assert row["mfa_secret"] is not None
+    assert event is not None
+    assert event["resource_id"] == target["id"]
+
+
+def test_request_mfa_rejects_user_without_enrollment(client):
+    admin = create_user("mfa-admin@example.com", "correct horse battery staple", role="Admin")
+    target = create_user("mfa-target@example.com", "correct horse battery staple", role="UR")
+    headers = auth_headers_for(client, admin["username"], "correct horse battery staple")
+    response = client.post(f"/api/security/users/{target['id']}/request-mfa", headers=headers)
+    assert response.status_code == 409

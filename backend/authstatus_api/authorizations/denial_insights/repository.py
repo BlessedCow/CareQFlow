@@ -137,6 +137,7 @@ def _list_snapshot_population(
 
     clauses: list[str] = [
         population_clause,
+        "auth_id IN (SELECT id FROM auths WHERE is_voided = 0)",
     ]
     params: list[Any] = []
 
@@ -248,15 +249,19 @@ def _list_follow_up_snapshots(
     placeholders = ", ".join("?" for _ in root_snapshot_ids)
 
     query = f"""
+            SELECT *
         SELECT *
         FROM auth_decision_snapshots
         WHERE
             snapshot_role = 'follow_up'
             AND root_snapshot_id IN ({placeholders})
+            AND auth_id IN (
+                SELECT id FROM auths WHERE is_voided = 0
+            )
         ORDER BY
             COALESCE(follow_up_decision_at, decision_at),
             id
-    """
+    """  # nosec B608
 
     with get_conn() as conn:
         rows = conn.execute(
@@ -276,6 +281,7 @@ def _list_follow_up_auth_states(
     placeholders = ", ".join("?" for _ in auth_ids)
 
     query = f"""
+            SELECT *
         SELECT
             id,
             p2p_requested,
@@ -289,7 +295,8 @@ def _list_follow_up_auth_states(
             retro_outcome
         FROM auths
         WHERE id IN ({placeholders})
-    """
+          AND is_voided = 0
+    """  # nosec B608
 
     with get_conn() as conn:
         rows = conn.execute(

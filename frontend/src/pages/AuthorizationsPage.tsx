@@ -67,6 +67,8 @@ interface AuthorizationsPageProps {
   onEditAuth: (auth: AuthRequest) => void;
   onManageDenialFollowUp: (auth: AuthRequest) => void;
   onDeleteAuth: (auth: AuthRequest) => void;
+  onVoidAuth: (auth: AuthRequest) => void;
+  canDeleteAuthorizations: boolean;
   onTimelineEventFieldChange: (
     field: keyof TimelineEventFormState,
     value: string
@@ -135,6 +137,8 @@ export function AuthorizationsPage({
   onEditAuth,
   onManageDenialFollowUp,
   onDeleteAuth,
+  onVoidAuth,
+  canDeleteAuthorizations,
   onTimelineEventFieldChange,
   onAddTimelineEvent,
   onAddTimelineEventAndReturn,
@@ -447,7 +451,7 @@ export function AuthorizationsPage({
               events={authEvents}
               isLoadingEvents={isLoadingAuthEvents}
               eventsError={authEventsError}
-              canEdit={canManageAuthorizations}
+              canEdit={canManageAuthorizations && !viewingAuth.isVoided}
               onClose={onCloseViewAuth}
               onEdit={onEditAuth}
               onManageDenialFollowUp={onManageDenialFollowUp}
@@ -461,7 +465,8 @@ export function AuthorizationsPage({
             darkMode={darkMode}
             onView={onViewAuth}
             onEdit={canManageAuthorizations ? onEditAuth : undefined}
-            onDelete={canManageAuthorizations ? onDeleteAuth : undefined}
+            onVoid={canManageAuthorizations ? onVoidAuth : undefined}
+            onDelete={canDeleteAuthorizations ? onDeleteAuth : undefined}
             deletingId={deletingAuthId}
             workflowViewMode={workflowViewMode}
           />

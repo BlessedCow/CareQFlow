@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import pytest
 
+import authstatus_api.authorizations.records as records_module
 from authstatus_api import crypto
 from authstatus_api.authorizations.analytics import get_analytics_summary
+from authstatus_api.authorizations.clinical_assessments import (
+    create_clinical_assessment,
+)
 from authstatus_api.authorizations.events import (
     create_auth_event,
     delete_auth_event,
     get_auth_event,
     list_auth_events,
+    sync_auth_timeline_fields,
     update_auth_event,
+)
+from authstatus_api.authorizations.loc_episodes import (
+    create_auth_loc_episode,
 )
 from authstatus_api.authorizations.records import (
     create_auth,
@@ -17,7 +25,9 @@ from authstatus_api.authorizations.records import (
     get_auth,
     list_auths,
     update_auth,
+    void_auth,
 )
+from authstatus_api.authorizations.state import require_writable_auth
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.settings import get_settings
 
@@ -812,3 +822,634 @@ def test_follow_up_lifecycle_preserves_authorization_values(
 
     assert events is not None
     assert all(event["event_type"] != event_type for event in events)
+
+
+def test_authorization_void_columns_preserve_original_status():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    with get_conn() as conn:
+        columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(auths)").fetchall()
+        }
+
+        row = conn.execute(
+            """
+            SELECT status, is_voided, voided_at,
+                   voided_by_user_id, void_reason
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+    assert {
+        "is_voided",
+        "voided_at",
+        "voided_by_user_id",
+        "void_reason",
+    }.issubset(columns)
+
+    assert row is not None
+    assert row["status"] == "Pending"
+    assert row["is_voided"] == 0
+    assert row["voided_at"] is None
+    assert row["voided_by_user_id"] is None
+    assert row["void_reason"] is None
+
+
+def test_void_auth_preserves_original_status_and_history():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT status, is_voided, voided_at,
+                   voided_by_user_id, void_reason
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+    assert row is not None
+    assert row["status"] == created["status"]
+    assert row["is_voided"] == 1
+    assert row["voided_at"] is not None
+    assert row["voided_by_user_id"] == 1
+    assert row["void_reason"] == "Duplicate authorization"
+    assert get_auth(auth_id) is not None
+
+
+def test_void_auth_rejects_second_void():
+    created = create_auth(make_payload())
+
+    assert void_auth(
+        created["id"],
+        user_id=1,
+        reason="Entered in error",
+    )
+
+    assert not void_auth(
+        created["id"],
+        user_id=1,
+        reason="Second attempt",
+    )
+
+
+def test_void_auth_requires_valid_reason():
+    created = create_auth(make_payload())
+
+    with pytest.raises(ValueError, match="void reason"):
+        void_auth(
+            created["id"],
+            user_id=1,
+            reason="  ",
+        )
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT is_voided FROM auths WHERE id = ?",
+            (created["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["is_voided"] == 0
+
+
+def test_void_auth_rolls_back_when_audit_fails():
+    created = create_auth(make_payload())
+
+    def fail_audit(conn):
+        raise RuntimeError("Synthetic audit failure")
+
+    with pytest.raises(RuntimeError, match="Synthetic audit failure"):
+        void_auth(
+            created["id"],
+            user_id=1,
+            reason="Duplicate authorization",
+            before_commit=fail_audit,
+        )
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT is_voided, voided_at,
+                   voided_by_user_id, void_reason
+            FROM auths
+            WHERE id = ?
+            """,
+            (created["id"],),
+        ).fetchone()
+
+    assert row is not None
+    assert row["is_voided"] == 0
+    assert row["voided_at"] is None
+    assert row["voided_by_user_id"] is None
+    assert row["void_reason"] is None
+
+
+def test_update_auth_rejects_voided_record_after_stale_read(monkeypatch):
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    original_get_auth = records_module.get_auth
+
+    def stale_get_auth(requested_id):
+        record = original_get_auth(requested_id)
+
+        if record is not None:
+            record = dict(record)
+            record["is_voided"] = False
+
+        return record
+
+    monkeypatch.setattr(
+        records_module,
+        "get_auth",
+        stale_get_auth,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Voided authorizations cannot be modified",
+    ):
+        update_auth(
+            auth_id,
+            {"status": "Approved"},
+        )
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT status, is_voided
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+    assert row is not None
+    assert row["status"] == created["status"]
+    assert row["is_voided"] == 1
+
+
+def test_timeline_sync_does_not_modify_voided_authorization():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    with get_conn() as conn:
+        before = conn.execute(
+            """
+            SELECT status, updated_at, is_voided
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+    sync_auth_timeline_fields(auth_id)
+
+    with get_conn() as conn:
+        after = conn.execute(
+            """
+            SELECT status, updated_at, is_voided
+            FROM auths
+            WHERE id = ?
+            """,
+            (auth_id,),
+        ).fetchone()
+
+    assert before is not None
+    assert after is not None
+    assert dict(after) == dict(before)
+
+
+def test_voided_auth_rejects_event_creation():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    with get_conn() as conn:
+        initial_event_count = conn.execute(
+            "SELECT COUNT(*) FROM auth_events WHERE auth_id = ?",
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Voided authorizations cannot be modified",
+    ):
+        create_auth_event(
+            auth_id,
+            {
+                "event_type": "Status Update",
+                "event_date": "2026-10-19",
+                "outcome": "Approved",
+            },
+        )
+
+    with get_conn() as conn:
+        events = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["total"]
+
+        row = conn.execute(
+            "SELECT is_voided FROM auths WHERE id = ?",
+            (auth_id,),
+        ).fetchone()
+
+    assert row["is_voided"] == 1
+    assert events == initial_event_count
+
+
+def test_auth_event_and_timeline_roll_back_when_audit_fails():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    with get_conn() as conn:
+        before = dict(
+            conn.execute(
+                """
+                SELECT status, updated_at
+                FROM auths
+                WHERE id = ?
+                """,
+                (auth_id,),
+            ).fetchone()
+        )
+
+        initial_event_count = conn.execute(
+            "SELECT COUNT(*) FROM auth_events WHERE auth_id = ?",
+            (auth_id,),
+        ).fetchone()[0]
+
+    def fail_audit(conn, event):
+        raise RuntimeError("Synthetic audit failure")
+
+    with pytest.raises(RuntimeError, match="Synthetic audit failure"):
+        create_auth_event(
+            auth_id,
+            {
+                "event_type": "Status Update",
+                "event_date": "2026-10-19",
+                "outcome": "Approved",
+            },
+            before_commit=fail_audit,
+        )
+
+    with get_conn() as conn:
+        after = dict(
+            conn.execute(
+                """
+                SELECT status, updated_at
+                FROM auths
+                WHERE id = ?
+                """,
+                (auth_id,),
+            ).fetchone()
+        )
+
+        count = conn.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM auth_events
+            WHERE auth_id = ?
+            """,
+            (auth_id,),
+        ).fetchone()["total"]
+
+    assert after == before
+    assert count == initial_event_count
+
+
+def test_voided_auth_rejects_event_update():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    event = create_auth_event(
+        auth_id,
+        {
+            "event_type": "Note",
+            "event_date": "2026-10-19",
+            "notes": "Original note",
+        },
+    )
+    assert event is not None
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Voided authorizations cannot be modified",
+    ):
+        update_auth_event(
+            auth_id,
+            event["id"],
+            {"notes": "Modified note"},
+        )
+
+    stored = get_auth_event(auth_id, event["id"])
+    assert stored is not None
+    assert stored["notes"] == "Original note"
+
+
+def test_voided_auth_rejects_event_deletion():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    event = create_auth_event(
+        auth_id,
+        {
+            "event_type": "Note",
+            "event_date": "2026-10-19",
+            "notes": "Preserve this note",
+        },
+    )
+    assert event is not None
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Entered in error",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Voided authorizations cannot be modified",
+    ):
+        delete_auth_event(auth_id, event["id"])
+
+    assert get_auth_event(auth_id, event["id"]) is not None
+
+
+def test_event_update_rolls_back_when_audit_fails():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    event = create_auth_event(
+        auth_id,
+        {
+            "event_type": "Note",
+            "event_date": "2026-10-19",
+            "notes": "Original note",
+        },
+    )
+    assert event is not None
+
+    with get_conn() as conn:
+        before = dict(
+            conn.execute(
+                """
+                SELECT status, updated_at
+                FROM auths
+                WHERE id = ?
+                """,
+                (auth_id,),
+            ).fetchone()
+        )
+
+    def fail_audit(conn, updated_event):
+        raise RuntimeError("Synthetic audit failure")
+
+    with pytest.raises(RuntimeError, match="Synthetic audit failure"):
+        update_auth_event(
+            auth_id,
+            event["id"],
+            {"notes": "Modified note"},
+            before_commit=fail_audit,
+        )
+
+    stored = get_auth_event(auth_id, event["id"])
+
+    with get_conn() as conn:
+        after = dict(
+            conn.execute(
+                """
+                SELECT status, updated_at
+                FROM auths
+                WHERE id = ?
+                """,
+                (auth_id,),
+            ).fetchone()
+        )
+
+    assert stored is not None
+    assert stored["notes"] == "Original note"
+    assert after == before
+
+
+def test_event_deletion_rolls_back_when_audit_fails():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    event = create_auth_event(
+        auth_id,
+        {
+            "event_type": "Note",
+            "event_date": "2026-10-19",
+            "notes": "Preserve this note",
+        },
+    )
+    assert event is not None
+
+    with get_conn() as conn:
+        before = dict(
+            conn.execute(
+                """
+                SELECT status, updated_at
+                FROM auths
+                WHERE id = ?
+                """,
+                (auth_id,),
+            ).fetchone()
+        )
+
+    def fail_audit(conn):
+        raise RuntimeError("Synthetic audit failure")
+
+    with pytest.raises(RuntimeError, match="Synthetic audit failure"):
+        delete_auth_event(
+            auth_id,
+            event["id"],
+            before_commit=fail_audit,
+        )
+
+    stored = get_auth_event(auth_id, event["id"])
+
+    with get_conn() as conn:
+        after = dict(
+            conn.execute(
+                """
+                SELECT status, updated_at
+                FROM auths
+                WHERE id = ?
+                """,
+                (auth_id,),
+            ).fetchone()
+        )
+
+    assert stored is not None
+    assert stored["notes"] == "Preserve this note"
+    assert after == before
+
+
+def test_writable_auth_guard_rejects_voided_authorization():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    with get_conn() as conn:
+        assert require_writable_auth(conn, auth_id)
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    with get_conn() as conn:
+        with pytest.raises(
+            ValueError,
+            match="Voided authorizations cannot be modified",
+        ):
+            require_writable_auth(conn, auth_id)
+
+
+def test_writable_auth_guard_returns_false_for_missing_authorization():
+    created = create_auth(make_payload())
+
+    with get_conn() as conn:
+        assert require_writable_auth(conn, created["id"] + 1) is False
+
+
+def test_voided_authorization_rejects_new_loc_episode():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Entered in error",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Voided authorizations cannot be modified",
+    ):
+        create_auth_loc_episode(
+            auth_id,
+            {
+                "loc": "RTC",
+                "started_at": "2026-10-19T08:00:00+00:00",
+            },
+        )
+
+    with get_conn() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM auth_loc_episodes WHERE auth_id = ?",
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert count == 0
+
+
+def test_voided_authorization_rejects_new_clinical_assessment():
+    created = create_auth(make_payload())
+    auth_id = created["id"]
+
+    assert void_auth(
+        auth_id,
+        user_id=1,
+        reason="Entered in error",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Voided authorizations cannot be modified",
+    ):
+        create_clinical_assessment(
+            auth_id,
+            {
+                "instrument": "CIWA-Ar",
+                "score": 12,
+                "assessed_at": "2026-10-19T08:00:00+00:00",
+                "loc": "RTC",
+            },
+        )
+
+    with get_conn() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM clinical_assessments WHERE auth_id = ?",
+            (auth_id,),
+        ).fetchone()[0]
+
+    assert count == 0
+
+
+def test_analytics_excludes_voided_authorizations_and_restores_counts():
+    first = create_auth(make_payload())
+
+    second_payload = make_payload()
+    second_payload["client_name"] = "Jane Smith"
+    second = create_auth(second_payload)
+
+    assert get_analytics_summary()["total_auths"] == 2
+
+    assert void_auth(
+        first["id"],
+        user_id=1,
+        reason="Duplicate authorization",
+    )
+
+    summary = get_analytics_summary()
+    assert summary["total_auths"] == 1
+    assert summary["by_loc"] == {"RTC": 1}
+
+    voided_record = get_auth(first["id"])
+    assert voided_record is not None
+    assert voided_record["is_voided"] is True
+
+    with get_conn() as conn:
+        history_count = conn.execute(
+            "SELECT COUNT(*) FROM auth_events WHERE auth_id = ?",
+            (first["id"],),
+        ).fetchone()[0]
+
+    assert history_count >= 1
+
+    active_record = get_auth(second["id"])
+    assert active_record is not None
+    assert active_record["is_voided"] is False

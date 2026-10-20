@@ -39,6 +39,10 @@ def test_security_monitoring_summary_is_empty_without_failures():
         "failed_logins": 0,
         "locked_logins": 0,
         "failed_mfa": 0,
+        "verified_login_mfa": 0,
+        "verified_delete_mfa": 0,
+        "failed_delete_mfa": 0,
+        "locked_deletions": 0,
         "total_failures": 0,
         "distinct_failure_ips": 0,
         "distinct_failure_usernames": 0,
@@ -187,3 +191,101 @@ def test_security_monitoring_marks_lockout_activity_high():
 
     assert result["locked_logins"] == 1
     assert result["severity"] == "high"
+
+
+def test_security_monitoring_includes_auth_delete_mfa_activity():
+    username = "delete-admin@example.com"
+
+    for _ in range(5):
+        record_audit_event(
+            action="security.auth_delete_mfa_failed",
+            resource_type="auth",
+            resource_id=42,
+            username=username,
+            metadata={
+                "operation": "auth.delete",
+                "verification": "totp",
+            },
+        )
+
+    record_audit_event(
+        action="security.auth_delete_mfa_locked",
+        resource_type="auth",
+        resource_id=42,
+        username=username,
+        metadata={
+            "operation": "auth.delete",
+            "reason": "failed_mfa_attempt_limit",
+            "window_minutes": 15,
+        },
+    )
+
+    result = get_security_monitoring_summary()
+
+    assert result["failed_logins"] == 0
+    assert result["locked_logins"] == 0
+    assert result["failed_mfa"] == 0
+    assert result["failed_delete_mfa"] == 5
+    assert result["locked_deletions"] == 1
+    assert result["total_failures"] == 6
+    assert result["distinct_failure_usernames"] == 1
+    assert result["max_failures_single_username"] == 6
+    assert result["severity"] == "high"
+
+
+def test_security_monitoring_ignores_old_auth_delete_events():
+    event = record_audit_event(
+        action="security.auth_delete_mfa_locked",
+        resource_type="auth",
+        resource_id=42,
+        username="old-admin@example.com",
+    )
+
+    old_timestamp = (datetime.now(UTC) - timedelta(hours=25)).isoformat(
+        timespec="seconds"
+    )
+
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE audit_events
+            SET created_at = ?
+            WHERE id = ?
+            """,
+            (old_timestamp, event["id"]),
+        )
+
+    result = get_security_monitoring_summary()
+
+    assert result["failed_delete_mfa"] == 0
+    assert result["locked_deletions"] == 0
+    assert result["total_failures"] == 0
+    assert result["severity"] == "normal"
+
+
+def test_security_monitoring_counts_successful_mfa_separately():
+    record_audit_event(
+        action="security.login_mfa_verified",
+        resource_type="mfa_login_challenge",
+        username="admin@example.com",
+    )
+    record_audit_event(
+        action="security.auth_delete_mfa_verified",
+        resource_type="auth",
+        resource_id=42,
+        username="admin@example.com",
+    )
+    record_audit_event(
+        action="security.auth_delete_mfa_failed",
+        resource_type="auth",
+        resource_id=43,
+        username="admin@example.com",
+    )
+
+    result = get_security_monitoring_summary()
+
+    assert result["verified_login_mfa"] == 1
+    assert result["verified_delete_mfa"] == 1
+    assert result["failed_delete_mfa"] == 1
+    assert result["total_failures"] == 1
+    assert result["severity"] == "normal"

@@ -328,6 +328,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
         "0014_retro_review_context",
+        "0015_authorization_void_columns",
     ]
     assert get_applied_migration_ids(conn) == {
         "0001_security_walkthrough_columns",
@@ -344,6 +345,7 @@ def test_registered_migrations_apply_registered_registry(conn):
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
         "0014_retro_review_context",
+        "0015_authorization_void_columns",
     }
 
     governance_triggers = {row["name"] for row in conn.execute("""
@@ -733,6 +735,7 @@ def test_init_db_applies_registered_migrations_in_order(
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
         "0014_retro_review_context",
+        "0015_authorization_void_columns",
     ]
 
     assert user_row is not None
@@ -1006,6 +1009,7 @@ def test_init_db_upgrades_legacy_database_through_all_registered_migrations(
         "0012_security_mfa_challenge_failed_attempts",
         "0013_decision_provenance_foundation",
         "0014_retro_review_context",
+        "0015_authorization_void_columns",
     ]
 
     assert user_row is not None

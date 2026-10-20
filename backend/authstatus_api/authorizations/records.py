@@ -632,6 +632,9 @@ def update_auth(
     if existing_auth is None:
         return None
 
+    if existing_auth.get("is_voided"):
+        raise ValueError("Voided authorizations cannot be modified.")
+
     prepared = prepare_auth_payload(payload)
     now = current_timestamp()
     prepared["updated_at"] = now
@@ -668,10 +671,13 @@ def update_auth(
     values = [prepared[key] for key in keys]
 
     with get_conn() as conn:
-        conn.execute(
-            f"UPDATE auths SET {assignments} WHERE id = ?",  # nosec
+        cursor = conn.execute(
+            f"UPDATE auths SET {assignments} WHERE id = ? AND is_voided = 0",  # nosec
             [*values, auth_id],
         )
+
+        if cursor.rowcount != 1:
+            raise ValueError("Voided authorizations cannot be modified.")
 
         row = conn.execute(
             "SELECT * FROM auths WHERE id = ?",
@@ -725,6 +731,81 @@ def update_auth(
         create_automatic_follow_up_decision_snapshots(final_auth)
 
     return final_auth
+
+
+def void_auth(
+    auth_id: int,
+    *,
+    user_id: int,
+    reason: str,
+    before_commit: Callable[[Any], None] | None = None,
+) -> bool:
+    normalized_reason = reason.strip()
+
+    if not 3 <= len(normalized_reason) <= 500:
+        raise ValueError("Authorization void reason must contain 3 to 500 characters.")
+
+    init_db()
+
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE auths
+            SET
+                is_voided = 1,
+                voided_at = ?,
+                voided_by_user_id = ?,
+                void_reason = ?,
+                updated_at = ?
+            WHERE id = ?
+              AND is_voided = 0
+            """,
+            (
+                current_timestamp(),
+                user_id,
+                normalized_reason,
+                current_timestamp(),
+                auth_id,
+            ),
+        )
+
+        voided = cursor.rowcount == 1
+
+        if voided and before_commit is not None:
+            before_commit(conn)
+
+    return voided
+
+
+def restore_voided_auth(
+    auth_id: int,
+    *,
+    before_commit: Callable[[Any], None] | None = None,
+) -> bool:
+    init_db()
+
+    with get_conn() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE auths
+            SET
+                is_voided = 0,
+                voided_at = NULL,
+                voided_by_user_id = NULL,
+                void_reason = NULL,
+                updated_at = ?
+            WHERE id = ?
+              AND is_voided = 1
+            """,
+            (current_timestamp(), auth_id),
+        )
+
+        restored = cursor.rowcount == 1
+
+        if restored and before_commit is not None:
+            before_commit(conn)
+
+    return restored
 
 
 def delete_auth(

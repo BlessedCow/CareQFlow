@@ -4,7 +4,10 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from authstatus_api.authorizations.state import current_timestamp
+from authstatus_api.authorizations.state import (
+    current_timestamp,
+    require_writable_auth,
+)
 from authstatus_api.persistence.connections import get_conn
 from authstatus_api.persistence.schema import init_db
 
@@ -131,7 +134,7 @@ def create_auth_loc_episode(
     now = current_timestamp()
 
     with get_conn() as conn:
-        if not _auth_exists(conn, auth_id):
+        if not require_writable_auth(conn, auth_id):
             return None
 
         if _episode_overlaps(
@@ -218,6 +221,9 @@ def get_auth_loc_episode(
     init_db()
 
     with get_conn() as conn:
+        if not require_writable_auth(conn, auth_id):
+            return None
+
         row = conn.execute(
             """
             SELECT *
@@ -350,6 +356,9 @@ def delete_auth_loc_episode(
     init_db()
 
     with get_conn() as conn:
+        if not require_writable_auth(conn, auth_id):
+            return False
+
         cursor = conn.execute(
             """
             DELETE FROM auth_loc_episodes
