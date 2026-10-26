@@ -2,10 +2,10 @@
     "schema_version": 1,
     "assets": {
       "caddy": {
-        "version": "2.11.1",
-        "archive_name": "caddy_2.11.1_windows_amd64.zip",
-        "download_url": "https://github.com/caddyserver/caddy/releases/download/v2.11.1/caddy_2.11.1_windows_amd64.zip",
-        "sha256": "de55cc5c227fb03d5d69fca6adf0d71e90fdcfab84c1a314598f25f3bba83fd2",
+      "version": "2.11.7",
+      "archive_name": "caddy_2.11.7_windows_amd64.zip",
+      "download_url": "https://github.com/caddyserver/caddy/releases/download/v2.11.7/caddy_2.11.7_windows_amd64.zip",
+      "sha256": "0a1edc0b799512051c57071ce0e798d3f2cf67dc98171366f1d2b326072e3b06",
         "executable_name": "caddy.exe",
         "architecture": "amd64"
       },

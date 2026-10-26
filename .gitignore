@@ -81,6 +81,7 @@ local_vobs/
 backend/wheelhouse/
 /desktop.ini
 /CQF.ico
+local_caddy_backup/
 
 # Local Windows installer source assets
 local_installer_assets/

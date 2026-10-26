@@ -2372,7 +2372,9 @@ def test_admin_reset_revokes_existing_user_sessions(client):
     )
 
     assert response.status_code == 200
+    assert response.json()["sessions_revoked"] >= 1
 
+    client.cookies.clear()
     client.cookies.set(
         "carequeue_session",
         user_token,
@@ -3612,13 +3614,19 @@ def test_admin_requests_mfa_without_resetting_enrollment(client):
         get_active_trusted_device_by_token,
     )
 
-    admin = create_user("mfa-admin@example.com", "correct horse battery staple", role="Admin")
-    target = create_user("mfa-target@example.com", "correct horse battery staple", role="UR")
+    admin = create_user(
+        "mfa-admin@example.com", "correct horse battery staple", role="Admin"
+    )
+    target = create_user(
+        "mfa-target@example.com", "correct horse battery staple", role="UR"
+    )
     secret = pyotp.random_base32()
     assert store_user_mfa_secret(target["id"], secret)
     assert enable_user_mfa(target["id"])
     trusted = create_trusted_device(target["id"])
-    headers = auth_headers_for(client, admin["username"], "correct horse battery staple")
+    headers = auth_headers_for(
+        client, admin["username"], "correct horse battery staple"
+    )
 
     response = client.post(
         f"/api/security/users/{target['id']}/request-mfa",
@@ -3644,8 +3652,16 @@ def test_admin_requests_mfa_without_resetting_enrollment(client):
 
 
 def test_request_mfa_rejects_user_without_enrollment(client):
-    admin = create_user("mfa-admin@example.com", "correct horse battery staple", role="Admin")
-    target = create_user("mfa-target@example.com", "correct horse battery staple", role="UR")
-    headers = auth_headers_for(client, admin["username"], "correct horse battery staple")
-    response = client.post(f"/api/security/users/{target['id']}/request-mfa", headers=headers)
+    admin = create_user(
+        "mfa-admin@example.com", "correct horse battery staple", role="Admin"
+    )
+    target = create_user(
+        "mfa-target@example.com", "correct horse battery staple", role="UR"
+    )
+    headers = auth_headers_for(
+        client, admin["username"], "correct horse battery staple"
+    )
+    response = client.post(
+        f"/api/security/users/{target['id']}/request-mfa", headers=headers
+    )
     assert response.status_code == 409

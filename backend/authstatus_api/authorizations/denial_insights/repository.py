@@ -249,7 +249,6 @@ def _list_follow_up_snapshots(
     placeholders = ", ".join("?" for _ in root_snapshot_ids)
 
     query = f"""
-            SELECT *
         SELECT *
         FROM auth_decision_snapshots
         WHERE
@@ -281,7 +280,6 @@ def _list_follow_up_auth_states(
     placeholders = ", ".join("?" for _ in auth_ids)
 
     query = f"""
-            SELECT *
         SELECT
             id,
             p2p_requested,
