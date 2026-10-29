@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = "0.7.0"
+    [string]$Version = "0.7.1"
 )
 
 $ErrorActionPreference = "Stop"
@@ -176,11 +176,21 @@ Copy-Item `
 
 Write-Host "Copying Linux deployment files..."
 
+$deploymentStagingDirectory = Join-Path `
+    $stagingDirectory `
+    "deployment"
+
+New-Item `
+    -ItemType Directory `
+    -Path $deploymentStagingDirectory `
+    -Force |
+Out-Null
+
 Copy-Item `
     -LiteralPath (
-    Join-Path $repositoryRoot "deployment"
-) `
-    -Destination $stagingDirectory `
+        Join-Path $repositoryRoot "deployment\linux"
+    ) `
+    -Destination $deploymentStagingDirectory `
     -Recurse `
     -Force
 

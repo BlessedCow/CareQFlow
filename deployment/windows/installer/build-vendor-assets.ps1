@@ -6,7 +6,11 @@ param(
 
     [switch]$ForceDownload,
 
-    [switch]$KeepExisting
+    [switch]$KeepExisting,
+
+    [string]$CaddyExecutablePath,
+
+    [string]$CaddyExecutableSha256
 )
 
 $ErrorActionPreference = "Stop"
@@ -173,6 +177,32 @@ if ($assetLock.schema_version -ne 1) {
 $caddyAsset = $assetLock.assets.caddy
 $winswAsset = $assetLock.assets.winsw
 
+if ([bool]$CaddyExecutablePath -ne [bool]$CaddyExecutableSha256) {
+    throw (
+        "CaddyExecutablePath and CaddyExecutableSha256 " +
+        "must be supplied together."
+    )
+}
+
+$resolvedCustomCaddyPath = $null
+
+if ($CaddyExecutablePath) {
+    $resolvedCustomCaddyPath = (
+        Resolve-Path `
+            -LiteralPath $CaddyExecutablePath `
+            -ErrorAction Stop
+    ).Path
+
+    if (-not (Test-Path -LiteralPath $resolvedCustomCaddyPath -PathType Leaf)) {
+        throw "The custom Caddy executable was not found."
+    }
+
+    Assert-FileHash `
+        -Path $resolvedCustomCaddyPath `
+        -ExpectedSha256 $CaddyExecutableSha256 `
+        -AssetName "Custom Caddy"
+}
+
 if (-not $AssetCacheDirectory) {
     $AssetCacheDirectory = Join-Path `
         $repositoryRoot `
@@ -227,12 +257,14 @@ $winswCachedExecutable = Join-Path `
     $resolvedAssetCacheDirectory `
     $winswAsset.file_name
 
-Get-PinnedAsset `
-    -DownloadUrl $caddyAsset.download_url `
-    -DestinationPath $caddyCachedArchive `
-    -ExpectedSha256 $caddyAsset.sha256 `
-    -AssetName "Caddy" `
-    -Force:$ForceDownload
+if (-not $resolvedCustomCaddyPath) {
+    Get-PinnedAsset `
+        -DownloadUrl $caddyAsset.download_url `
+        -DestinationPath $caddyCachedArchive `
+        -ExpectedSha256 $caddyAsset.sha256 `
+        -AssetName "Caddy" `
+        -Force:$ForceDownload
+}
 
 Get-PinnedAsset `
     -DownloadUrl $winswAsset.download_url `
@@ -261,56 +293,71 @@ New-Item `
     -Force |
 Out-Null
 
-$caddyExtractionDirectory = Join-Path `
-    $resolvedOutputDirectory `
-    ".caddy-extract"
+$stagedCaddyExecutable = Join-Path `
+    $caddyOutputDirectory `
+    $caddyAsset.executable_name
 
-Remove-Item `
-    -LiteralPath $caddyExtractionDirectory `
-    -Recurse `
-    -Force `
-    -ErrorAction SilentlyContinue
-
-try {
-    Write-Status "Extracting Caddy..."
-
-    Expand-Archive `
-        -LiteralPath $caddyCachedArchive `
-        -DestinationPath $caddyExtractionDirectory `
-        -Force
-
-    $extractedCaddyExecutable = Join-Path `
-        $caddyExtractionDirectory `
-        $caddyAsset.executable_name
-
-    if (
-        -not (
-            Test-Path `
-                -LiteralPath $extractedCaddyExecutable `
-                -PathType Leaf
-        )
-    ) {
-        throw (
-            "The Caddy archive does not contain " +
-            "$($caddyAsset.executable_name)."
-        )
-    }
-
-    $stagedCaddyExecutable = Join-Path `
-        $caddyOutputDirectory `
-        $caddyAsset.executable_name
+if ($resolvedCustomCaddyPath) {
+    Write-Status "Staging the verified custom Caddy executable..."
 
     Copy-Item `
-        -LiteralPath $extractedCaddyExecutable `
+        -LiteralPath $resolvedCustomCaddyPath `
         -Destination $stagedCaddyExecutable `
         -Force
+
+    Assert-FileHash `
+        -Path $stagedCaddyExecutable `
+        -ExpectedSha256 $CaddyExecutableSha256 `
+        -AssetName "Staged custom Caddy"
 }
-finally {
+else {
+    $caddyExtractionDirectory = Join-Path `
+        $resolvedOutputDirectory `
+        ".caddy-extract"
+
     Remove-Item `
         -LiteralPath $caddyExtractionDirectory `
         -Recurse `
         -Force `
         -ErrorAction SilentlyContinue
+
+    try {
+        Write-Status "Extracting Caddy..."
+
+        Expand-Archive `
+            -LiteralPath $caddyCachedArchive `
+            -DestinationPath $caddyExtractionDirectory `
+            -Force
+
+        $extractedCaddyExecutable = Join-Path `
+            $caddyExtractionDirectory `
+            $caddyAsset.executable_name
+
+        if (
+            -not (
+                Test-Path `
+                    -LiteralPath $extractedCaddyExecutable `
+                    -PathType Leaf
+            )
+        ) {
+            throw (
+                "The Caddy archive does not contain " +
+                "$($caddyAsset.executable_name)."
+            )
+        }
+
+        Copy-Item `
+            -LiteralPath $extractedCaddyExecutable `
+            -Destination $stagedCaddyExecutable `
+            -Force
+    }
+    finally {
+        Remove-Item `
+            -LiteralPath $caddyExtractionDirectory `
+            -Recurse `
+            -Force `
+            -ErrorAction SilentlyContinue
+    }
 }
 
 $stagedWinSWExecutable = Join-Path `
@@ -422,6 +469,31 @@ $metadata = [ordered]@{
         product_version = $winswVersionInfo.ProductVersion
         executable = "winsw/$($winswAsset.file_name)"
     }
+}
+
+$metadata.caddy.source = if ($resolvedCustomCaddyPath) {
+    "custom"
+}
+else {
+    "official"
+}
+
+$metadata.caddy.sha256 = (
+    Get-FileHash `
+        -LiteralPath $stagedCaddyExecutable `
+        -Algorithm SHA256
+).Hash.ToLowerInvariant()
+
+if ($resolvedCustomCaddyPath) {
+    $goBuildInfo = @(
+        & go version -m $stagedCaddyExecutable
+    )
+
+    if ($LASTEXITCODE -ne 0 -or $goBuildInfo.Count -eq 0) {
+        throw "Unable to read custom Caddy Go build information."
+    }
+
+    $metadata.caddy.go_build_info = $goBuildInfo
 }
 
 $metadata |

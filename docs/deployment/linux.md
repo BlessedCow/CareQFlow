@@ -204,7 +204,7 @@ Then build the Linux release archive:
 A specific version may also be supplied:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.7.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.7.1
 ```
 
 The package is written under:
@@ -213,10 +213,10 @@ The package is written under:
 build/linux/installer/
 ```
 
-For CareQFlow v0.7.0, the expected release filename is:
+For CareQFlow v0.7.1, the expected release filename is:
 
 ```text
-CareQFlow-Linux-Setup-0.7.0.tar.gz
+CareQFlow-Linux-Setup-0.7.1.tar.gz
 ```
 
 The build script validates required payload sources, requires an existing production frontend build, stages the production files, normalizes Linux deployment text files to LF line endings, and creates the compressed tar archive.
@@ -230,7 +230,7 @@ For example:
 ```bash
 mkdir carequeue-installer
 
-tar -xzf CareQFlow-Linux-Setup-0.7.0.tar.gz \
+tar -xzf CareQFlow-Linux-Setup-0.7.1.tar.gz \
   -C carequeue-installer
 
 cd carequeue-installer

@@ -1,5 +1,5 @@
 #define MyAppName "CareQFlow"
-#define MyAppVersion "0.7.0"
+#define MyAppVersion "0.7.1"
 #define MyAppPublisher "CareQFlow"
 #define MyAppURL "https://github.com/BlessedCow/CareQueue"
 #define MyAppExeName "CareQFlow-Setup.exe"

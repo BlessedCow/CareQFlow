@@ -9,7 +9,11 @@ param(
 
     [switch]$KeepExisting,
 
-    [switch]$ForceVendorDownload
+    [switch]$ForceVendorDownload,
+
+    [string]$CaddyExecutablePath,
+
+    [string]$CaddyExecutableSha256
 )
 
 $ErrorActionPreference = "Stop"
@@ -301,6 +305,18 @@ if ($ForceVendorDownload) {
     $vendorBuilderArguments.ForceDownload = $true
 }
 
+if ([bool]$CaddyExecutablePath -ne [bool]$CaddyExecutableSha256) {
+    throw (
+        "CaddyExecutablePath and CaddyExecutableSha256 " +
+        "must be supplied together."
+    )
+}
+
+if ($CaddyExecutablePath) {
+    $vendorBuilderArguments.CaddyExecutablePath = $CaddyExecutablePath
+    $vendorBuilderArguments.CaddyExecutableSha256 = $CaddyExecutableSha256
+}
+
 & $vendorAssetBuilder @vendorBuilderArguments
 
 if ($LASTEXITCODE -ne 0) {
@@ -469,6 +485,39 @@ Copy-Item `
     -Destination $payloadBackendDirectory `
     -Recurse `
     -Force
+
+$bytecodeDirectories = @(
+    Get-ChildItem `
+        -LiteralPath $payloadBackendDirectory `
+        -Directory `
+        -Filter "__pycache__" `
+        -Recurse `
+        -Force
+)
+
+foreach ($directory in $bytecodeDirectories) {
+    Remove-Item `
+        -LiteralPath $directory.FullName `
+        -Recurse `
+        -Force `
+        -ErrorAction Stop
+}
+
+$bytecodeFiles = Get-ChildItem `
+    -LiteralPath $payloadBackendDirectory `
+    -File `
+    -Recurse `
+    -Force |
+    Where-Object {
+        $_.Extension -in @(".pyc", ".pyo")
+    }
+
+foreach ($file in $bytecodeFiles) {
+    Remove-Item `
+        -LiteralPath $file.FullName `
+        -Force `
+        -ErrorAction Stop
+}
 
 Copy-Item `
     -LiteralPath (
@@ -673,7 +722,7 @@ $payloadMetadata = [ordered]@{
     created_utc    = [DateTime]::UtcNow.ToString("o")
     application    = [ordered]@{
         name            = "CareQueue"
-        backend_version = "0.7.0"
+        backend_version = "0.7.1"
     }
     runtime        = [ordered]@{
         python = $pythonVersion
@@ -700,6 +749,33 @@ ConvertTo-Json `
 Set-Content `
     -LiteralPath $payloadMetadataPath `
     -Encoding utf8
+
+$finalBytecodeDirectories = @(
+    Get-ChildItem `
+        -LiteralPath $payloadBackendDirectory `
+        -Directory `
+        -Filter "__pycache__" `
+        -Recurse `
+        -Force
+)
+
+foreach ($directory in $finalBytecodeDirectories) {
+    Remove-Item `
+        -LiteralPath $directory.FullName `
+        -Recurse `
+        -Force `
+        -ErrorAction Stop
+}
+
+Get-ChildItem `
+    -LiteralPath $payloadBackendDirectory `
+    -File `
+    -Recurse `
+    -Force |
+Where-Object {
+    $_.Extension -in @(".pyc", ".pyo")
+} |
+Remove-Item -Force -ErrorAction Stop
 
 $payloadManifestPath = Join-Path `
     $resolvedOutputDirectory `

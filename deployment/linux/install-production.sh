@@ -793,7 +793,42 @@ install_caddy() {
 
             curl -1sLf \
                 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-                > /etc/apt/sources.list.d/caddy-stable.list
+                -o /etc/apt/sources.list.d/caddy-stable.list
+
+            python3 - /etc/apt/sources.list.d/caddy-stable.list <<'PY'
+            import pathlib
+            import sys
+
+            source = pathlib.Path(sys.argv[1])
+            expected_key = (
+                "signed-by=/usr/share/keyrings/"
+                "caddy-stable-archive-keyring.gpg"
+            )
+            expected_url = (
+                "https://dl.cloudsmith.io/public/caddy/stable/"
+            )
+
+            entries = [
+                line.strip()
+                for line in source.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+
+            if len(entries) != 1:
+                raise SystemExit("Invalid Caddy APT repository configuration.")
+
+            parts = entries[0].split()
+
+            if (
+                len(parts) != 5
+                or parts[0] != "deb"
+                or parts[1] != f"[{expected_key}]"
+                or not parts[2].startswith(expected_url)
+                or parts[3] != "any-version"
+                or parts[4] != "main"
+            ):
+                raise SystemExit("Caddy repository trust configuration rejected.")
+            PY
 
             chmod o+r \
                 /usr/share/keyrings/caddy-stable-archive-keyring.gpg

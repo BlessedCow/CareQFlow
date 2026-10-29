@@ -489,7 +489,7 @@ Build a fresh Windows payload:
 
 ```powershell
 .\deployment\windows\installer\build-payload.ps1 `
-    -EmbeddedPythonArchive ".\local_installer_assets\python-3.14.6-embed-amd64.zip"
+    -EmbeddedPythonArchive ".\local_installer_assets\python-3.14.10-embed-amd64.zip"
 ```
 
 Compile the installer:
@@ -499,10 +499,10 @@ Compile the installer:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQFlow `0.7.0`, run:
+For CareQFlow `0.7.1`, run:
 
 ```powershell
-.\build\windows\installer\CareQFlow-Setup-0.7.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.7.1.exe
 ```
 
 Validate the package:
@@ -510,6 +510,19 @@ Validate the package:
 ```powershell
 .\deployment\windows\installer\validate-release-package.ps1
 ```
+
+For Windows release builds using the locally compiled, security-updated Caddy executable, supply both the executable path and its verified SHA-256. The vendor builder verifies the supplied executable before staging it. Omit both parameters to retain the official pinned Caddy download behavior.
+
+```powershell
+.\deployment\windows\installer\build-payload.ps1 `
+    -EmbeddedPythonArchive ".\local_installer_assets\python-3.14.10-embed-amd64.zip" `
+    -BuildPythonExecutable ".\backend\.venv\Scripts\python.exe" `
+    -CaddyExecutablePath ".\local_installer_assets\caddy-audit\caddy-patched.exe" `
+    -CaddyExecutableSha256 "BBC4FC7A3847AD1ADA1F72B83BE91BE820EE5C795BF036FB756FAE04FA786DF4"
+```
+
+The checksum above identifies the locally verified Windows Caddy candidate. Other builds must use their own verified checksum.
+
 
 ### Linux
 
@@ -522,13 +535,13 @@ npm --prefix frontend run build
 Build the Linux release archive:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.7.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.7.1
 ```
 
-For CareQFlow `0.7.0`, the resulting archive is:
+For CareQFlow `0.7.1`, the resulting archive is:
 
 ```text
-build\linux\installer\CareQFlow-Linux-Setup-0.7.0.tar.gz
+build\linux\installer\CareQFlow-Linux-Setup-0.7.1.tar.gz
 ```
 
 Local package creation is not sufficient release validation. Test the exact release artifact on clean supported virtual machines before publishing it.
@@ -545,6 +558,48 @@ When deployment changes affect Upgrade or Rollback behavior, release validation 
 - Restoration of the expected previous installed-version metadata
 
 Use synthetic data for failed-upgrade and rollback testing.
+
+## Version 0.7.1 Dependency and Build Hardening
+
+The 0.7.1 development cycle includes security and dependency maintenance across the backend, frontend, and Windows packaging toolchain.
+
+### Backend and Python
+
+- Windows embedded Python runtime: 3.14.10, 64-bit.
+- Production Python dependencies are packaged in a private runtime and offline wheelhouse.
+- Dependency maintenance includes updates to `dnspython`, `cryptography`, `pypdf`, and other packages resolved from `backend/requirements.txt`.
+- The assembled Windows payload removes Python `__pycache__` directories and `.pyc`/`.pyo` files before generating its SHA-256 manifest.
+- Verify backend dependency vulnerabilities with `pip-audit` and run the appropriate pytest and Ruff suites after changes.
+
+### Frontend and Node.js
+
+The validated Windows development environment used:
+
+- Node.js 26.13.0.
+- npm 12.0.1.
+- Vite 7.3.7.
+
+The production frontend build completed successfully, and the npm audit reported zero vulnerabilities at the time of validation. Nonfatal build warnings included deprecated transitive packages, a blocked optional `libxmljs2` installation script, and a large JavaScript chunk. These warnings should not be confused with confirmed runtime security findings.
+
+### Windows Caddy
+
+The security-updated Windows Caddy candidate uses:
+
+- Caddy 2.11.7.
+- Go 1.27.3.
+- xcaddy 0.4.7.
+- A `golang.org/x/net` replacement at version 0.62.0.
+- `golang.org/x/crypto` 0.58.0 as resolved by the Go build.
+
+The candidate was checked with `govulncheck`, which reported one remaining finding, `GO-2026-5932`, involving the unmaintained OpenPGP package. The finding remains unresolved; configuration validation alone does not establish that the affected code is unreachable.
+
+The Windows build workflow compiles Caddy, verifies that the patched dependency is present, scans the executable, and passes its calculated SHA-256 into payload assembly. CI execution must still be validated independently of local YAML parsing.
+
+The vendor metadata includes the Caddy source, SHA-256, and Go build information when a custom executable is supplied.
+
+### Release validation
+
+Successful local packaging does not establish production readiness. Validate the final installer on clean supported systems, confirm HTTPS and service startup, and test upgrade and rollback behavior using synthetic data. Repeat the security scans against the binaries and dependencies actually included in each release.
 
 ## Optional Security Checks
 
@@ -568,16 +623,16 @@ Review findings before changing dependencies.
 When preparing a new release, use the repository version helper:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.7.0
+.\deployment\bump-version.ps1 -Version 0.7.1
 ```
 
-Replace `0.7.0` with the intended application release version when preparing a later release.
+Replace `0.7.1` with the intended application release version when preparing a later release.
 
 The helper updates controlled backend and deployment version declarations without blindly replacing matching strings in tests, dependency versions, documentation examples, or historical governance fixtures.
 
 The governance attestation version and governance document revision are independent of the CareQFlow application version. Do not change either value only because the application release number changes.
 
-Application release licensing is also version-sensitive. CareQueue `0.4.x` and earlier releases retain their historical MIT terms, while CareQFlow `0.7.0` and later versions expressly released under the current licensing model use Business Source License 1.1 until the applicable Change Date.
+Application release licensing is also version-sensitive. CareQueue `0.4.x` and earlier releases retain their historical MIT terms, while CareQueue `0.5.0`, CareQFlow `0.5.0` and later versions expressly released under the current licensing model use Business Source License 1.1 until the applicable Change Date.
 
 Before publishing a release, review:
 

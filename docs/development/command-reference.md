@@ -283,10 +283,10 @@ CareQFlow keeps the application release version in several backend and deploymen
 Use the repository release-version helper rather than editing those locations individually:
 
 ```powershell
-.\deployment\bump-version.ps1 -Version 0.7.0
+.\deployment\bump-version.ps1 -Version 0.7.1
 ```
 
-Replace `0.7.0` with the intended release version when preparing a later release.
+Replace `0.7.1` with the intended release version when preparing a later release.
 
 The script updates the controlled release-version declarations used by:
 
@@ -351,10 +351,10 @@ After the Windows payload has been built:
     ".\deployment\windows\installer\CareQueue.iss"
 ```
 
-For CareQFlow `0.7.0`, the resulting installer is:
+For CareQFlow `0.7.1`, the resulting installer is:
 
 ```text
-build\windows\installer\CareQFlow-Setup-0.7.0.exe
+build\windows\installer\CareQFlow-Setup-0.7.1.exe
 ```
 
 Future releases use the version configured by the release-version tooling.
@@ -375,16 +375,16 @@ Use this validation before publishing the Windows release artifact.
 
 ## Run the Windows Installer
 
-For CareQFlow `0.7.0`:
+For CareQFlow `0.7.1`:
 
 ```powershell
-.\build\windows\installer\CareQFlow-Setup-0.7.0.exe
+.\build\windows\installer\CareQFlow-Setup-0.7.1.exe
 ```
 
 An explicit invocation path can also be used:
 
 ```powershell
-& ".\build\windows\installer\CareQFlow-Setup-0.7.0.exe"
+& ".\build\windows\installer\CareQFlow-Setup-0.7.1.exe"
 ```
 
 The installer requires administrator elevation because it installs Windows services and writes to protected locations.
@@ -536,31 +536,31 @@ Permissions-Policy
 
 ## Generate a Windows Installer Checksum
 
-For CareQFlow `0.7.0`:
+For CareQFlow `0.7.1`:
 
 ```powershell
 Get-FileHash `
     -Algorithm SHA256 `
-    ".\build\windows\installer\CareQFlow-Setup-0.7.0.exe" |
+    ".\build\windows\installer\CareQFlow-Setup-0.7.1.exe" |
 ForEach-Object {
-    "$($_.Hash)  CareQFlow-Setup-0.7.0.exe"
+    "$($_.Hash)  CareQFlow-Setup-0.7.1.exe"
 } |
 Set-Content `
     -Encoding ASCII `
-    ".\build\windows\installer\CareQFlow-Setup-0.7.0.exe.sha256"
+    ".\build\windows\installer\CareQFlow-Setup-0.7.1.exe.sha256"
 ```
 
 Verify it:
 
 ```powershell
 $expectedHash = (
-    Get-Content ".\build\windows\installer\CareQFlow-Setup-0.7.0.exe.sha256"
+    Get-Content ".\build\windows\installer\CareQFlow-Setup-0.7.1.exe.sha256"
 ).Split(" ")[0]
 
 $actualHash = (
     Get-FileHash `
         -Algorithm SHA256 `
-        ".\build\windows\installer\CareQFlow-Setup-0.7.0.exe"
+        ".\build\windows\installer\CareQFlow-Setup-0.7.1.exe"
 ).Hash
 
 $actualHash -eq $expectedHash
@@ -668,7 +668,7 @@ npm --prefix frontend run build
 Then build the Linux archive:
 
 ```powershell
-.\deployment\linux\installer\build-payload.ps1 -Version 0.7.0
+.\deployment\linux\installer\build-payload.ps1 -Version 0.7.1
 ```
 
 Because the release script also has a version default, after the repository has been bumped to the intended version this can be shortened to:
@@ -677,10 +677,10 @@ Because the release script also has a version default, after the repository has 
 .\deployment\linux\installer\build-payload.ps1
 ```
 
-For CareQFlow `0.7.0`, the artifact is:
+For CareQFlow `0.7.1`, the artifact is:
 
 ```text
-build\linux\installer\CareQFlow-Linux-Setup-0.7.0.tar.gz
+build\linux\installer\CareQFlow-Linux-Setup-0.7.1.tar.gz
 ```
 
 The build script reports the resulting package path, size, and SHA256 value.
@@ -691,7 +691,7 @@ On the Linux target:
 
 ```bash
 mkdir carequeue-installer
-tar -xzf CareQFlow-Linux-Setup-0.7.0.tar.gz \
+tar -xzf CareQFlow-Linux-Setup-0.7.1.tar.gz \
   -C carequeue-installer
 cd carequeue-installer
 ```
@@ -924,9 +924,13 @@ LICENSES/MIT.txt
 docs/licensing.md
 ```
 
-CareQueue `0.4.x` and earlier releases remain under their historical MIT terms.
+CareQueue `0.4.x` and earlier releases remain under their historical MIT license terms.
 
-CareQFlow `0.7.0` and later versions expressly released under the current terms use Business Source License 1.1 until the applicable Change Date.
+CareQueue `0.5.0` introduced Business Source License 1.1 (BSL 1.1), replacing MIT for that release.
+
+Beginning with version `0.6.0`, the project was renamed from CareQueue to CareQFlow. The licensing model remained BSL 1.1.
+
+CareQFlow `0.6.0` and later versions expressly released under BSL 1.1 remain subject to that license until their applicable Change Date.
 
 Do not describe a current BSL release as Open Source before its applicable Change Date.
 

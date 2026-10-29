@@ -1,7 +1,7 @@
 -r requirements.txt
 
 faker>=37,<38
-httpx2>=2.7,<3
+httpx2>=2.16.0,<3
 pytest>=9.0.3,<10
 pytest-xdist>=3.8,<4
 ruff>=0.16.5,<0.17

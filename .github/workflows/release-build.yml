@@ -93,6 +93,123 @@ jobs:
         with:
           python-version: "3.14"
 
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.3"
+          cache: false
+
+      - name: Build patched Caddy
+        shell: pwsh
+        run: |
+          go version
+
+          go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "xcaddy installation failed."
+          }
+
+          $outputDirectory = Join-Path $env:RUNNER_TEMP "careqflow-caddy"
+
+          New-Item -ItemType Directory -Force $outputDirectory |
+              Out-Null
+
+          $caddyExecutable = Join-Path $outputDirectory "caddy-patched.exe"
+          $xcaddy = Join-Path (go env GOPATH) "bin\xcaddy.exe"
+
+          & $xcaddy build v2.11.7 `
+              --output $caddyExecutable `
+              --replace "golang.org/x/net=golang.org/x/net@v0.62.0"
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Patched Caddy build failed."
+          }
+
+          $buildInfo = go version -m $caddyExecutable
+
+          if ($buildInfo -notmatch "go1\.27\.3") {
+              throw "Caddy was not built with Go 1.27.3."
+          }
+
+          if ($buildInfo -notmatch "golang.org/x/net\s+v0\.62\.0") {
+              throw "The patched x/net dependency was not found."
+          }
+
+          $hash = (
+              Get-FileHash -LiteralPath $caddyExecutable -Algorithm SHA256
+          ).Hash
+
+          & $caddyExecutable version
+
+          "CADDY_EXECUTABLE=$caddyExecutable" >> $env:GITHUB_ENV
+          "CADDY_SHA256=$hash" >> $env:GITHUB_ENV
+
+          Write-Host "Patched Caddy SHA256: $hash"
+
+      - name: Verify patched Caddy vulnerabilities
+        shell: pwsh
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "govulncheck installation failed."
+          }
+
+          $scanner = Join-Path (go env GOPATH) "bin\govulncheck.exe"
+          $report = Join-Path $env:RUNNER_TEMP "caddy-govulncheck.json"
+
+          & $scanner -mode=binary -json $env:CADDY_EXECUTABLE |
+              Out-File -LiteralPath $report -Encoding utf8
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Caddy vulnerability scanning failed."
+          }
+
+          $verifyReport = @'
+          import json
+          import sys
+          from pathlib import Path
+
+          content = Path(sys.argv[1]).read_text(encoding="utf-8-sig")
+          decoder = json.JSONDecoder()
+          position = 0
+          findings = set()
+
+          while position < len(content):
+              while position < len(content) and content[position].isspace():
+                  position += 1
+
+              if position == len(content):
+                  break
+
+              message, end = decoder.raw_decode(content, position)
+              position = end
+
+              finding = message.get("finding")
+              if finding:
+                  findings.add(finding["osv"])
+
+          allowed = {"GO-2026-5932"}
+          unexpected = findings - allowed
+
+          print(f"Caddy vulnerability findings: {len(findings)}")
+          for identifier in sorted(findings):
+              print(f"  {identifier}")
+
+          if unexpected:
+              print("Unexpected Caddy vulnerabilities detected.")
+              sys.exit(1)
+
+          print("Caddy vulnerability policy passed.")
+          '@
+
+          python -c $verifyReport $report
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Caddy vulnerability policy failed."
+          }
+
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -113,13 +230,13 @@ jobs:
 
           $pythonArchive = Join-Path `
               $assetDirectory `
-              "python-3.14.6-embed-amd64.zip"
+              "python-3.14.10-embed-amd64.zip"
 
           Invoke-WebRequest `
-              -Uri "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip" `
+              -Uri "https://www.python.org/ftp/python/3.14.10/python-3.14.10-embed-amd64.zip" `
               -OutFile $pythonArchive
 
-          $expectedHash = "df901e84a896ff1ee720ad03377e0c8d8c2244fda79808aeeaff6316df1cb75c"
+          $expectedHash = "90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159"
 
           $actualHash = (
               Get-FileHash `
@@ -208,15 +325,33 @@ jobs:
 
           Write-Host "Inno Setup installed successfully."
 
-      - name: Build Windows payload
-        shell: pwsh
-        run: |
-          $pythonArchive = Join-Path `
-              $env:RUNNER_TEMP `
-              "carequeue-assets\python-3.14.6-embed-amd64.zip"
+          - name: Build Windows payload
+          shell: pwsh
+          run: |
+            $pythonArchive = Join-Path `
+                $env:RUNNER_TEMP `
+                "carequeue-assets\python-3.14.10-embed-amd64.zip"
 
-          .\deployment\windows\installer\build-payload.ps1 `
-              -EmbeddedPythonArchive $pythonArchive
+            .\deployment\windows\installer\build-payload.ps1 `
+                -EmbeddedPythonArchive $pythonArchive `
+                -CaddyExecutablePath $env:CADDY_EXECUTABLE `
+                -CaddyExecutableSha256 $env:CADDY_SHA256
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "Windows payload build failed."
+            }
+
+            $payloadCaddy = ".\build\windows\payload\vendor\caddy\caddy.exe"
+
+            $payloadHash = (
+                Get-FileHash -LiteralPath $payloadCaddy -Algorithm SHA256
+            ).Hash
+
+            if ($payloadHash -ne $env:CADDY_SHA256) {
+                throw "The Windows payload contains an unexpected Caddy binary."
+            }
+
+            Write-Host "Patched Caddy payload checksum verified."
 
       - name: Compile Windows installer
         shell: pwsh
