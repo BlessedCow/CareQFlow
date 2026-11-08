@@ -18,7 +18,10 @@ deployment/linux/
 ├── uninstall-production.sh
 ├── installer/
 │   ├── build-payload.ps1
-│   └── invoke-install.sh
+│   ├── invoke-install.sh
+│   └── gui/
+│       ├── installer.py
+│       └── build-gui-deb.py
 ├── networking/
 │   ├── Export-CareQFlowClientTrust.sh
 │   ├── Install-CareQFlowClientTrust.sh
@@ -81,6 +84,59 @@ Current limitations include:
 - Public DNS and publicly trusted certificate deployment require separate planning and configuration.
 - Production disaster-recovery activation still requires operator review and validation.
 - The exact target distribution and operating-system version should be validated before introducing sensitive production data.
+
+## Graphical installer for Ubuntu and Debian
+
+CareQFlow also provides a GTK4 setup wizard for systems with a graphical desktop.
+The command-line `invoke-install.sh` remains the installation authority and is
+supported for headless deployments. The GUI runs without root privileges; the
+installer terminal asks for elevated access only when an operation starts.
+
+For a development checkout, install the GUI prerequisites with the OS package
+manager (not the backend Python requirements):
+
+```bash
+sudo apt update
+sudo apt install python3-gi gir1.2-gtk-4.0
+/usr/bin/python3 deployment/linux/installer/gui/installer.py
+```
+
+The wizard lets administrators select install, upgrade, repair, rollback, or
+uninstall, and choose Local Only, Secure LAN, or Tailscale where applicable. The
+Linux release archive must include `carequeue-release.env` and the bundled
+installer scripts before a privileged operation can start.
+
+### Build and install the graphical `.deb` package
+
+The `.deb` is a **setup launcher and a copy of the versioned release payload**,
+not a package containing running CareQFlow services. It is built on Ubuntu or
+Debian *from the versioned Linux release archive*, after the archive has been
+built and verified. `dpkg-deb` and system Python 3 are required for building:
+
+```bash
+python3 deployment/linux/installer/gui/build-gui-deb.py \
+  build/linux/installer/CareQFlow-Linux-Setup-0.7.1.tar.gz \
+  --output-dir build/linux/installer
+
+sudo apt install ./build/linux/installer/CareQFlow-Setup-GUI_0.7.1_all.deb
+```
+
+Launch **CareQFlow Setup** from the desktop application menu or run
+`careqflow-setup`. Package installation pulls in GTK4 and PyGObject through
+APT, plus a terminal emulator and `sudo`. The graphical setup tool still needs
+an interactive terminal for privilege elevation, license acceptance, and setup
+prompts. It supports offline installation of the `.deb` only if its required
+system packages are already available.
+
+Removing `careqflow-setup-gui` removes the graphical setup launcher and its
+packaged source files. It does **not** uninstall the deployed CareQFlow
+application or remove clinical databases, encryption keys, backups, or logs.
+Use the wizard's Uninstall operation or the supported CLI uninstall process
+when that is intended.
+
+The release workflow builds and uploads a separate `.deb` artifact from the
+verified Linux tarball. CI packaging does not replace installation testing on
+a supported Ubuntu or Debian desktop.
 
 ### Legacy Linux Runtime Namespace
 
@@ -1549,3 +1605,27 @@ Before committing screenshots:
 - Do not show keys, tokens, or credentials.
 - Do not show real patient or authorization records.
 - Review terminal history visible in the screenshot.
+
+
+## Graphical Debian Setup Package
+
+The `CareQFlow-Setup-GUI_<version>_all.deb` package includes the production
+frontend, backend source, Linux service templates, installation scripts, and
+GTK4 setup wizard. Users install the package through APT and launch
+**CareQFlow Setup** from the application menu. The setup wizard handles
+install, upgrade, repair, rollback, and uninstall operations.
+
+APT resolves the GTK4, Python GObject, and terminal prerequisites declared
+by the setup package. The installation scripts also provision required system
+packages, Caddy, and an isolated Python environment. A network connection and
+access to configured package repositories are required for those dependencies.
+The Debian package is **not an offline installer** and does not ship Python
+virtual environments, system libraries, or generated installation secrets.
+
+Production archives exclude Python bytecode caches and test caches. The
+archive builder stops if private key files or local `.env` files appear in
+its staging directory. Installation keys, service credentials, and clinical
+data are created or managed on the target system, not included in the package.
+
+The setup package can be uninstalled separately from the deployed CareQFlow
+application and its stored data.

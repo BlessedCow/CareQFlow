@@ -46,6 +46,8 @@ $requiredPaths = @(
     "deployment\linux\install-production.sh"
     "deployment\linux\uninstall-production.sh"
     "deployment\linux\installer\invoke-install.sh"
+    "deployment\linux\installer\gui\installer.py"
+    "deployment\linux\installer\gui\build-gui-deb.py"
     "deployment\linux\systemd\carequeue-api.service"
     "deployment\linux\systemd\carequeue-caddy.service"
     "deployment\linux\systemd\carequeue-backup.service"
@@ -211,6 +213,43 @@ Copy-Item `
     -Recurse `
     -Force
 
+Write-Host "Removing development artifacts from Linux staging..."
+
+$excludedDirectoryNames = @(
+    "__pycache__"
+    ".pytest_cache"
+    ".mypy_cache"
+    ".ruff_cache"
+    ".tox"
+    ".venv"
+    "node_modules"
+)
+
+Get-ChildItem -LiteralPath $stagingDirectory -Directory -Recurse -Force |
+    Where-Object { $_.Name -in $excludedDirectoryNames } |
+    Sort-Object { $_.FullName.Length } -Descending |
+    ForEach-Object {
+        if (Test-Path -LiteralPath $_.FullName) {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force
+        }
+    }
+
+Get-ChildItem -LiteralPath $stagingDirectory -File -Recurse -Force |
+    Where-Object { $_.Extension -in @(".pyc", ".pyo") } |
+    ForEach-Object {
+        Remove-Item -LiteralPath $_.FullName -Force
+    }
+
+$unsafePayloadFiles = Get-ChildItem -LiteralPath $stagingDirectory -File -Recurse -Force |
+    Where-Object {
+        $_.Name -match '^\.env(?:\..+)?$' -or
+        $_.Extension -in @(".pem", ".key", ".p12", ".pfx")
+    }
+
+if ($unsafePayloadFiles) {
+    throw "Linux staging includes private configuration or key files. Remove them before packaging."
+}
+
 Write-Host "Writing CareQFlow release metadata..."
 
 $releaseMetadataPath = Join-Path `
@@ -309,6 +348,10 @@ def normalize_member(member: tarfile.TarInfo) -> tarfile.TarInfo:
         raise ValueError(
             f"Unsupported archive entry type: {member.name}"
         )
+
+    excluded = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".venv", "node_modules"}
+    if any(part in excluded for part in path.parts) or path.suffix in {".pyc", ".pyo"}:
+        raise ValueError(f"Development artifact in Linux release: {member.name}")
 
     member.uid = 0
     member.gid = 0

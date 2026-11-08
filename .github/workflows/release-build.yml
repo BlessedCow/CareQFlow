@@ -5,414 +5,779 @@ on:
 
 permissions:
   contents: read
+
   id-token: write
+
   attestations: write
 
 jobs:
   linux:
     name: Linux release package
+
     runs-on: windows-latest
 
     steps:
       - name: Check out repository
+
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
+
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+
         with:
           node-version: "24"
+
           cache: npm
+
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
+
         working-directory: frontend
+
         run: npm ci
 
       - name: Build frontend
+
         working-directory: frontend
+
         run: npm run build
 
       - name: Build Linux release package
+
         shell: pwsh
+
         run: .\deployment\linux\installer\build-payload.ps1
 
       - name: Verify Linux release checksum
+
         shell: pwsh
+
         run: |
+
           $checksumFile = Get-ChildItem `
+
               .\build\linux\installer\*.sha256 |
+
               Sort-Object LastWriteTime -Descending |
+
               Select-Object -First 1
 
+
+
           if (-not $checksumFile) {
+
               throw "Linux release checksum file was not generated."
+
           }
+
+
 
           $packageFile = $checksumFile.FullName -replace '\.sha256$'
 
+
+
           $expectedHash = (
+
               Get-Content $checksumFile.FullName
+
           ).Split(" ")[0]
 
+
+
           $actualHash = (
+
               Get-FileHash `
+
                   -Algorithm SHA256 `
+
                   $packageFile
+
           ).Hash.ToLowerInvariant()
 
+
+
           if ($actualHash -ne $expectedHash) {
+
               throw "Linux release package checksum verification failed."
+
           }
+
+
 
           Write-Host "Linux release package checksum verified."
 
       - name: Attest Linux release package
+
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+
         with:
           subject-path: build/linux/installer/CareQFlow-Linux-Setup-*.tar.gz
 
       - name: Upload Linux release package
+
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+
         with:
           name: carequeue-linux-release
+
           path: |
+
             build/linux/installer/CareQFlow-Linux-Setup-*.tar.gz
+
             build/linux/installer/CareQFlow-Linux-Setup-*.tar.gz.sha256
+
           if-no-files-found: error
 
-  windows:
-    name: Windows release package
-    runs-on: windows-latest
+  linux_gui_deb:
+    name: Linux GTK setup package
+    needs: linux
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Download verified Linux release
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: carequeue-linux-release
+          path: build/linux/installer
+
+      - name: Build graphical setup package
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=(build/linux/installer/CareQFlow-Linux-Setup-*.tar.gz)
+          if (( ${#archive[@]} != 1 )) || [[ ! -f "${archive[0]}" ]]; then
+            echo "Exactly one Linux release archive is required." >&2
+            exit 1
+          fi
+          (cd build/linux/installer && sha256sum --check "$(basename "${archive[0]}").sha256")
+          python3 deployment/linux/installer/gui/build-gui-deb.py "${archive[0]}" \
+            --output-dir build/linux/gui
+          dpkg-deb --field build/linux/gui/*.deb Package Version Depends
+          (cd build/linux/gui && sha256sum *.deb > CareQFlow-Setup-GUI.sha256)
+
+      - name: Attest Linux GUI package
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: build/linux/gui/*.deb
+
+      - name: Upload Linux GUI package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: carequeue-linux-gui-release
+          path: |
+            build/linux/gui/*.deb
+            build/linux/gui/*.sha256
+          if-no-files-found: error
+
+  windows:
+    name: Windows release package
+
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Set up Python
+
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+
         with:
           python-version: "3.14"
 
       - name: Set up Go
+
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+
         with:
           go-version: "1.27.3"
+
           cache: false
 
       - name: Build patched Caddy
+
         shell: pwsh
+
         run: |
+
           go version
+
+
 
           go install github.com/caddyserver/xcaddy/cmd/xcaddy@v0.4.7
 
+
+
           if ($LASTEXITCODE -ne 0) {
+
               throw "xcaddy installation failed."
+
           }
+
+
 
           $outputDirectory = Join-Path $env:RUNNER_TEMP "careqflow-caddy"
 
+
+
           New-Item -ItemType Directory -Force $outputDirectory |
+
               Out-Null
 
+
+
           $caddyExecutable = Join-Path $outputDirectory "caddy-patched.exe"
+
           $xcaddy = Join-Path (go env GOPATH) "bin\xcaddy.exe"
 
+
+
           & $xcaddy build v2.11.7 `
+
               --output $caddyExecutable `
+
               --replace "golang.org/x/net=golang.org/x/net@v0.62.0"
 
+
+
           if ($LASTEXITCODE -ne 0) {
+
               throw "Patched Caddy build failed."
+
           }
+
+
 
           $buildInfo = go version -m $caddyExecutable
 
+
+
           if ($buildInfo -notmatch "go1\.27\.3") {
+
               throw "Caddy was not built with Go 1.27.3."
+
           }
+
+
 
           if ($buildInfo -notmatch "golang.org/x/net\s+v0\.62\.0") {
+
               throw "The patched x/net dependency was not found."
+
           }
 
+
+
           $hash = (
+
               Get-FileHash -LiteralPath $caddyExecutable -Algorithm SHA256
+
           ).Hash
+
+
 
           & $caddyExecutable version
 
+
+
           "CADDY_EXECUTABLE=$caddyExecutable" >> $env:GITHUB_ENV
+
           "CADDY_SHA256=$hash" >> $env:GITHUB_ENV
+
+
 
           Write-Host "Patched Caddy SHA256: $hash"
 
       - name: Verify patched Caddy vulnerabilities
+
         shell: pwsh
+
         run: |
+
           go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
+
+
           if ($LASTEXITCODE -ne 0) {
+
               throw "govulncheck installation failed."
+
           }
+
+
 
           $scanner = Join-Path (go env GOPATH) "bin\govulncheck.exe"
+
           $report = Join-Path $env:RUNNER_TEMP "caddy-govulncheck.json"
 
+
+
           & $scanner -mode=binary -json $env:CADDY_EXECUTABLE |
+
               Out-File -LiteralPath $report -Encoding utf8
 
+
+
           if ($LASTEXITCODE -ne 0) {
+
               throw "Caddy vulnerability scanning failed."
+
           }
 
+
+
           $verifyReport = @'
+
           import json
+
           import sys
+
           from pathlib import Path
 
+
+
           content = Path(sys.argv[1]).read_text(encoding="utf-8-sig")
+
           decoder = json.JSONDecoder()
+
           position = 0
+
           findings = set()
 
+
+
           while position < len(content):
+
               while position < len(content) and content[position].isspace():
+
                   position += 1
 
+
+
               if position == len(content):
+
                   break
 
+
+
               message, end = decoder.raw_decode(content, position)
+
               position = end
 
+
+
               finding = message.get("finding")
+
               if finding:
+
                   findings.add(finding["osv"])
 
+
+
           allowed = {"GO-2026-5932"}
+
           unexpected = findings - allowed
 
+
+
           print(f"Caddy vulnerability findings: {len(findings)}")
+
           for identifier in sorted(findings):
+
               print(f"  {identifier}")
 
+
+
           if unexpected:
+
               print("Unexpected Caddy vulnerabilities detected.")
+
               sys.exit(1)
 
+
+
           print("Caddy vulnerability policy passed.")
+
           '@
+
+
 
           python -c $verifyReport $report
 
+
+
           if ($LASTEXITCODE -ne 0) {
+
               throw "Caddy vulnerability policy failed."
+
           }
 
       - name: Set up Node
+
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+
         with:
           node-version: "24"
+
           cache: npm
+
           cache-dependency-path: frontend/package-lock.json
 
       - name: Download and verify embedded Python
+
         shell: pwsh
+
         run: |
+
           $assetDirectory = Join-Path $env:RUNNER_TEMP "carequeue-assets"
 
+
+
           New-Item `
+
               -ItemType Directory `
+
               -Path $assetDirectory `
+
               -Force |
+
           Out-Null
 
+
+
           $pythonArchive = Join-Path `
+
               $assetDirectory `
+
               "python-3.14.10-embed-amd64.zip"
 
+
+
           Invoke-WebRequest `
+
               -Uri "https://www.python.org/ftp/python/3.14.10/python-3.14.10-embed-amd64.zip" `
+
               -OutFile $pythonArchive
+
+
 
           $expectedHash = "90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159"
 
+
+
           $actualHash = (
+
               Get-FileHash `
+
                   -LiteralPath $pythonArchive `
+
                   -Algorithm SHA256
+
           ).Hash.ToLowerInvariant()
 
+
+
           if ($actualHash -ne $expectedHash) {
+
               throw "Embedded Python SHA256 verification failed."
+
           }
+
+
 
           Write-Host "Embedded Python SHA256 verified."
 
       - name: Download and verify Inno Setup
+
         shell: pwsh
+
         env:
           GH_TOKEN: ${{ github.token }}
+
         run: |
+
           $assetDirectory = Join-Path $env:RUNNER_TEMP "carequeue-assets"
 
+
+
           gh release download is-7_0_2 `
+
               --repo jrsoftware/issrc `
+
               --pattern "innosetup-7.0.2-x64.exe" `
+
               --dir $assetDirectory
 
+
+
           if ($LASTEXITCODE -ne 0) {
+
               throw "Failed to download Inno Setup 7.0.2."
+
           }
 
+
+
           $innoInstaller = Join-Path `
+
               $assetDirectory `
+
               "innosetup-7.0.2-x64.exe"
+
+
 
           $expectedHash = "5ad54ca3def786f8f4212552e54cc6d8d61329e2d24a1cfee0571d42c2684ff1"
 
+
+
           $actualHash = (
+
               Get-FileHash `
+
                   -LiteralPath $innoInstaller `
+
                   -Algorithm SHA256
+
           ).Hash.ToLowerInvariant()
 
+
+
           if ($actualHash -ne $expectedHash) {
+
               throw "Inno Setup SHA256 verification failed."
+
           }
+
+
 
           Write-Host "Inno Setup SHA256 verified."
 
       - name: Install Inno Setup
+
         shell: pwsh
+
         run: |
+
           $assetDirectory = Join-Path $env:RUNNER_TEMP "carequeue-assets"
 
+
+
           $innoInstaller = Join-Path `
+
               $assetDirectory `
+
               "innosetup-7.0.2-x64.exe"
 
+
+
           $innoDirectory = Join-Path `
+
               $env:RUNNER_TEMP `
+
               "InnoSetup"
 
+
+
           $process = Start-Process `
+
               -FilePath $innoInstaller `
+
               -ArgumentList @(
+
                   "/VERYSILENT",
+
                   "/SUPPRESSMSGBOXES",
+
                   "/NORESTART",
+
                   "/DIR=$innoDirectory"
+
               ) `
+
               -Wait `
+
               -PassThru
 
+
+
           if ($process.ExitCode -ne 0) {
+
               throw (
+
                   "Inno Setup installation failed with exit code " +
+
                   $process.ExitCode
+
               )
+
           }
+
+
 
           $compiler = Join-Path `
+
               $innoDirectory `
+
               "ISCC.exe"
 
+
+
           if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+
               throw "ISCC.exe was not found after installing Inno Setup."
+
           }
+
+
 
           Write-Host "Inno Setup installed successfully."
 
-          - name: Build Windows payload
-          shell: pwsh
-          run: |
-            $pythonArchive = Join-Path `
-                $env:RUNNER_TEMP `
-                "carequeue-assets\python-3.14.10-embed-amd64.zip"
-
-            .\deployment\windows\installer\build-payload.ps1 `
-                -EmbeddedPythonArchive $pythonArchive `
-                -CaddyExecutablePath $env:CADDY_EXECUTABLE `
-                -CaddyExecutableSha256 $env:CADDY_SHA256
-
-            if ($LASTEXITCODE -ne 0) {
-                throw "Windows payload build failed."
-            }
-
-            $payloadCaddy = ".\build\windows\payload\vendor\caddy\caddy.exe"
-
-            $payloadHash = (
-                Get-FileHash -LiteralPath $payloadCaddy -Algorithm SHA256
-            ).Hash
-
-            if ($payloadHash -ne $env:CADDY_SHA256) {
-                throw "The Windows payload contains an unexpected Caddy binary."
-            }
-
-            Write-Host "Patched Caddy payload checksum verified."
-
-      - name: Compile Windows installer
+      - name: Build Windows payload
         shell: pwsh
         run: |
-          $compiler = Join-Path `
+          $pythonArchive = Join-Path `
               $env:RUNNER_TEMP `
-              "InnoSetup\ISCC.exe"
+              "carequeue-assets\python-3.14.10-embed-amd64.zip"
 
-          & $compiler `
-              ".\deployment\windows\installer\CareQueue.iss"
+          .\deployment\windows\installer\build-payload.ps1 `
+              -EmbeddedPythonArchive $pythonArchive `
+              -CaddyExecutablePath $env:CADDY_EXECUTABLE `
+              -CaddyExecutableSha256 $env:CADDY_SHA256
 
           if ($LASTEXITCODE -ne 0) {
+              throw "Windows payload build failed."
+          }
+
+          $payloadCaddy = ".\build\windows\payload\vendor\caddy\caddy.exe"
+
+          $payloadHash = (
+              Get-FileHash -LiteralPath $payloadCaddy -Algorithm SHA256
+          ).Hash
+
+          if ($payloadHash -ne $env:CADDY_SHA256) {
+              throw "The Windows payload contains an unexpected Caddy binary."
+          }
+
+          Write-Host "Patched Caddy payload checksum verified."
+
+      - name: Compile Windows installer
+
+        shell: pwsh
+
+        run: |
+
+          $compiler = Join-Path `
+
+              $env:RUNNER_TEMP `
+
+              "InnoSetup\ISCC.exe"
+
+
+
+          & $compiler `
+
+              ".\deployment\windows\installer\CareQueue.iss"
+
+
+
+          if ($LASTEXITCODE -ne 0) {
+
               throw "Inno Setup compilation failed."
+
           }
 
       - name: Validate Windows release package
+
         shell: pwsh
+
         run: >
+
           .\deployment\windows\installer\validate-release-package.ps1
+
           -SkipInstalledAppChecks
 
       - name: Verify Windows release checksum
+
         shell: pwsh
+
         run: |
+
           $checksumFile = Get-ChildItem `
+
               .\build\windows\installer\*.exe.sha256 |
+
               Sort-Object LastWriteTime -Descending |
+
               Select-Object -First 1
 
+
+
           if (-not $checksumFile) {
+
               throw "Windows release checksum file was not generated."
+
           }
+
+
 
           $packageFile = $checksumFile.FullName -replace '\.sha256$'
 
+
+
           $expectedHash = (
+
               Get-Content $checksumFile.FullName
+
           ).Split(" ")[0]
 
+
+
           $actualHash = (
+
               Get-FileHash `
+
                   -LiteralPath $packageFile `
+
                   -Algorithm SHA256
+
           ).Hash.ToLowerInvariant()
 
+
+
           if ($actualHash -ne $expectedHash) {
+
               throw "Windows release package checksum verification failed."
+
           }
+
+
 
           Write-Host "Windows release package checksum verified."
 
       - name: Attest Windows release package
+
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+
         with:
           subject-path: build/windows/installer/CareQFlow-Setup-*.exe
 
       - name: Upload Windows release package
+
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+
         with:
           name: carequeue-windows-release
+
           path: |
+
             build/windows/installer/CareQFlow-Setup-*.exe
+
             build/windows/installer/CareQFlow-Setup-*.exe.sha256
+
           if-no-files-found: error
